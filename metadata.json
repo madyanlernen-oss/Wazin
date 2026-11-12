@@ -1,0 +1,8 @@
+{
+  "name": "LifeBalance AI - توازن الحياة الذكي",
+  "description": "منصة ذكية متكاملة باللغة العربية لتحقيق التوازن بين مجالات الحياة الثمانية بمساعدة 8 مستشارين ذكاء اصطناعي وتحليل المنسق العام التكاملي.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
