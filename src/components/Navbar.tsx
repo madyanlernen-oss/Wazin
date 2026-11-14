@@ -4,6 +4,8 @@ import {
   MessageSquare,
   Sparkles,
   ClipboardList,
+  GitCompare,
+  Target,
   RotateCcw,
   LogOut,
   LogIn,
@@ -13,8 +15,8 @@ import { UserProfile } from '../types/lifeBalance';
 import { TadbeerLogo } from './TadbeerLogo';
 
 interface NavbarProps {
-  currentScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary';
-  onNavigate: (screen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary') => void;
+  currentScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
+  onNavigate: (screen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix') => void;
   onNavigateToAuth?: (mode: 'login' | 'signup') => void;
   userProfile: UserProfile | null;
   onSignOut: () => void;
@@ -101,8 +103,34 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
-            <span className="hidden md:inline">عجلة الحياة ولوحة التحكم</span>
+            <span className="hidden md:inline">عجلة الحياة</span>
             <span className="md:hidden">العجلة</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('goals_matrix')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              currentScreen === 'goals_matrix'
+                ? 'bg-[#1b605b] text-white shadow-sm'
+                : 'text-[#4e605d] hover:text-[#1b605b] hover:bg-[#f1ebd8]'
+            }`}
+          >
+            <Target className="w-4 h-4" />
+            <span className="hidden md:inline">أهدافي (أيزنهاور)</span>
+            <span className="md:hidden">أهدافي</span>
+          </button>
+
+          <button
+            onClick={() => onNavigate('comparison')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              currentScreen === 'comparison'
+                ? 'bg-[#1b605b] text-white shadow-sm'
+                : 'text-[#4e605d] hover:text-[#1b605b] hover:bg-[#f1ebd8]'
+            }`}
+          >
+            <GitCompare className="w-4 h-4" />
+            <span className="hidden md:inline">المقارنة</span>
+            <span className="md:hidden">المقارنة</span>
           </button>
 
           <button
@@ -114,21 +142,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <MessageSquare className="w-4 h-4" />
-            <span className="hidden md:inline">استشارة المستشارين</span>
+            <span className="hidden md:inline">المستشارون</span>
             <span className="md:hidden">المستشارون</span>
-          </button>
-
-          <button
-            onClick={() => onNavigate('director_summary')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all relative ${
-              currentScreen === 'director_summary'
-                ? 'bg-[#b88d3b] text-white shadow-sm'
-                : 'text-[#b88d3b] hover:bg-[#f1ebd8]'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" />
-            <span className="hidden md:inline">تقرير المنسق العام</span>
-            <span className="md:hidden">التقرير</span>
           </button>
 
           <button
@@ -140,8 +155,8 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <ClipboardList className="w-4 h-4" />
-            <span className="hidden md:inline">التقييم ({completedCount}/8)</span>
-            <span className="md:hidden">{completedCount}/8</span>
+            <span className="hidden md:inline">قيّم أسبوعك الآن</span>
+            <span className="md:hidden">التقييم</span>
           </button>
         </nav>
 

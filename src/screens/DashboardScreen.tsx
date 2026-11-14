@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { RadarChart } from '../components/RadarChart';
+import { YearlyAndWeeklyAnalytics } from '../components/YearlyAndWeeklyAnalytics';
 import { AdvisorConfig, LifeAreaId, UserProfile } from '../types/lifeBalance';
 import { extractInsightsFromAnswers } from '../utils/storage';
 
@@ -515,6 +516,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           })}
         </div>
       </div>
+
+      {/* Yearly and Weekly Longitudinal Analytics Component */}
+      <YearlyAndWeeklyAnalytics />
     </div>
   );
 };

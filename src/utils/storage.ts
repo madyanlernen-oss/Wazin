@@ -2,6 +2,7 @@ import { ADVISORS_LIST, SAMPLE_GOALS, SAMPLE_SCORES, SAMPLE_USER_PROFILE } from 
 import {
   AdvisorConfig,
   DirectorSummaryReport,
+  EisenhowerGoalItem,
   LifeAreaId,
   UserProfile,
 } from '../types/lifeBalance';
@@ -11,9 +12,10 @@ export interface StoredAppState {
   scores: Record<LifeAreaId, number>;
   answers: Record<string, any>; // key: `${advisorId}_${questionId}`
   goals: Record<LifeAreaId, string[]>;
+  eisenhowerGoals?: EisenhowerGoalItem[];
   completedAdvisors: LifeAreaId[];
   directorReport: DirectorSummaryReport | null;
-  lastActiveScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary';
+  lastActiveScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
   selectedAdvisorId: LifeAreaId;
 }
 

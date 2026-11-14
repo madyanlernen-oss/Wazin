@@ -4,6 +4,8 @@ import {
   MessageSquare,
   Sparkles,
   ClipboardList,
+  GitCompare,
+  Target,
   RotateCcw,
   LogOut,
   X,
@@ -13,8 +15,8 @@ import { UserProfile } from '../types/lifeBalance';
 import { TadbeerLogo } from './TadbeerLogo';
 
 interface SidebarProps {
-  currentScreen: 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary';
-  onNavigate: (screen: 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary') => void;
+  currentScreen: 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
+  onNavigate: (screen: 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix') => void;
   userProfile: UserProfile | null;
   onSignOut: () => void;
   onReset: () => void;
@@ -36,30 +38,44 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const navItems = [
     {
       id: 'dashboard' as const,
-      label: 'عجلة الحياة ولوحة التحكم',
+      label: 'لوحة التحكم وعجلة الحياة',
       icon: LayoutDashboard,
       badge: null,
     },
     {
+      id: 'goals_matrix' as const,
+      label: 'أهدافي (مصفوفة أيزنهاور)',
+      icon: Target,
+      badge: 'التركيز اليومي',
+      badgeColor: 'bg-[#bd9240]/15 text-[#bd9240]',
+    },
+    {
       id: 'onboarding' as const,
-      label: 'تقييم أبعاد الحياة',
+      label: 'قيّم أسبوعك الآن',
       icon: ClipboardList,
-      badge: `${completedCount}/8`,
-      badgeColor: completedCount > 0 ? 'bg-emerald-100 text-emerald-800' : 'bg-[#FAF7F2] text-[#7a8c88] border border-[#ded7c8]',
+      badge: 'أسبوعي',
+      badgeColor: 'bg-emerald-100 text-emerald-800',
     },
     {
       id: 'advisor_chat' as const,
       label: 'استشارة المستشارين',
       icon: MessageSquare,
-      badge: '8 مستشارين',
+      badge: '8 أبعاد',
       badgeColor: 'bg-[#1b605b]/10 text-[#1b605b]',
     },
     {
       id: 'director_summary' as const,
-      label: 'تقرير المنسق العام',
-      icon: Sparkles,
-      badge: 'ذكي',
-      badgeColor: 'bg-[#bd9240]/15 text-[#bd9240]',
+      label: 'رؤية المنسق العام',
+      icon: Compass,
+      badge: 'تكامل الذكاء',
+      badgeColor: 'bg-amber-100 text-amber-800',
+    },
+    {
+      id: 'comparison' as const,
+      label: 'المقارنة والتحليلات',
+      icon: GitCompare,
+      badge: 'تراكمي',
+      badgeColor: 'bg-[#1b605b]/10 text-[#1b605b]',
     },
   ];
 

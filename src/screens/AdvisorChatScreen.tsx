@@ -29,6 +29,7 @@ interface AdvisorChatScreenProps {
   answers: Record<string, any>;
   goals: Record<LifeAreaId, string[]>;
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
+  onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
   onBackToDashboard: () => void;
 }
 
@@ -40,6 +41,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   answers,
   goals,
   onAddGoal,
+  onAddEisenhowerGoal,
   onBackToDashboard,
 }) => {
   const currentAdvisor: AdvisorConfig =
@@ -169,6 +171,9 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
   const handleAddActionToGoals = (actionText: string) => {
     onAddGoal(currentAdvisor.id, actionText);
+    if (onAddEisenhowerGoal) {
+      onAddEisenhowerGoal(actionText, currentAdvisor.name, currentAdvisor.id);
+    }
     setAddedGoals((prev) => ({ ...prev, [actionText]: true }));
   };
 
@@ -367,12 +372,12 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                                   {isAdded ? (
                                     <>
                                       <Check className="w-3 h-3" />
-                                      <span>تمت الإضافة!</span>
+                                      <span>أُضيفت لمصفوفة أيزنهاور</span>
                                     </>
                                   ) : (
                                     <>
                                       <Plus className="w-3 h-3" />
-                                      <span>إضافة لأهدافي</span>
+                                      <span>إضافة لمصفوفة أيزنهاور (المربع 2)</span>
                                     </>
                                   )}
                                 </button>

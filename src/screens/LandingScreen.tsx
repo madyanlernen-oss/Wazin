@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LifeDimensionsGuide } from '../components/LifeDimensionsGuide';
+import { TadbeerEmblem } from '../components/TadbeerLogo';
 
 interface LandingScreenProps {
   onLoadSample: () => void;
@@ -30,7 +31,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         {/* Hero Section */}
         <div className="text-center max-w-3xl mx-auto space-y-6 pt-4">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-[#eae3d5] text-xs font-bold text-[#1b605b] shadow-xs">
-            <Sparkles className="w-4 h-4 text-[#bd9240] animate-spin" />
+            <TadbeerEmblem size={18} className="animate-spin-slow" />
             <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
           </div>
 

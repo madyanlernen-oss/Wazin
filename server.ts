@@ -28,7 +28,7 @@ const ai = new GoogleGenAI({
 // Endpoint: Advisor Chat
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
   try {
-    const { advisor, userProfile, answers, goals, message, history } = req.body;
+    const { advisor, userProfile, answers, goals, message, history, userName, userScore, userGoals, userAnswers } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'الرسالة مطلوبة' });
@@ -40,17 +40,22 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       });
     }
 
+    const effectiveUserProfile = userProfile || { name: userName || 'صديقنا' };
+    const effectiveAnswers = answers || userAnswers || {};
+    const effectiveGoals = goals || userGoals || [];
+    const effectiveScore = userScore !== undefined ? userScore : (advisor?.score || 0);
+
     const systemInstruction = `
-أنت ${advisor.name} (${advisor.role})، المستشار الذكي المتخصص في جانب "${advisor.title}" ضمن تطبيق "LifeBalance AI - توازن الحياة الذكي".
+أنت ${advisor?.name || 'المستشار الذكي'} (${advisor?.role || 'مستشار توازن'}), المستشار المتخصص في جانب "${advisor?.title || 'توازن الحياة'}" ضمن منصة "تدبير - توازن حياتك بوعي".
 أسلوبك: حكيم، ملهم، عملي، دافئ، مشجع، ومتفهم للواقع العربي والثقافي.
 تتحدث باللغة العربية الفصحى الجميلة والواضحة والمباشرة.
 
 معلومات المستفيد:
-- الاسم: ${userProfile?.name || 'صديقنا'}
-- الدرجة الحالية في هذا الجانب: ${advisor.score || 0}/10
-- التحديات الحالية: ${advisor.challenges?.join('، ') || 'لم تُحدد بعد'}
-- الأهداف الحالية: ${goals?.join('، ') || 'لم تُحدد بعد'}
-- إجابات التقييم السابقة: ${JSON.stringify(answers || {})}
+- الاسم: ${effectiveUserProfile?.name || 'صديقنا'}
+- الدرجة الحالية في هذا الجانب: ${effectiveScore}/10
+- التحديات الحالية: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
+- الأهداف الحالية: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
+- إجابات التقييم السابقة: ${JSON.stringify(effectiveAnswers)}
 
 مهمتك:
 1. الإجابة بدقة ووعي عميق على سؤال المستفيد انطلاقاً من اختصاصك.
@@ -80,7 +85,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     ];
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       contents,
       config: {
         systemInstruction,
@@ -156,7 +161,7 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       contents: prompt,
       config: {
         systemInstruction,
@@ -282,7 +287,7 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
 `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
       contents: prompt,
       config: {
         systemInstruction,

@@ -1,21 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
-  ArrowLeft,
-  ArrowRight,
-  CheckCircle2,
-  HelpCircle,
-  SkipForward,
+  Send,
+  Mic,
+  MicOff,
   Sparkles,
-  ChevronRight,
-  Award,
-  Check,
+  CheckCircle2,
   TrendingUp,
   AlertCircle,
+  Check,
+  User,
+  Lightbulb,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { AdvisorConfig, LifeAreaId } from '../types/lifeBalance';
 import { calculateScoreForAdvisor, extractInsightsFromAnswers } from '../utils/storage';
+
+interface EvaluationChatMessage {
+  id: string;
+  sender: 'advisor' | 'user';
+  text: string;
+  timestamp: string;
+}
 
 interface OnboardingScreenProps {
   initialAdvisorId?: LifeAreaId;
@@ -41,72 +47,164 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     return idx >= 0 ? idx : 0;
   });
 
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [inputText, setInputText] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
-  const [autoSaveFeedback, setAutoSaveFeedback] = useState(false);
+  const [speechSupported, setSpeechSupported] = useState(false);
+
+  // Chat conversation state per advisor
+  const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
+  // Track step count per advisor conversation (allows asking 8 or more flexible questions)
+  const [advisorStep, setAdvisorStep] = useState<Record<string, number>>({});
+
+  const recognitionRef = useRef<any>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
-  const currentQuestion = currentAdvisor.questions[currentQuestionIndex];
-  const answerKey = `${currentAdvisor.id}_${currentQuestion.id}`;
-  const currentValue = answers[answerKey];
+  const currentStep = advisorStep[currentAdvisor.id] || 0;
 
-  // Temporary local state for current question value before confirming
-  const [localValue, setLocalValue] = useState<any>(currentValue);
-
-  // Sync localValue whenever question changes
+  // Speech Recognition Setup (Web Speech API) - Voice Input only (Speech to Text)
   useEffect(() => {
-    setLocalValue(answers[`${currentAdvisor.id}_${currentAdvisor.questions[currentQuestionIndex].id}`]);
-  }, [currentAdvisorIndex, currentQuestionIndex, answers, currentAdvisor]);
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
-  // Overall journey progress (8 advisors * 8 questions = 64 total questions)
-  const totalCompletedQuestions = Object.keys(answers).length;
-  const overallProgressPercent = Math.min(100, (totalCompletedQuestions / 64) * 100);
+    if (SpeechRecognition) {
+      setSpeechSupported(true);
+      const recognition = new SpeechRecognition();
+      recognition.lang = 'ar-SA';
+      recognition.continuous = false;
+      recognition.interimResults = false;
 
-  // Current advisor question progress
-  const advisorProgressPercent = ((currentQuestionIndex + 1) / 8) * 100;
+      recognition.onresult = (event: any) => {
+        const transcript = event.results[0][0].transcript;
+        if (transcript) {
+          setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        }
+        setIsRecording(false);
+      };
 
-  // Auto-save whenever localValue changes
-  const handleSelectValue = (val: any) => {
-    setLocalValue(val);
-    onSaveAnswer(currentAdvisor.id, currentQuestion.id, val);
+      recognition.onerror = () => {
+        setIsRecording(false);
+      };
 
-    // Show quick subtle auto-save toast
-    setAutoSaveFeedback(true);
-    setTimeout(() => setAutoSaveFeedback(false), 1200);
+      recognition.onend = () => {
+        setIsRecording(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  // Toggle voice recording (Speech to text)
+  const toggleRecording = () => {
+    if (!speechSupported || !recognitionRef.current) {
+      alert('ميزة الميكروفون غير مفعلة أو غير مدعومة في متصفحك. يمكنك الكتابة مباشرة.');
+      return;
+    }
+
+    if (isRecording) {
+      recognitionRef.current.stop();
+      setIsRecording(false);
+    } else {
+      try {
+        recognitionRef.current.start();
+        setIsRecording(true);
+      } catch (err) {
+        setIsRecording(false);
+      }
+    }
   };
 
-  // Toggle for multi-select
-  const handleToggleMultiSelect = (optionId: string) => {
-    const currentList: string[] = Array.isArray(localValue) ? localValue : [];
-    let updated: string[];
-    if (currentList.includes(optionId)) {
-      updated = currentList.filter((item) => item !== optionId);
-    } else {
-      updated = [...currentList, optionId];
+  // Initialize welcome message and first question for the advisor
+  useEffect(() => {
+    const advisorKey = currentAdvisor.id;
+    if (!chatMessages[advisorKey] || chatMessages[advisorKey].length === 0) {
+      const q = currentAdvisor.questions[0];
+      const initialMsgs: EvaluationChatMessage[] = [
+        {
+          id: 'welcome',
+          sender: 'advisor',
+          text: `مرحباً بك! أنا ${currentAdvisor.name}، المستشار المختص في ${currentAdvisor.title}.\n\nأنا هنا لأحاورك بود وشفافية لنستكشف هذا الجانب معاً ونحدد مستواه ونقاط قوته وفرص تطويره. تحدث معي بأريحية تامة وكأننا في جلسة حوارية خاصة.`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+        {
+          id: `q_0`,
+          sender: 'advisor',
+          text: `${q.title}${q.description ? `\n\n💡 ${q.description}` : ''}`,
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        },
+      ];
+      setChatMessages((prev) => ({ ...prev, [advisorKey]: initialMsgs }));
+      setAdvisorStep((prev) => ({ ...prev, [advisorKey]: 0 }));
     }
-    handleSelectValue(updated);
-  };
+  }, [currentAdvisorIndex, currentAdvisor]);
 
-  // Navigate to Next Question or Next Advisor
-  const handleNext = () => {
-    if (localValue !== undefined) {
-      onSaveAnswer(currentAdvisor.id, currentQuestion.id, localValue);
-    }
+  // Auto scroll down
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMessages, currentAdvisorIndex]);
 
-    if (currentQuestionIndex < 7) {
-      setCurrentQuestionIndex((prev) => prev + 1);
+  // Handle user response
+  const handleSendAnswer = (textToSend?: string) => {
+    const text = (textToSend || inputText).trim();
+    if (!text) return;
+
+    const advisorKey = currentAdvisor.id;
+    const userMsg: EvaluationChatMessage = {
+      id: `usr_${Date.now()}`,
+      sender: 'user',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    // Save answer under current question or dynamic step
+    const currentQId = currentAdvisor.questions[currentStep]?.id || `step_${currentStep + 1}`;
+    onSaveAnswer(currentAdvisor.id, currentQId, text);
+    setInputText('');
+
+    const currentList = chatMessages[advisorKey] || [];
+    const nextStep = currentStep + 1;
+    setAdvisorStep((prev) => ({ ...prev, [advisorKey]: nextStep }));
+
+    // If within standard question bank (up to 8)
+    if (nextStep < currentAdvisor.questions.length) {
+      const nextQ = currentAdvisor.questions[nextStep];
+      const nextAdvisorMsg: EvaluationChatMessage = {
+        id: `q_${nextStep}`,
+        sender: 'advisor',
+        text: `أشكرك على هذه الإجابة الواعية.\n\n${nextQ.title}${
+          nextQ.description ? `\n\n💡 ${nextQ.description}` : ''
+        }`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setChatMessages((prev) => ({
+        ...prev,
+        [advisorKey]: [...currentList, userMsg, nextAdvisorMsg],
+      }));
     } else {
-      // Completed all 8 questions for this advisor
-      const calculatedScore = calculateScoreForAdvisor(currentAdvisor, {
+      // Completed the foundational questions
+      const updatedAnswers = {
         ...answers,
-        [`${currentAdvisor.id}_${currentQuestion.id}`]: localValue,
-      });
-
+        [`${currentAdvisor.id}_${currentQId}`]: text,
+      };
+      const calculatedScore = calculateScoreForAdvisor(currentAdvisor, updatedAnswers);
       onFinishAdvisor(currentAdvisor.id, calculatedScore);
 
-      // Trigger Confetti
+      const completionMsg: EvaluationChatMessage = {
+        id: `finish_${Date.now()}`,
+        sender: 'advisor',
+        text: `رائع جداً! استطعتُ تكوين رؤية شاملة ودقيقة حول ${currentAdvisor.title}، وتم تقدير نتيجتك بـ (${calculatedScore}/10).\n\nيمكنك الآن إتمام هذا الجانب والانتقال للجانب التالي، أو إذا رغبت في توضيح أو إضافة أي تفصيل آخر يمكنك متابعة الحديث وسأجيبك بكل سرور.`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setChatMessages((prev) => ({
+        ...prev,
+        [advisorKey]: [...currentList, userMsg, completionMsg],
+      }));
+
       confetti({
-        particleCount: 70,
+        particleCount: 60,
         spread: 60,
         origin: { y: 0.7 },
       });
@@ -115,61 +213,42 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  // Navigate to Previous Question
-  const handlePrev = () => {
-    if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex((prev) => prev - 1);
-    } else if (currentAdvisorIndex > 0) {
-      setCurrentAdvisorIndex((prev) => prev - 1);
-      setCurrentQuestionIndex(7);
+  const handleQuickOptionClick = (label: string, weight?: number) => {
+    if (weight !== undefined) {
+      const currentQId = currentAdvisor.questions[currentStep]?.id || `step_${currentStep + 1}`;
+      onSaveAnswer(currentAdvisor.id, currentQId, weight);
     }
+    handleSendAnswer(label);
   };
 
-  // Skip question with default average
-  const handleSkip = () => {
-    let defaultValue: any = 5;
-    if (currentQuestion.type === 'multiple_choice' && currentQuestion.options) {
-      defaultValue = currentQuestion.options[0]?.id;
-    } else if (currentQuestion.type === 'multi_select') {
-      defaultValue = [];
-    } else if (currentQuestion.type === 'open_text') {
-      defaultValue = 'تم التخطي - سأعود لها لاحقاً';
-    }
-
-    handleSelectValue(defaultValue);
-    handleNext();
-  };
-
-  // Proceed to next advisor after celebration modal
   const handleContinueAfterCelebration = () => {
     setShowCelebration(false);
     if (currentAdvisorIndex < ADVISORS_LIST.length - 1) {
       setCurrentAdvisorIndex((prev) => prev + 1);
-      setCurrentQuestionIndex(0);
     } else {
-      // Completed all 8 advisors!
       onCompleteAll();
     }
   };
 
-  // Current advisor computed score preview
   const currentAdvisorScore = calculateScoreForAdvisor(currentAdvisor, answers);
   const insights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
+  const activeConversation = chatMessages[currentAdvisor.id] || [];
+  const activeQuestion = currentAdvisor.questions[currentStep];
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-4xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-6 bg-[#FAF7F2]">
-      {/* Top Advisor Stepper Bar */}
+    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-6 bg-[#FAF7F2]">
+      {/* Top Advisor Selector Tabs */}
       <div className="bg-white border border-[#eae3d5] rounded-2xl p-4 shadow-xs">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[#536561]">رحلة تقييم المجالات:</span>
+            <span className="text-xs font-bold text-[#536561]">حوار أبعاد الحياة:</span>
             <span className="text-xs font-black text-[#1b605b]">
-              {currentAdvisorIndex + 1} من 8
+              {currentAdvisor.title}
             </span>
           </div>
-          <div className="text-[11px] font-semibold text-[#7a8c88]">
-            الإنجاز الإجمالي: {Math.round(overallProgressPercent)}%
-          </div>
+          <span className="text-[11px] font-semibold text-[#7a8c88]">
+            جلسة حوارية مع المستشار الذكي
+          </span>
         </div>
 
         {/* Advisor Tabs */}
@@ -183,10 +262,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 key={advisor.id}
                 onClick={() => {
                   setCurrentAdvisorIndex(index);
-                  setCurrentQuestionIndex(0);
                   setShowCelebration(false);
                 }}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                   isCurrent
                     ? 'bg-[#1b605b] text-white shadow-xs'
                     : isCompleted
@@ -196,7 +274,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 style={isCurrent ? { borderColor: '#1b605b' } : {}}
               >
                 <span>{advisor.avatarSvg}</span>
-                <span className="hidden sm:inline">{advisor.title.split(' ')[0]} {advisor.title.split(' ')[1] || ''}</span>
+                <span>{advisor.title}</span>
                 {isCompleted && <Check className="w-3.5 h-3.5 text-emerald-600" />}
               </button>
             );
@@ -204,24 +282,26 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </div>
       </div>
 
-      {/* Main Advisor Stage */}
-      <div className="relative bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs">
-        {/* Advisor Header Card */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-[#f0eae0]">
-          <div className="flex items-center gap-4">
+      {/* Main Chat Interface (Clean AI Chat Window) */}
+      <div className="bg-white border border-[#eae3d5] rounded-3xl overflow-hidden shadow-xs flex flex-col h-[700px]">
+        {/* Advisor Header Bar */}
+        <div className="px-6 py-4 border-b border-[#f0eae0] flex items-center justify-between bg-white flex-shrink-0">
+          <div className="flex items-center gap-3">
             <div
-              className="w-14 h-14 rounded-2xl flex items-center justify-center text-3xl shadow-xs border border-black/5 relative"
+              className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5 relative"
               style={{ backgroundColor: `${currentAdvisor.themeColor}15` }}
             >
               {currentAdvisor.avatarSvg}
               <span
-                className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-2 border-white"
+                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white"
                 style={{ backgroundColor: currentAdvisor.themeColor }}
               />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-xl font-black text-[#1d2e2b]">{currentAdvisor.name}</h2>
+                <h2 className="text-base font-black text-[#1d2e2b]">
+                  {currentAdvisor.name}
+                </h2>
                 <span
                   className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
                   style={{
@@ -233,276 +313,188 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   {currentAdvisor.badge}
                 </span>
               </div>
-              <p className="text-xs font-semibold text-[#536561] mt-0.5">
-                {currentAdvisor.role}
-              </p>
+              <p className="text-xs text-[#536561] mt-0.5">{currentAdvisor.role}</p>
             </div>
           </div>
 
-          {/* Auto-save indicator */}
-          <div className="flex items-center gap-2 self-start sm:self-center">
-            {autoSaveFeedback ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200 animate-pulse">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                تم الحفظ تلقائياً
-              </span>
-            ) : (
-              <span className="text-[11px] text-[#7a8c88] flex items-center gap-1">
-                <Check className="w-3 h-3 text-[#7a8c88]" />
-                حفظ مستمر محلي
-              </span>
-            )}
-          </div>
-        </div>
-
-        {/* Advisor Tagline Quote */}
-        <div className="my-4 px-4 py-2.5 rounded-xl bg-[#FAF7F2] border border-[#eae3d5] text-xs italic text-[#536561] flex items-center gap-2">
-          <span className="text-base select-none">💬</span>
-          <span>"{currentAdvisor.tagline}"</span>
-        </div>
-
-        {/* Question Progress Bar */}
-        <div className="mt-6 mb-8">
-          <div className="flex items-center justify-between text-xs font-bold mb-2">
-            <span className="text-[#1d2e2b]">
-              السؤال {currentQuestionIndex + 1} من 8
-            </span>
-            <span style={{ color: currentAdvisor.themeColor }}>
-              {Math.round(advisorProgressPercent)}%
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF7F2] border border-[#eae3d5] text-xs font-semibold text-[#1b605b]">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+              مستشار نشط
             </span>
           </div>
-          <div className="w-full h-2 bg-[#FAF7F2] rounded-full overflow-hidden border border-[#eae3d5]">
-            <div
-              className="h-full rounded-full transition-all duration-300"
-              style={{
-                width: `${advisorProgressPercent}%`,
-                backgroundColor: currentAdvisor.themeColor,
-              }}
-            />
-          </div>
         </div>
 
-        {/* The Question Prompt */}
-        <div className="space-y-3 mb-8">
-          <h3 className="text-xl sm:text-2xl font-black text-[#1d2e2b] leading-snug">
-            {currentQuestion.title}
-          </h3>
-          {currentQuestion.description && (
-            <p className="text-xs sm:text-sm text-[#536561] leading-relaxed">
-              {currentQuestion.description}
-            </p>
-          )}
+        {/* Messages Stream */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#fcfbfa]">
+          {activeConversation.map((msg) => {
+            const isAdvisor = msg.sender === 'advisor';
+            return (
+              <div
+                key={msg.id}
+                className={`flex gap-3 max-w-3xl ${isAdvisor ? 'mr-auto' : 'ml-auto flex-row-reverse'}`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 border shadow-xs ${
+                    isAdvisor ? 'border-black/5' : 'bg-[#1b605b] text-white border-transparent'
+                  }`}
+                  style={isAdvisor ? { backgroundColor: `${currentAdvisor.themeColor}20` } : {}}
+                >
+                  {isAdvisor ? currentAdvisor.avatarSvg : <User className="w-4 h-4" />}
+                </div>
+
+                <div
+                  className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-xs whitespace-pre-line border ${
+                    isAdvisor
+                      ? 'bg-white border-[#eae3d5] text-[#1d2e2b] rounded-tr-xs'
+                      : 'bg-[#1b605b] border-transparent text-white rounded-tl-xs'
+                  }`}
+                >
+                  <p>{msg.text}</p>
+                  <span
+                    className={`block text-[10px] mt-1.5 font-medium ${
+                      isAdvisor ? 'text-[#8a9995]' : 'text-emerald-100/75'
+                    }`}
+                  >
+                    {msg.timestamp}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+          <div ref={messagesEndRef} />
         </div>
 
-        {/* Dynamic Question Type Input */}
-        <div className="min-h-[200px] mb-8">
-          {/* 1. Rating (1 - 10) */}
-          {currentQuestion.type === 'rating' && (
-            <div className="space-y-6">
-              <div className="grid grid-cols-5 sm:grid-cols-10 gap-2">
-                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
-                  const isSelected = localValue === num;
-                  return (
+        {/* Quick Options Bar in upper part of input (if relevant to current stage) */}
+        {activeQuestion && (
+          <div className="px-4 py-2.5 bg-[#FAF7F2] border-t border-[#f0eae0] flex-shrink-0">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+              <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
+                <Sparkles className="w-3 h-3 text-[#bd9240]" />
+                خيارات سريعة (أو اكتب بحرية):
+              </span>
+
+              {/* Rating 1 - 10 quick pills */}
+              {activeQuestion.type === 'rating' && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                     <button
                       key={num}
                       type="button"
-                      onClick={() => handleSelectValue(num)}
-                      className={`h-14 sm:h-16 rounded-xl font-black text-base sm:text-lg flex flex-col items-center justify-center transition-all duration-200 border ${
-                        isSelected
-                          ? 'text-white shadow-md scale-105 border-white'
-                          : 'bg-[#FAF7F2] text-[#1d2e2b] border-[#ded7c8] hover:border-[#bd9240] hover:bg-white'
-                      }`}
-                      style={
-                        isSelected
-                          ? {
-                              backgroundColor: currentAdvisor.themeColor,
-                              boxShadow: `0 4px 14px -2px ${currentAdvisor.themeColor}50`,
-                            }
-                          : {}
-                      }
+                      onClick={() => handleQuickOptionClick(`تقييمي الحالي: ${num} من 10`, num)}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#1d2e2b] hover:text-[#1b605b] text-xs font-bold transition-all shadow-xs"
                     >
-                      <span>{num}</span>
-                      <span className="text-[9px] opacity-75 font-normal">
-                        {num === 1 ? 'أدنى' : num === 10 ? 'أعلى' : ''}
-                      </span>
+                      {num}
                     </button>
-                  );
-                })}
-              </div>
-
-              {/* Rating Scale Labels */}
-              {currentQuestion.ratingLabels && (
-                <div className="flex items-center justify-between text-xs text-[#536561] px-1 pt-1 border-t border-[#f0eae0]">
-                  <span className="text-rose-600 font-semibold">
-                    1: {currentQuestion.ratingLabels.low}
-                  </span>
-                  {currentQuestion.ratingLabels.mid && (
-                    <span className="text-amber-700 font-semibold hidden sm:inline">
-                      5: {currentQuestion.ratingLabels.mid}
-                    </span>
-                  )}
-                  <span className="text-emerald-700 font-semibold">
-                    10: {currentQuestion.ratingLabels.high}
-                  </span>
+                  ))}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* 2. Multiple Choice */}
-          {currentQuestion.type === 'multiple_choice' && currentQuestion.options && (
-            <div className="grid grid-cols-1 gap-3">
-              {currentQuestion.options.map((option) => {
-                const isSelected = localValue === option.id;
-                return (
+              {/* Multiple choice options */}
+              {activeQuestion.type === 'multiple_choice' &&
+                activeQuestion.options?.map((opt) => (
                   <button
-                    key={option.id}
+                    key={opt.id}
                     type="button"
-                    onClick={() => handleSelectValue(option.id)}
-                    className={`text-right p-4 rounded-2xl transition-all duration-200 flex items-center justify-between border ${
-                      isSelected
-                        ? 'bg-[#FAF7F2] text-[#1d2e2b] shadow-xs'
-                        : 'bg-white text-[#2c3d39] border-[#ded7c8] hover:border-[#bd9240] hover:bg-[#FAF7F2]'
-                    }`}
-                    style={isSelected ? { borderColor: currentAdvisor.themeColor } : {}}
+                    onClick={() => handleQuickOptionClick(opt.label, opt.scoreWeight)}
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] hover:text-[#1b605b] text-[11px] font-semibold transition-all shadow-xs"
                   >
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${
-                          isSelected
-                            ? 'border-transparent text-white'
-                            : 'border-[#ded7c8] bg-transparent'
-                        }`}
-                        style={isSelected ? { backgroundColor: currentAdvisor.themeColor } : {}}
-                      >
-                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                      </div>
-                      <span className="text-sm font-bold">{option.label}</span>
-                    </div>
-
-                    {isSelected && (
-                      <span
-                        className="text-[10px] font-bold px-2 py-0.5 rounded-full"
-                        style={{
-                          backgroundColor: `${currentAdvisor.themeColor}15`,
-                          color: currentAdvisor.themeColor,
-                        }}
-                      >
-                        اختيارك
-                      </span>
-                    )}
+                    {opt.label}
                   </button>
-                );
-              })}
-            </div>
-          )}
+                ))}
 
-          {/* 3. Open Text */}
-          {currentQuestion.type === 'open_text' && (
-            <div className="space-y-3">
-              <textarea
-                rows={5}
-                value={typeof localValue === 'string' ? localValue : ''}
-                onChange={(e) => handleSelectValue(e.target.value)}
-                placeholder={currentQuestion.placeholder || 'اكتب رؤيتك أو تفاصيل تجربتك هنا بكل حرية...'}
-                className="w-full bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl p-4 text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all leading-relaxed"
-                dir="rtl"
-              />
-              <p className="text-[11px] text-[#7a8c88]">
-                ملاحظة: تُستخدم هذه الإجابة لتحليل التحديات الخاصة بك وتقديم خطة موجهة في استشارة المستشار والمنسق العام.
-              </p>
+              {/* Suggestions for open-text / general dialogue */}
+              {(activeQuestion.type === 'open_text' || activeQuestion.type === 'multi_select') &&
+                (activeQuestion.options
+                  ? activeQuestion.options.map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => handleQuickOptionClick(opt.label, opt.scoreWeight)}
+                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs"
+                      >
+                        {opt.label}
+                      </button>
+                    ))
+                  : currentAdvisor.suggestedQuestions.map((sug, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setInputText(sug)}
+                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#536561] text-[11px] transition-all shadow-xs"
+                      >
+                        {sug}
+                      </button>
+                    )))}
             </div>
-          )}
+          </div>
+        )}
 
-          {/* 4. Multi-Select Goals */}
-          {currentQuestion.type === 'multi_select' && currentQuestion.options && (
-            <div className="space-y-3">
-              <div className="grid grid-cols-1 gap-2.5">
-                {currentQuestion.options.map((option) => {
-                  const isChecked = Array.isArray(localValue) && localValue.includes(option.id);
-                  return (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => handleToggleMultiSelect(option.id)}
-                      className={`text-right p-3.5 rounded-xl transition-all duration-200 flex items-center justify-between border ${
-                        isChecked
-                          ? 'bg-[#FAF7F2] text-[#1d2e2b] shadow-xs'
-                          : 'bg-white text-[#2c3d39] border-[#ded7c8] hover:border-[#bd9240]'
-                      }`}
-                      style={isChecked ? { borderColor: currentAdvisor.themeColor } : {}}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div
-                          className={`w-5 h-5 rounded-md flex items-center justify-center border transition-all ${
-                            isChecked
-                              ? 'border-transparent text-white'
-                              : 'border-[#ded7c8] bg-transparent'
-                          }`}
-                          style={isChecked ? { backgroundColor: currentAdvisor.themeColor } : {}}
-                        >
-                          {isChecked && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                        </div>
-                        <span className="text-sm font-semibold">{option.label}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-              <div className="text-[11px] text-[#7a8c88] flex items-center justify-between">
-                <span>يمكنك اختيار هدف واحد أو أكثر</span>
-                <span className="text-[#1b605b] font-bold">
-                  المحدد: {Array.isArray(localValue) ? localValue.length : 0}
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Bottom Actions Bar */}
-        <div className="flex items-center justify-between pt-6 border-t border-[#f0eae0] gap-3">
-          {/* Back button */}
-          <button
-            type="button"
-            onClick={handlePrev}
-            disabled={currentAdvisorIndex === 0 && currentQuestionIndex === 0}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-white border border-[#ded7c8] hover:bg-[#FAF7F2] text-[#536561] text-xs font-bold disabled:opacity-30 disabled:pointer-events-none transition-all shadow-xs"
+        {/* Input Bar: Text + Mic (Voice to Text) + Send */}
+        <div className="p-3 sm:p-4 bg-white border-t border-[#f0eae0] flex-shrink-0">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleSendAnswer();
+            }}
+            className="flex items-center gap-2"
           >
-            <ArrowRight className="w-4 h-4" />
-            <span>السابق</span>
-          </button>
-
-          <div className="flex items-center gap-2">
-            {/* Skip button */}
+            {/* Mic Button for Voice Dictation */}
             <button
               type="button"
-              onClick={handleSkip}
-              className="flex items-center gap-1 px-3.5 py-2.5 rounded-xl text-[#7a8c88] hover:text-[#1d2e2b] text-xs font-bold hover:bg-[#FAF7F2] transition-all"
+              onClick={toggleRecording}
+              title={isRecording ? 'إيقاف التسجيل الصوتي' : 'تحدث بالصوت'}
+              className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0 ${
+                isRecording
+                  ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-600/30'
+                  : 'bg-[#FAF7F2] border border-[#ded7c8] text-[#536561] hover:text-[#1b605b] hover:border-[#1b605b]'
+              }`}
             >
-              <span>تخطي</span>
-              <SkipForward className="w-3.5 h-3.5" />
+              {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
             </button>
 
-            {/* Next / Confirm button */}
+            {/* Free Text Input */}
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder={
+                isRecording
+                  ? 'جارٍ الاستماع لصوتك باللغة العربية...'
+                  : `اكتب إجابتك هنا بحرية تامة...`
+              }
+              className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
+              dir="rtl"
+            />
+
+            {/* Send Button */}
+            <button
+              type="submit"
+              disabled={!inputText.trim()}
+              className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95"
+              style={{ backgroundColor: currentAdvisor.themeColor }}
+            >
+              <Send className="w-5 h-5 -rotate-90" />
+            </button>
+          </form>
+
+          <div className="mt-2 flex items-center justify-between text-[11px] text-[#7a8c88] px-1">
+            <span className="flex items-center gap-1">
+              <Lightbulb className="w-3.5 h-3.5 text-[#bd9240]" />
+              يمكنك الرد كتابةً، أو التحدث بالميكروفون، أو اختيار أي مقترح من الأعلى.
+            </span>
             <button
               type="button"
-              onClick={handleNext}
-              className="flex items-center gap-2 px-6 py-2.5 rounded-xl text-white text-xs font-extrabold shadow-sm transition-all hover:opacity-95"
-              style={{
-                backgroundColor: currentAdvisor.themeColor,
-                boxShadow: `0 3px 10px -2px ${currentAdvisor.themeColor}50`,
-              }}
+              onClick={() => handleSendAnswer('تم التخطي')}
+              className="text-[#7a8c88] hover:text-[#1d2e2b] underline cursor-pointer"
             >
-              <span>
-                {currentQuestionIndex === 7 ? 'تأكيد وحساب النتيجة' : 'التالي'}
-              </span>
-              <ArrowLeft className="w-4 h-4" />
+              تخطي السؤال
             </button>
           </div>
         </div>
       </div>
 
-      {/* Celebration Modal when an Advisor's 8 questions are completed */}
+      {/* Celebration Modal when an Advisor's evaluation completes */}
       {showCelebration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative text-center space-y-6">
@@ -516,13 +508,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             <div>
               <div className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 text-emerald-800 border border-emerald-200">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                اكتمل تقييم الجانب بنجاح
+                اكتمل حوار الجانب بنجاح
               </div>
               <h3 className="text-2xl font-black text-[#1d2e2b]">
                 أحسنت! أنهيت جولة {currentAdvisor.name}
               </h3>
               <p className="text-xs text-[#536561] mt-1">
-                تم تحليل إجاباتك ورصد نتيجتك في {currentAdvisor.title}
+                تم تحليل إجاباتك الحرة ورصد نتيجتك التقديرية في {currentAdvisor.title}
               </p>
             </div>
 
@@ -595,7 +587,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 }}
               >
                 {currentAdvisorIndex < ADVISORS_LIST.length - 1
-                  ? 'المستشار التالي &larr;'
+                  ? 'المستشار التالي ←'
                   : 'عرض النتائج المتكاملة 🎉'}
               </button>
             </div>

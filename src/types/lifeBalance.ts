@@ -51,6 +51,26 @@ export interface AdvisorConfig {
   suggestedQuestions: string[];
 }
 
+export type EisenhowerQuadrant =
+  | 'q1_urgent_important'
+  | 'q2_important_not_urgent'
+  | 'q3_urgent_not_important'
+  | 'q4_not_urgent_not_important';
+
+export type GoalTimeframe = 'daily' | 'weekly' | 'monthly' | 'yearly';
+
+export interface EisenhowerGoalItem {
+  id: string;
+  title: string;
+  quadrant: EisenhowerQuadrant;
+  timeframe: GoalTimeframe;
+  areaId: LifeAreaId;
+  completed: boolean;
+  source: 'advisor' | 'user';
+  advisorName?: string;
+  createdAt?: string;
+}
+
 export interface UserProfile {
   name: string;
   email?: string;
@@ -92,14 +112,6 @@ export interface DirectorSummaryReport {
   thirtyDayRoadmap: ThirtyDayWeek[];
   directorGoldenRule: string;
   generatedAt: string;
-}
-
-export interface AreaAnalysis {
-  assessmentSummary: string;
-  keyStrengths: string[];
-  mainChallenges: string[];
-  quickWins: string[];
-  strategicMilestone: string;
 }
 
 export interface ChatMessage {

@@ -13,6 +13,8 @@ import { OnboardingScreen } from './screens/OnboardingScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { AdvisorChatScreen } from './screens/AdvisorChatScreen';
 import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
+import { ComparisonScreen } from './screens/ComparisonScreen';
+import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
 import { Menu } from 'lucide-react';
 import {
   DirectorSummaryReport,
@@ -42,7 +44,7 @@ export default function App() {
 
   // Screen navigation state
   const [activeScreen, setActiveScreen] = useState<
-    'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary'
+    'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix'
   >('landing');
 
   // Track whether user clicked 'login' or 'signup' from top buttons
@@ -87,14 +89,27 @@ export default function App() {
     setActiveScreen('dashboard');
   };
 
-  // Handler: Login Success (Ensures clean state for new user: 0/8 completed, no pre-filled answers)
+  // Handler: Login Success (If demo user, load 1-year rich sample analytics state)
   const handleLoginSuccess = (profile: UserProfile) => {
     saveStoredUser(profile);
-    const fresh = getDefaultInitialState();
-    setAppState({
-      ...fresh,
-      userProfile: profile,
-    });
+    const isDemo =
+      profile.email?.toLowerCase() === 'demo@tadbeer.ai' ||
+      profile.name.toLowerCase() === 'demo' ||
+      profile.name.includes('ضيف');
+
+    if (isDemo) {
+      const sample = loadSampleState();
+      setAppState({
+        ...sample,
+        userProfile: profile,
+      });
+    } else {
+      const fresh = getDefaultInitialState();
+      setAppState({
+        ...fresh,
+        userProfile: profile,
+      });
+    }
     setActiveScreen('dashboard');
   };
 
@@ -157,6 +172,27 @@ export default function App() {
           ...prev.goals,
           [advisorId]: [goal, ...currentList],
         },
+      };
+    });
+  };
+
+  // Handler: Automatically add advisor action to Eisenhower Matrix (Quadrant 2)
+  const handleAddEisenhowerGoal = (title: string, advisorName: string, areaId: LifeAreaId) => {
+    setAppState((prev) => {
+      const existing = prev.eisenhowerGoals && prev.eisenhowerGoals.length > 0 ? prev.eisenhowerGoals : [];
+      const newGoal = {
+        id: `eisen_${Date.now()}`,
+        title,
+        quadrant: 'q2_important_not_urgent' as const,
+        timeframe: 'weekly' as const,
+        areaId,
+        completed: false,
+        source: 'advisor' as const,
+        advisorName,
+      };
+      return {
+        ...prev,
+        eisenhowerGoals: [newGoal, ...existing],
       };
     });
   };
@@ -243,7 +279,7 @@ export default function App() {
     <div className="min-h-screen bg-[#FAF7F2] text-[#1D2E2B] font-['Tajawal',sans-serif] selection:bg-[#1b605b]/20 selection:text-[#1b605b] flex flex-row">
       {/* Sidebar on the right in RTL */}
       <Sidebar
-        currentScreen={activeScreen as 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary'}
+        currentScreen={activeScreen as 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix'}
         onNavigate={(screen) => setActiveScreen(screen)}
         userProfile={appState.userProfile}
         onSignOut={handleSignOut}
@@ -314,6 +350,7 @@ export default function App() {
               answers={appState.answers}
               goals={appState.goals}
               onAddGoal={handleAddGoal}
+              onAddEisenhowerGoal={handleAddEisenhowerGoal}
               onBackToDashboard={() => setActiveScreen('dashboard')}
             />
           )}
@@ -327,6 +364,22 @@ export default function App() {
               report={appState.directorReport}
               onSaveReport={handleSaveDirectorReport}
               onBackToDashboard={() => setActiveScreen('dashboard')}
+            />
+          )}
+
+          {activeScreen === 'comparison' && (
+            <ComparisonScreen
+              userProfile={appState.userProfile}
+              onNavigateToDashboard={() => setActiveScreen('dashboard')}
+            />
+          )}
+
+          {activeScreen === 'goals_matrix' && (
+            <EisenhowerMatrixScreen
+              goals={appState.eisenhowerGoals}
+              onUpdateGoals={(updated) =>
+                setAppState((prev) => ({ ...prev, eisenhowerGoals: updated }))
+              }
             />
           )}
         </main>

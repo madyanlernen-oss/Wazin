@@ -365,32 +365,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 <LogIn className="w-4 h-4" />
                 <span>تسجيل الدخول والمتابعة</span>
               </button>
-
-              {/* Demo Account Credentials Quick Helper */}
-              <div className="pt-1">
-                <div className="bg-[#FAF7F2] border border-[#eae3d5] rounded-2xl p-3 text-xs space-y-2 shadow-xs">
-                  <div className="flex items-center justify-between text-[#1b605b] font-bold">
-                    <span className="flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
-                      بيانات الحساب التجريبي المباشر:
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrName('demo@tadbeer.ai');
-                        setPassword('123456');
-                      }}
-                      className="text-[11px] font-bold text-[#1b605b] hover:text-[#16504c] underline cursor-pointer"
-                    >
-                      تعبئة تلقائية بنقرة واحدة
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap items-center justify-between gap-2 text-[#536561] text-[11px] bg-white px-3 py-2 rounded-xl border border-[#ded7c8]">
-                    <span>البريد: <strong className="text-[#1d2e2b] font-mono select-all">demo@tadbeer.ai</strong></span>
-                    <span>كلمة المرور: <strong className="text-[#1d2e2b] font-mono select-all">123456</strong></span>
-                  </div>
-                </div>
-              </div>
             </form>
           )}
 
