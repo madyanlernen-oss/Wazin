@@ -2,6 +2,7 @@ import express, { Request, Response } from 'express';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 
 dotenv.config();
@@ -45,29 +46,52 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     const effectiveGoals = goals || userGoals || [];
     const effectiveScore = userScore !== undefined ? userScore : (advisor?.score || 0);
 
-    const systemInstruction = `
-أنت ${advisor?.name || 'المستشار الذكي'} (${advisor?.role || 'مستشار توازن'}), المستشار المتخصص في جانب "${advisor?.title || 'توازن الحياة'}" ضمن منصة "تدبير - توازن حياتك بوعي".
-أسلوبك: حكيم، ملهم، عملي، دافئ، مشجع، ومتفهم للواقع العربي والثقافي.
-تتحدث باللغة العربية الفصحى الجميلة والواضحة والمباشرة.
+    // تحديد ملف الوكيل بناءً على الاختيار القادم من الطلب
+    const agentFileMap: Record<string, string> = {
+      financial: '01-financial.md',
+      health: '02-health.md',
+      spiritual: '03-spiritual.md',
+      career: '04-career.md',
+      personal: '05-personal.md',
+      learning: '06-learning.md',
+      family: '07-family.md',
+      social: '08-social.md',
+      aggregator: '09-aggregator.md',
+      advisor: '10-advisor.md'
+    };
 
-معلومات المستفيد:
+    // استخدام اسم الوكيل أو افتراضياً الخبير المالي
+    const agentKey = typeof advisor === 'string' ? advisor : (advisor?.id || 'financial');
+    const selectedFile = agentFileMap[agentKey] || '01-financial.md';
+    let agentPath = path.join(process.cwd(), 'agents', selectedFile);
+    if (!fs.existsSync(agentPath)) {
+      agentPath = path.join(process.cwd(), 'Agents', selectedFile);
+    }
+
+    // قراءة تعليمات الوكيل من ملف الـ Markdown الخاص به بدقة
+    let systemInstruction = "أنت مساعد ذكي لنظام تدبير.";
+    if (fs.existsSync(agentPath)) {
+      systemInstruction = fs.readFileSync(agentPath, 'utf8');
+    }
+
+    // إثراء التعليمات بسياق المستفيد وأسلوب الرد المطلوب
+    systemInstruction += `
+
+سياق المستفيد من منصة تدبير:
 - الاسم: ${effectiveUserProfile?.name || 'صديقنا'}
 - الدرجة الحالية في هذا الجانب: ${effectiveScore}/10
 - التحديات الحالية: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف الحالية: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
 - إجابات التقييم السابقة: ${JSON.stringify(effectiveAnswers)}
 
-مهمتك:
-1. الإجابة بدقة ووعي عميق على سؤال المستفيد انطلاقاً من اختصاصك.
-2. تقديم نصائح إجرائية قابلة للتطبيق اليوم أو هذا الأسبوع (Micro-habits).
-3. ربط النصيحة عند الحاجة بجوانب الحياة الأخرى (مثل تأثير الصحة على الإنتاجية أو السكينة الروحية على القرارات).
-4. اختتام الرد بـ 1 إلى 3 خطوات عملية مقترحة (خطوات سريعة).
-
-اكتب الرد بصيغة JSON مهيكلة:
+مهمتك الإضافية:
+1. التحدث باللغة العربية الفصحى الدافئة، الحكيمة والملهمة.
+2. تقديم نصيحة عملية وتحديد خطوات إجرائية سريعة (Micro-habits).
+3. إرجاع الرد بصيغة JSON مهيكلة:
 {
-  "reply": "نص الإجابة التفصيلية والملهمة هنا بأسلوب المستشار مع فقرات منسقة ورموز نقطية إن لزم",
+  "reply": "نص الرد والإرشاد العملي الشامل والمشجع من الوكيل",
   "actionSteps": ["خطوة عملية 1", "خطوة عملية 2"],
-  "reflectionQuestion": "سؤال تأملي عميق يطرحه المستشار على المستفيد لتوسيع إدراكه"
+  "reflectionQuestion": "سؤال تأملي ذكي للمستفيد"
 }
 `;
 
@@ -113,6 +137,14 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     });
 
     const parsed = JSON.parse(response.text || '{}');
+    if (!parsed.reply && (parsed.summary || parsed.advice)) {
+      parsed.reply = [parsed.summary, parsed.advice].filter(Boolean).join('\n\n');
+    }
+    if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
+      if (parsed.advice) parsed.actionSteps = [parsed.advice];
+      else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
+      else parsed.actionSteps = [];
+    }
     return res.json(parsed);
   } catch (error: any) {
     console.error('Advisor Chat error:', error);
@@ -254,6 +286,14 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
     });
 
     const parsed = JSON.parse(response.text || '{}');
+    if (!parsed.reply && (parsed.summary || parsed.advice)) {
+      parsed.reply = [parsed.summary, parsed.advice].filter(Boolean).join('\n\n');
+    }
+    if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
+      if (parsed.advice) parsed.actionSteps = [parsed.advice];
+      else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
+      else parsed.actionSteps = [];
+    }
     return res.json(parsed);
   } catch (error: any) {
     console.error('Director Summary error:', error);
@@ -316,6 +356,14 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
     });
 
     const parsed = JSON.parse(response.text || '{}');
+    if (!parsed.reply && (parsed.summary || parsed.advice)) {
+      parsed.reply = [parsed.summary, parsed.advice].filter(Boolean).join('\n\n');
+    }
+    if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
+      if (parsed.advice) parsed.actionSteps = [parsed.advice];
+      else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
+      else parsed.actionSteps = [];
+    }
     return res.json(parsed);
   } catch (error: any) {
     console.error('Area Deep-dive error:', error);
