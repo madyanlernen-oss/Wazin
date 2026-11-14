@@ -53,14 +53,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'onboarding' as const,
       label: 'قيّم أسبوعك الآن',
       icon: ClipboardList,
-      badge: 'أسبوعي',
+      badge: 'جلسة أسبوعية 🔒',
       badgeColor: 'bg-emerald-100 text-emerald-800',
     },
     {
       id: 'advisor_chat' as const,
       label: 'استشارة المستشارين',
       icon: MessageSquare,
-      badge: '8 أبعاد',
+      badge: 'حوار مفتوح 💬',
       badgeColor: 'bg-[#1b605b]/10 text-[#1b605b]',
     },
     {

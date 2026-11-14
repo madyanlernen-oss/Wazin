@@ -12,13 +12,21 @@ import {
   User,
   Lightbulb,
   ChevronDown,
-  Zap,
-  Brain,
-  Scale,
+  Lock,
+  MessageSquare,
+  ArrowRight,
+  ArrowLeft,
+  Compass,
+  RotateCcw,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { AdvisorConfig, LifeAreaId } from '../types/lifeBalance';
-import { calculateScoreForAdvisor, extractInsightsFromAnswers } from '../utils/storage';
+import {
+  calculateScoreForAdvisor,
+  extractInsightsFromAnswers,
+  isAdvisorWeeklyLocked,
+  getDaysUntilNextUnlock,
+} from '../utils/storage';
 import { AI_MODES, AiModelMode } from './AdvisorChatScreen';
 
 interface EvaluationChatMessage {
@@ -35,7 +43,9 @@ interface OnboardingScreenProps {
   onFinishAdvisor: (advisorId: LifeAreaId, score: number) => void;
   onCompleteAll: () => void;
   completedAdvisors: LifeAreaId[];
+  completedDates?: Record<string, number>;
   onNavigateToDashboard: () => void;
+  onNavigateToAdvisorChat?: (advisorId: LifeAreaId) => void;
 }
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
@@ -45,7 +55,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onFinishAdvisor,
   onCompleteAll,
   completedAdvisors,
+  completedDates,
   onNavigateToDashboard,
+  onNavigateToAdvisorChat,
 }) => {
   const [currentAdvisorIndex, setCurrentAdvisorIndex] = useState(() => {
     const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
@@ -71,7 +83,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // Chat conversation state per advisor
   const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
-  // Track step count per advisor conversation (allows asking 8 or more flexible questions)
+  // Step in the 3-phase weekly evaluation ritual:
+  // 0: Welcome, Listening & Initial Rating (1-10)
+  // 1: Exploring Core Obstacle / Challenge
+  // 2: Weekly Diagnosis, Golden Prescription & Domain Locked
   const [advisorStep, setAdvisorStep] = useState<Record<string, number>>({});
 
   const recognitionRef = useRef<any>(null);
@@ -79,6 +94,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
   const currentStep = advisorStep[currentAdvisor.id] || 0;
+
+  // Determine if current advisor is completed / locked for this week
+  const isCompleted = completedAdvisors.includes(currentAdvisor.id);
+  const isLocked = isCompleted || isAdvisorWeeklyLocked(currentAdvisor.id, completedDates);
+  const daysRemaining = getDaysUntilNextUnlock(completedDates?.[currentAdvisor.id]) || 7;
+
+  // All 8 domains completed state
+  const isAllCompleted = completedAdvisors.length >= 8;
 
   // Speech Recognition Setup (Web Speech API) - Voice Input only (Speech to Text)
   useEffect(() => {
@@ -132,22 +155,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  // Initialize welcome message and first question for the advisor
+  // Initialize welcoming message for weekly clinic evaluation
   useEffect(() => {
     const advisorKey = currentAdvisor.id;
     if (!chatMessages[advisorKey] || chatMessages[advisorKey].length === 0) {
-      const q = currentAdvisor.questions[0];
       const initialMsgs: EvaluationChatMessage[] = [
         {
           id: 'welcome',
           sender: 'advisor',
-          text: `مرحباً بك! أنا ${currentAdvisor.name}، المستشار المختص في ${currentAdvisor.title}.\n\nأنا هنا لأحاورك بود وشفافية لنستكشف هذا الجانب معاً ونحدد مستواه ونقاط قوته وفرص تطويره. تحدث معي بأريحية تامة وكأننا في جلسة حوارية خاصة.`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-        {
-          id: `q_0`,
-          sender: 'advisor',
-          text: `${q.title}${q.description ? `\n\n💡 ${q.description}` : ''}`,
+          text: `مرحباً بك يا ضيف تدبير في عيادة التقييم الأسبوعي الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nهذه الجلسة هي مساحتك الآمنة للتنفس والمصارحة دون أي أحكام مسبقة.\n\nكيف تصف حالك وشعورك العام في هذا الجانب هذا الأسبوع؟ وما تقييمك لمستوى رضاك الحالي من 1 إلى 10؟`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ];
@@ -161,10 +177,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, currentAdvisorIndex]);
 
-  // Finish and approve current advisor assessment
+  // Finish and approve current advisor assessment immediately
   const handleFinishCurrentAdvisor = () => {
     const calculatedScore = calculateScoreForAdvisor(currentAdvisor, answers);
-    onFinishAdvisor(currentAdvisor.id, calculatedScore);
+    const scoreToSave = calculatedScore > 0 ? calculatedScore : 7.0;
+    onFinishAdvisor(currentAdvisor.id, scoreToSave);
     confetti({
       particleCount: 60,
       spread: 60,
@@ -173,10 +190,33 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     setShowCelebration(true);
   };
 
-  // Handle user response with REAL AI Agent invocation
+  // Move to next incomplete advisor
+  const handleGoToNextAdvisor = () => {
+    setShowCelebration(false);
+    // Find next incomplete advisor index
+    const nextIdx = ADVISORS_LIST.findIndex(
+      (adv, i) => i > currentAdvisorIndex && !completedAdvisors.includes(adv.id)
+    );
+    if (nextIdx >= 0) {
+      setCurrentAdvisorIndex(nextIdx);
+    } else {
+      // Find first incomplete anywhere
+      const firstIncomplete = ADVISORS_LIST.findIndex(
+        (adv) => !completedAdvisors.includes(adv.id)
+      );
+      if (firstIncomplete >= 0) {
+        setCurrentAdvisorIndex(firstIncomplete);
+      } else {
+        // All completed!
+        onCompleteAll();
+      }
+    }
+  };
+
+  // Handle user response with structured 3-phase clinical session
   const handleSendAnswer = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
-    if (!text || isAdvisorReplying) return;
+    if (!text || isAdvisorReplying || isLocked) return;
 
     const advisorKey = currentAdvisor.id;
     const userMsg: EvaluationChatMessage = {
@@ -186,16 +226,21 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    // Save answer under current question or dynamic step
-    const currentQId = currentAdvisor.questions[currentStep]?.id || `step_${currentStep + 1}`;
-    onSaveAnswer(currentAdvisor.id, currentQId, text);
-    setInputText('');
+    // Save answer and check if user provided a numeric rating
+    const ratingMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:من\s*10|\/10)?/);
+    if (ratingMatch && currentStep === 0) {
+      const num = Math.min(10, Math.max(1, parseFloat(ratingMatch[1])));
+      onSaveAnswer(currentAdvisor.id, 'score_rating', num);
+    } else {
+      onSaveAnswer(currentAdvisor.id, `phase_${currentStep + 1}`, text);
+    }
 
+    setInputText('');
     const currentList = chatMessages[advisorKey] || [];
     const nextStep = currentStep + 1;
     setAdvisorStep((prev) => ({ ...prev, [advisorKey]: nextStep }));
 
-    // Immediately display user message
+    // Display user message immediately
     setChatMessages((prev) => ({
       ...prev,
       [advisorKey]: [...currentList, userMsg],
@@ -209,7 +254,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         content: m.text,
       }));
 
-      // Call AI Agent API
+      // Call AI Agent API with assessment session mode
       const res = await fetch('/api/gemini/advisor-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -220,19 +265,26 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           answers,
           userScore: calculateScoreForAdvisor(currentAdvisor, answers),
           aiMode,
+          isEvaluationSession: true,
+          evaluationStep: nextStep,
         }),
       });
 
-      if (!res.ok) throw new Error('فشل استجابة الوكيل');
-      const data = await res.json();
-      let replyContent = data.reply || data.advice || data.summary || 'أنا معك وأستمع إليك باهتمام.';
+      let replyContent = '';
+      if (res.ok) {
+        const data = await res.json();
+        replyContent = data.reply || data.advice || data.summary || '';
+      }
 
-      // If user is still in early exploration and asks questions or answers, weave in the next reflection smoothly
-      if (nextStep < currentAdvisor.questions.length && !text.match(/^(مرحبا|أهلا|سلام)/i)) {
-        const nextQ = currentAdvisor.questions[nextStep];
-        replyContent += `\n\n📌 **استكشاف إضافي:** ${nextQ.title}${
-          nextQ.description ? `\n💡 ${nextQ.description}` : ''
-        }`;
+      // If reply is empty, generate contextual clinical response
+      if (!replyContent) {
+        if (nextStep === 1) {
+          replyContent = `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت تقييمك ومشاعرك بوعي تام.\n\nكطبيب ومرشد لك في ${currentAdvisor.title}، كل مرحلة نمر بها هي فرصة للاتزان وإعادة الضبط. بالنظر إلى وتيرة أسبوعك المنصرم، ما هو أكبر تحدٍ أو عائق نفسي أو عملي واجهك وشعرت أنه يسحب من طاقتك وتركيزك في هذا الجانب؟`;
+        } else {
+          const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
+          const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+          replyContent = `✅ أحسنت يا صديقنا. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية لهذا الأسبوع.\n\nرصدنا درجتك المعتمدة في ${currentAdvisor.title}: (${finalScore}/10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\n🔒 **تم حفظ جلستك وإقفال هذا الجانب لهذا الأسبوع**، لتمنح نفسك مساحة هادئة للتطبيق العملي حتى موعد جلستنا مطلع الأسبوع القادم.\n\nإذا كان لديك أي سؤال لاحق أو رغبت في حوار حر ومفتوح في أي وقت، يمكنك دائماً التوجه إلى قسم **(استشارة المستشارين)** في القائمة الجانبية.\n\nفلننتقل الآن إلى الجانب التالي.`;
+        }
       }
 
       const nextAdvisorMsg: EvaluationChatMessage = {
@@ -246,71 +298,86 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         ...prev,
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
+
+      // When step 2 completes, automatically close the session and lock the domain for the week
+      if (nextStep >= 2) {
+        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
+        const scoreToSave = finalScore > 0 ? finalScore : 7.0;
+        onFinishAdvisor(currentAdvisor.id, scoreToSave);
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+        setShowCelebration(true);
+      }
     } catch (err) {
       console.error('Advisor chat error in onboarding:', err);
-      // Fallback
-      let fallbackText = `أهلاً بك! أنا معك كوكيل ومستشار في ${currentAdvisor.title}. تفضل بمشاركتي المزيد لنحلله معاً.`;
-      if (nextStep < currentAdvisor.questions.length) {
-        const nextQ = currentAdvisor.questions[nextStep];
-        fallbackText += `\n\n${nextQ.title}${nextQ.description ? `\n\n💡 ${nextQ.description}` : ''}`;
-      }
-      const nextAdvisorMsg: EvaluationChatMessage = {
-        id: `q_${nextStep}`,
-        sender: 'advisor',
-        text: fallbackText,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-      setChatMessages((prev) => ({
-        ...prev,
-        [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
-      }));
     } finally {
       setIsAdvisorReplying(false);
-    }
-  };
-
-  const handleQuickOptionClick = (label: string, weight?: number) => {
-    if (weight !== undefined) {
-      const currentQId = currentAdvisor.questions[currentStep]?.id || `step_${currentStep + 1}`;
-      onSaveAnswer(currentAdvisor.id, currentQId, weight);
-    }
-    handleSendAnswer(label);
-  };
-
-  const handleContinueAfterCelebration = () => {
-    setShowCelebration(false);
-    if (currentAdvisorIndex < ADVISORS_LIST.length - 1) {
-      setCurrentAdvisorIndex((prev) => prev + 1);
-    } else {
-      onCompleteAll();
     }
   };
 
   const currentAdvisorScore = calculateScoreForAdvisor(currentAdvisor, answers);
   const insights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
   const activeConversation = chatMessages[currentAdvisor.id] || [];
-  const activeQuestion = currentAdvisor.questions[currentStep];
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-6 bg-[#FAF7F2]">
+    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-5 bg-[#FAF7F2]">
+      {/* All 8 Domains Completed Milestone Banner */}
+      {isAllCompleted && (
+        <div className="bg-gradient-to-r from-emerald-900 to-[#1b605b] text-white rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-300 border border-emerald-400/20">
+          <div className="flex items-center gap-3 text-right">
+            <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-2xl flex-shrink-0">
+              🌟
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-base font-black">اكتملت خريطتك الأسبوعية المتكاملة (8 من 8)!</h3>
+                <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-950">
+                  مكتمل ومقفل للأسبوع 🔒
+                </span>
+              </div>
+              <p className="text-xs text-emerald-100/90 mt-0.5">
+                تم رسم عجلة الحياة وتحديث مصفوفة أيزنهاور وصياغة تقرير المنسق العام بالكامل.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onNavigateToDashboard}
+            className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-white hover:bg-emerald-50 text-[#1b605b] font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 flex-shrink-0 cursor-pointer"
+          >
+            <span>استعراض خريطتي ولوحة التحكم</span>
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Top Advisor Selector Tabs */}
       <div className="bg-white border border-[#eae3d5] rounded-2xl p-4 shadow-xs">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[#536561]">حوار أبعاد الحياة:</span>
+            <span className="text-xs font-bold text-[#536561]">جلسات التقييم الأسبوعي:</span>
             <span className="text-xs font-black text-[#1b605b]">
               {currentAdvisor.title}
             </span>
           </div>
-          <span className="text-[11px] font-semibold text-[#7a8c88]">
-            جلسة حوارية مع المستشار الذكي
-          </span>
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-[#7a8c88]">
+            <span>المكتمل: {completedAdvisors.length} من 8</span>
+            <div className="w-20 h-2 bg-[#eae3d5] rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-600 transition-all duration-300"
+                style={{ width: `${(completedAdvisors.length / 8) * 100}%` }}
+              />
+            </div>
+          </div>
         </div>
 
         {/* Advisor Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {ADVISORS_LIST.map((advisor, index) => {
-            const isCompleted = completedAdvisors.includes(advisor.id);
+            const isAdvCompleted = completedAdvisors.includes(advisor.id);
             const isCurrent = index === currentAdvisorIndex;
 
             return (
@@ -323,7 +390,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                   isCurrent
                     ? 'bg-[#1b605b] text-white shadow-xs'
-                    : isCompleted
+                    : isAdvCompleted
                     ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
                     : 'bg-[#FAF7F2] text-[#536561] border-[#eae3d5] hover:text-[#1d2e2b]'
                 }`}
@@ -331,15 +398,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               >
                 <span>{advisor.avatarSvg}</span>
                 <span>{advisor.title}</span>
-                {isCompleted && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                {isAdvCompleted && <Lock className="w-3 h-3 text-emerald-600" />}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Main Chat Interface (Clean AI Chat Window) */}
-      <div className="bg-white border border-[#eae3d5] rounded-3xl overflow-hidden shadow-xs flex flex-col h-[700px]">
+      {/* Main Chat Interface (Clean AI Clinic Window) */}
+      <div className="bg-white border border-[#eae3d5] rounded-3xl overflow-hidden shadow-xs flex flex-col h-[680px]">
         {/* Advisor Header Bar */}
         <div className="px-6 py-4 border-b border-[#f0eae0] flex items-center justify-between bg-white flex-shrink-0">
           <div className="flex items-center gap-3">
@@ -368,6 +435,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 >
                   {currentAdvisor.badge}
                 </span>
+                {isLocked && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
+                    <Lock className="w-2.5 h-2.5" />
+                    مكتمل للأسبوع
+                  </span>
+                )}
               </div>
               <p className="text-xs text-[#536561] mt-0.5">{currentAdvisor.role}</p>
             </div>
@@ -398,7 +471,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <div className="fixed inset-0 z-40" onClick={() => setShowModeDropdown(false)} />
                   <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl border border-[#ded7c8] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                     <div className="px-3 py-1.5 border-b border-[#f0eae0] mb-1">
-                      <span className="text-[11px] font-black text-[#1d2e2b] block">مستوى تفكير الذكاء الاصطناعي (Gemini)</span>
+                      <span className="text-[11px] font-black text-[#1d2e2b] block">مستوى تفكير الذكاء الاصطناعي</span>
                       <span className="text-[9px] text-[#7a8c88]">اختر سرعة وعمق التحليل أثناء الحوار</span>
                     </div>
 
@@ -449,18 +522,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               )}
             </div>
 
-            <button
-              type="button"
-              onClick={handleFinishCurrentAdvisor}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs"
-            >
-              <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>اعتماد النتيجة ({currentAdvisorScore}/10)</span>
-            </button>
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF7F2] border border-[#eae3d5] text-xs font-semibold text-[#1b605b]">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              مستشار نشط
-            </span>
+            {/* Quick approve button if not locked yet */}
+            {!isLocked && (
+              <button
+                type="button"
+                onClick={handleFinishCurrentAdvisor}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs"
+                title="اعتماد النتيجة الفورية وإقفال الجلسة"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5" />
+                <span>اعتماد ({currentAdvisorScore > 0 ? currentAdvisorScore : 7}/10)</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -501,6 +574,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
             );
           })}
+
           {isAdvisorReplying && (
             <div className="flex gap-3 max-w-3xl mr-auto items-center animate-pulse">
               <div
@@ -511,144 +585,172 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
               <div className="p-3 rounded-2xl bg-white border border-[#eae3d5] text-xs text-[#536561] flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5 text-[#bd9240] animate-spin" />
-                <span>
-                  {aiMode === 'fast' && `${currentAdvisor.name} يكتب لك نصيحة سريعة ومركزة ⚡...`}
-                  {aiMode === 'deep' && `${currentAdvisor.name} يحلل إجابتك بعمق وتفكير استراتيجي 🧠...`}
-                  {aiMode === 'balanced' && `${currentAdvisor.name} يفكر ويكتب تحليله لك الآن ⚖️...`}
-                </span>
+                <span>{currentAdvisor.name} يستمع إليك ويصيغ توجيهه الطبي بعناية...</span>
               </div>
             </div>
           )}
+
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Quick Options Bar in upper part of input (if relevant to current stage) */}
-        {activeQuestion && (
-          <div className="px-4 py-2.5 bg-[#FAF7F2] border-t border-[#f0eae0] flex-shrink-0">
-            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
-              <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
-                <Sparkles className="w-3 h-3 text-[#bd9240]" />
-                خيارات سريعة (أو اكتب بحرية):
-              </span>
-
-              {/* Rating 1 - 10 quick pills */}
-              {activeQuestion.type === 'rating' && (
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => handleQuickOptionClick(`تقييمي الحالي: ${num} من 10`, num)}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#1d2e2b] hover:text-[#1b605b] text-xs font-bold transition-all shadow-xs"
-                    >
-                      {num}
-                    </button>
-                  ))}
+        {/* LOCKED STATE BANNER (When this domain was evaluated and locked for the week) */}
+        {isLocked ? (
+          <div className="p-4 sm:p-5 bg-gradient-to-b from-[#FAF7F2] to-white border-t border-[#eae3d5] flex-shrink-0 space-y-3">
+            <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div className="flex items-center gap-3 text-right">
+                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <Lock className="w-5 h-5" />
                 </div>
-              )}
+                <div>
+                  <h4 className="text-xs sm:text-sm font-black text-emerald-950">
+                    جلسة هذا الأسبوع مكتملة ومقفلة بنجاح ({currentAdvisorScore}/10)
+                  </h4>
+                  <p className="text-[11px] text-emerald-800 mt-0.5">
+                    تتجدد جلسة التقييم القادمة بعد {daysRemaining} أيام لتمنح نفسك فرصة هادئة للتطبيق العملي.
+                  </p>
+                </div>
+              </div>
 
-              {/* Multiple choice options */}
-              {activeQuestion.type === 'multiple_choice' &&
-                activeQuestion.options?.map((opt) => (
+              <div className="flex items-center gap-2 w-full sm:w-auto">
+                {onNavigateToAdvisorChat && (
                   <button
-                    key={opt.id}
                     type="button"
-                    onClick={() => handleQuickOptionClick(opt.label, opt.scoreWeight)}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] hover:text-[#1b605b] text-[11px] font-semibold transition-all shadow-xs"
+                    onClick={() => onNavigateToAdvisorChat(currentAdvisor.id)}
+                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1b605b] hover:bg-[#164e4a] text-white text-xs font-bold transition-all shadow-xs"
                   >
-                    {opt.label}
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>حوار مفتوح مع {currentAdvisor.name}</span>
                   </button>
-                ))}
+                )}
+                <button
+                  type="button"
+                  onClick={handleGoToNextAdvisor}
+                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-300 text-xs font-bold transition-all shadow-xs"
+                >
+                  <span>الجانب التالي</span>
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* ACTIVE CLINIC INPUT BAR (Phase 0 and Phase 1) */
+          <>
+            {/* Quick Choices bar depending on current clinic step */}
+            <div className="px-4 py-2.5 bg-[#FAF7F2] border-t border-[#f0eae0] flex-shrink-0">
+              <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+                <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
+                  <Sparkles className="w-3 h-3 text-[#bd9240]" />
+                  {currentStep === 0 ? 'اختر رضاك التقريبي:' : 'خيارات سريعة للعوائق:'}
+                </span>
 
-              {/* Suggestions for open-text / general dialogue */}
-              {(activeQuestion.type === 'open_text' || activeQuestion.type === 'multi_select') &&
-                (activeQuestion.options
-                  ? activeQuestion.options.map((opt) => (
+                {/* Step 0: Quick 1 to 10 rating pills */}
+                {currentStep === 0 && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                       <button
-                        key={opt.id}
+                        key={num}
                         type="button"
-                        onClick={() => handleQuickOptionClick(opt.label, opt.scoreWeight)}
-                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs"
+                        onClick={() => handleSendAnswer(`تقييمي لرضاي الحالي: ${num} من 10`)}
+                        className="px-2.5 py-1 rounded-lg bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#1d2e2b] hover:text-[#1b605b] text-xs font-bold transition-all shadow-xs"
                       >
-                        {opt.label}
+                        {num}
                       </button>
-                    ))
-                  : currentAdvisor.suggestedQuestions.map((sug, idx) => (
+                    ))}
+                  </div>
+                )}
+
+                {/* Step 1: Suggested challenges or quick reflection pills */}
+                {currentStep >= 1 && (
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {currentAdvisor.challenges.map((ch, idx) => (
                       <button
                         key={idx}
                         type="button"
-                        onClick={() => setInputText(sug)}
-                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#536561] text-[11px] transition-all shadow-xs"
+                        onClick={() => handleSendAnswer(ch)}
+                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs"
                       >
-                        {sug}
+                        {ch}
                       </button>
-                    )))}
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => handleSendAnswer('الحمد لله، الأمور تسير بهدوء ودون عوائق كبيرة')}
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs"
+                    >
+                      الأمور مستقرة وهادئة 🌿
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+
+            {/* Input Bar: Text + Mic + Send */}
+            <div className="p-3 sm:p-4 bg-white border-t border-[#f0eae0] flex-shrink-0">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  handleSendAnswer();
+                }}
+                className="flex items-center gap-2"
+              >
+                {/* Mic Button for Voice Dictation */}
+                <button
+                  type="button"
+                  onClick={toggleRecording}
+                  title={isRecording ? 'إيقاف التسجيل الصوتي' : 'تحدث بالصوت'}
+                  className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0 ${
+                    isRecording
+                      ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-600/30'
+                      : 'bg-[#FAF7F2] border border-[#ded7c8] text-[#536561] hover:text-[#1b605b] hover:border-[#1b605b]'
+                  }`}
+                >
+                  {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                </button>
+
+                {/* Free Text Input */}
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder={
+                    isRecording
+                      ? 'جارٍ الاستماع لصوتك باللغة العربية...'
+                      : currentStep === 0
+                      ? 'اكتب شعورك أو تقييمك (مثلاً: راضٍ بنسبة 7 من 10)...'
+                      : 'اكتب العائق أو التحدي الأبرز بحرية تامة...'
+                  }
+                  className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
+                  dir="rtl"
+                />
+
+                {/* Send Button */}
+                <button
+                  type="submit"
+                  disabled={!inputText.trim() || isAdvisorReplying}
+                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95"
+                  style={{ backgroundColor: currentAdvisor.themeColor }}
+                >
+                  <Send className="w-5 h-5 -rotate-90" />
+                </button>
+              </form>
+
+              <div className="mt-2 flex items-center justify-between text-[11px] text-[#7a8c88] px-1">
+                <span className="flex items-center gap-1">
+                  <Lightbulb className="w-3.5 h-3.5 text-[#bd9240]" />
+                  جلسة أسبوعية مركزة من خطوتين: التقييم ثم التحدي لإصدار العادة وإقفال الجانب للأسبوع.
+                </span>
+                <button
+                  type="button"
+                  onClick={handleFinishCurrentAdvisor}
+                  className="text-[#1b605b] hover:underline font-bold cursor-pointer"
+                >
+                  اعتماد وإنهاء الجلسة فوراً ✓
+                </button>
+              </div>
+            </div>
+          </>
         )}
-
-        {/* Input Bar: Text + Mic (Voice to Text) + Send */}
-        <div className="p-3 sm:p-4 bg-white border-t border-[#f0eae0] flex-shrink-0">
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSendAnswer();
-            }}
-            className="flex items-center gap-2"
-          >
-            {/* Mic Button for Voice Dictation */}
-            <button
-              type="button"
-              onClick={toggleRecording}
-              title={isRecording ? 'إيقاف التسجيل الصوتي' : 'تحدث بالصوت'}
-              className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0 ${
-                isRecording
-                  ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-600/30'
-                  : 'bg-[#FAF7F2] border border-[#ded7c8] text-[#536561] hover:text-[#1b605b] hover:border-[#1b605b]'
-              }`}
-            >
-              {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-            </button>
-
-            {/* Free Text Input */}
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={
-                isRecording
-                  ? 'جارٍ الاستماع لصوتك باللغة العربية...'
-                  : `اكتب إجابتك هنا بحرية تامة...`
-              }
-              className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
-              dir="rtl"
-            />
-
-            {/* Send Button */}
-            <button
-              type="submit"
-              disabled={!inputText.trim() || isAdvisorReplying}
-              className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95"
-              style={{ backgroundColor: currentAdvisor.themeColor }}
-            >
-              <Send className="w-5 h-5 -rotate-90" />
-            </button>
-          </form>
-
-          <div className="mt-2 flex items-center justify-between text-[11px] text-[#7a8c88] px-1">
-            <span className="flex items-center gap-1">
-              <Lightbulb className="w-3.5 h-3.5 text-[#bd9240]" />
-              يمكنك الرد كتابةً، أو التحدث بالميكروفون، أو اختيار أي مقترح من الأعلى.
-            </span>
-            <button
-              type="button"
-              onClick={() => handleSendAnswer('تم التخطي')}
-              className="text-[#7a8c88] hover:text-[#1d2e2b] underline cursor-pointer"
-            >
-              تخطي السؤال
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Celebration Modal when an Advisor's evaluation completes */}
@@ -663,15 +765,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             </div>
 
             <div>
-              <div className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                اكتمل حوار الجانب بنجاح
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 text-emerald-800 border border-emerald-200">
+                <Lock className="w-3.5 h-3.5 text-emerald-600" />
+                اكتملت جلسة هذا الأسبوع وأُقفل الجانب بنجاح
               </div>
               <h3 className="text-2xl font-black text-[#1d2e2b]">
                 أحسنت! أنهيت جولة {currentAdvisor.name}
               </h3>
               <p className="text-xs text-[#536561] mt-1">
-                تم تحليل إجاباتك الحرة ورصد نتيجتك التقديرية في {currentAdvisor.title}
+                تم اعتماد نتيجتك التقديرية في {currentAdvisor.title} وحفظ توصيتك الذهبية للأسبوع
               </p>
             </div>
 
@@ -683,7 +785,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   className="text-3xl font-black"
                   style={{ color: currentAdvisor.themeColor }}
                 >
-                  {currentAdvisorScore} <span className="text-base text-[#7a8c88]">/ 10</span>
+                  {currentAdvisorScore > 0 ? currentAdvisorScore : 7} <span className="text-base text-[#7a8c88]">/ 10</span>
                 </span>
               </div>
               <div className="h-10 w-px bg-[#ded7c8]" />
@@ -707,7 +809,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   أبرز مواطن القوة:
                 </span>
                 <ul className="list-disc list-inside text-[#2c3d39] space-y-0.5">
-                  {insights.strengths.map((str, i) => (
+                  {insights.strengths.slice(0, 2).map((str, i) => (
                     <li key={i}>{str}</li>
                   ))}
                 </ul>
@@ -719,7 +821,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   فرص التحسين:
                 </span>
                 <ul className="list-disc list-inside text-[#2c3d39] space-y-0.5">
-                  {insights.challenges.map((ch, i) => (
+                  {insights.challenges.slice(0, 2).map((ch, i) => (
                     <li key={i}>{ch}</li>
                   ))}
                 </ul>
@@ -728,24 +830,32 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
             {/* Continue CTA */}
             <div className="pt-2 flex flex-col sm:flex-row gap-3">
+              {onNavigateToAdvisorChat && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCelebration(false);
+                    onNavigateToAdvisorChat(currentAdvisor.id);
+                  }}
+                  className="flex-1 py-3 px-4 rounded-xl bg-white hover:bg-[#FAF7F2] text-[#2c3d39] border border-[#ded7c8] text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>حوار مفتوح مع المستشار</span>
+                </button>
+              )}
               <button
                 type="button"
-                onClick={onNavigateToDashboard}
-                className="flex-1 py-3 px-4 rounded-xl bg-white hover:bg-[#FAF7F2] text-[#2c3d39] border border-[#ded7c8] text-xs font-bold transition-all shadow-xs"
-              >
-                معاينة لوحة التحكم والعجلة
-              </button>
-              <button
-                type="button"
-                onClick={handleContinueAfterCelebration}
-                className="flex-1 py-3 px-4 rounded-xl text-white text-xs font-black shadow-xs transition-all hover:opacity-95"
+                onClick={handleGoToNextAdvisor}
+                className="flex-1 py-3 px-4 rounded-xl text-white text-xs font-black shadow-xs transition-all hover:opacity-95 flex items-center justify-center gap-1.5"
                 style={{
                   backgroundColor: currentAdvisor.themeColor,
                 }}
               >
-                {currentAdvisorIndex < ADVISORS_LIST.length - 1
-                  ? 'المستشار التالي ←'
-                  : 'عرض النتائج المتكاملة 🎉'}
+                <span>
+                  {completedAdvisors.length >= 8
+                    ? '🎉 عرض خريطتي المتكاملة (الداشبورد)'
+                    : 'المستشار التالي ←'}
+                </span>
               </button>
             </div>
           </div>

@@ -14,12 +14,37 @@ export interface StoredAppState {
   goals: Record<LifeAreaId, string[]>;
   eisenhowerGoals?: EisenhowerGoalItem[];
   completedAdvisors: LifeAreaId[];
+  completedDates?: Record<string, number>; // timestamp of completion for weekly lock
   directorReport: DirectorSummaryReport | null;
   lastActiveScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
   selectedAdvisorId: LifeAreaId;
 }
 
 const STORAGE_KEY = 'lifebalance_state_v1';
+const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
+/**
+ * Checks if an advisor is locked for the current week (7 days lock)
+ */
+export const isAdvisorWeeklyLocked = (
+  advisorId: string,
+  completedDates?: Record<string, number>
+): boolean => {
+  if (!completedDates || !completedDates[advisorId]) return false;
+  const completedAt = completedDates[advisorId];
+  return Date.now() - completedAt < ONE_WEEK_MS;
+};
+
+/**
+ * Calculates remaining days until next weekly evaluation opens
+ */
+export const getDaysUntilNextUnlock = (completedAt?: number): number => {
+  if (!completedAt) return 0;
+  const elapsed = Date.now() - completedAt;
+  const remainingMs = ONE_WEEK_MS - elapsed;
+  if (remainingMs <= 0) return 0;
+  return Math.ceil(remainingMs / (24 * 60 * 60 * 1000));
+};
 
 export const getDefaultInitialState = (): StoredAppState => {
   const initialScores: Record<string, number> = {};
@@ -36,6 +61,7 @@ export const getDefaultInitialState = (): StoredAppState => {
     answers: {},
     goals: initialGoals as Record<LifeAreaId, string[]>,
     completedAdvisors: [],
+    completedDates: {},
     directorReport: null,
     lastActiveScreen: 'landing',
     selectedAdvisorId: 'spiritual',

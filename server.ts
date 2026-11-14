@@ -32,7 +32,9 @@ function generateLocalAgentResponse(
   message: string,
   userName: string,
   advisor: any,
-  score: number
+  score: number,
+  isEvaluationSession?: boolean,
+  evaluationStep?: number
 ) {
   const msg = message.toLowerCase().trim();
   const isGreeting = /^(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك|حيّك)/i.test(msg);
@@ -46,6 +48,27 @@ function generateLocalAgentResponse(
     agentKey === 'family' ? 'د. مريم الأسرية' :
     agentKey === 'social' ? 'أ. سامي الاجتماعي' : 'مستشار تدبير'
   );
+  const advRole = advisor?.role || advisor?.title || 'مستشار الحياة';
+
+  // إذا كانت جلسة تقييم أسبوعية في العيادة (Weekly Assessment Ritual)
+  if (isEvaluationSession) {
+    if (evaluationStep === 1) {
+      // المحطة 1: الاستماع للتقييم والشعور وسؤال العائق الأكبر
+      return {
+        reply: `أسمعك بكل اهتمام واحتواء يا ${userName}، ورصدت تقييمك ومشاعرك بوعي تام.\n\nكطبيب ومرشد لك في ${advRole}، أرى أن كل مرحلة تمر بها تحمل رسالة مهمة. بالنظر إلى وتيرة أسبوعك المنصرم، ما هو أكبر تحدٍ أو عائق نفسي أو عملي واجهك وشعرت أنه يسحب من طاقتك وتركيزك في هذا الجانب؟`,
+        actionSteps: advisor?.defaultGoals?.slice(0, 1) || ['تحديد العائق الرئيسي للتعامل معه بمرونة'],
+        reflectionQuestion: 'ما الذي يجعلك تشعر أن هذا العائق يستحق التركيز عليه الآن؟'
+      };
+    } else if (evaluationStep && evaluationStep >= 2) {
+      // المحطة الختامية: التشخيص الأسبوعي والعادة الذهبية وإقفال الجلسة للأسبوع القادم
+      const goldenHabit = advisor?.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+      return {
+        reply: `✅ أحسنت يا ${userName}. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية لهذا الأسبوع.\n\nرصدنا درجتك المعتمدة في ${advRole}: (${score > 0 ? score.toFixed(1) : '7.0'} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\n🔒 **تم حفظ جلستك وإقفال هذا الجانب لهذا الأسبوع**، لتمنح نفسك مساحة هادئة للتطبيق العملي حتى موعد جلستنا مطلع الأسبوع القادم.\n\nإذا كان لديك أي سؤال لاحق أو رغبت في حوار حر ومفتوح في أي وقت، يمكنك دائماً التوجه إلى قسم **(استشارة المستشارين)** في القائمة الجانبية.\n\nفلننتقل الآن إلى الجانب التالي.`,
+        actionSteps: advisor?.defaultGoals?.slice(0, 2) || [goldenHabit],
+        reflectionQuestion: 'كيف يمكنك تهيئة بيئتك اليوم لتلتزم بهذه العادة طوال الأسبوع؟'
+      };
+    }
+  }
 
   // 1. Domain: Spiritual (د. سفيان الروحي)
   if (agentKey === 'spiritual') {
@@ -195,7 +218,21 @@ function generateLocalAgentResponse(
 // Endpoint: Advisor Chat
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
   try {
-    const { advisor, userProfile, answers, goals, message, history, userName, userScore, userGoals, userAnswers, aiMode } = req.body;
+    const {
+      advisor,
+      userProfile,
+      answers,
+      goals,
+      message,
+      history,
+      userName,
+      userScore,
+      userGoals,
+      userAnswers,
+      aiMode,
+      isEvaluationSession,
+      evaluationStep,
+    } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'الرسالة مطلوبة' });
@@ -245,7 +282,9 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
         message,
         effectiveUserProfile?.name || 'صديقنا',
         advisor,
-        effectiveScore
+        effectiveScore,
+        isEvaluationSession,
+        evaluationStep
       );
       return res.json(localResponse);
     }
@@ -272,6 +311,27 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 `;
     }
 
+    let clinicSpecialGuideline = '';
+    if (isEvaluationSession) {
+      if (evaluationStep === 1) {
+        clinicSpecialGuideline = `
+[المحطة الأولى من التقييم الأسبوعي الإكلينيكي 🌿]
+- أنت طبيب ومستشار نفسي يستقبل المستفيد في جلسته الأسبوعية.
+- استمع لما شاركه عن تقييمه ومشاعره برفق، وتفاعل معه بإنسانية وعمق.
+- اسأله سؤالاً واحداً فقط لاستكشاف التحدي أو العائق الأكبر الذي أثر عليه هذا الأسبوع في هذا الجانب.
+- لا تسأل أسئلة متعددة ولا تستجوبه، بل اجعله يشعر بالأمان والاحتواء.
+`;
+      } else if (evaluationStep >= 2) {
+        clinicSpecialGuideline = `
+[المحطة الختامية للتقييم الأسبوعي الإكلينيكي 🔒]
+- هذه الجلسة الختامية للتقييم الأسبوعي لهذا الجانب.
+- لخص ما سمعته منه، واعتمد درجته لهذا الأسبوع (${effectiveScore}/10).
+- قدم له التوصية والعادة الذهبية الواحدة لأسبوعه.
+- اختم الجلسة رسمياً وبمحبة: أخبره أن جلسة التقييم اكتملت بنجاح وحفظت، وأن هذا الجانب مغلق الآن حتى الأسبوع القادم ليتفرغ للتطبيق العملي، وأنه لأي استفسارات إضافية مفتوحة يمكنه زيارة قسم (استشارة المستشارين).
+`;
+      }
+    }
+
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
     const systemInstruction = `
 ${agentRoleDescription}
@@ -280,6 +340,7 @@ ${agentRoleDescription}
 أنت شخصية مستقلة، عميقة الفكر، حكيمة ودافئة، وتفكر مع المستفيد كمرشد وشريك حقيقي.
 
 ${modeGuideline}
+${clinicSpecialGuideline}
 
 قواعد الحوار والتفكير مع المستفيد:
 1. استمع لكل كلمة كتبها المستفيد وفكر معه في سياق مشاعره وحيرته وأفكاره.
@@ -402,14 +463,16 @@ ${modeGuideline}
     return res.json(parsed);
   } catch (error: any) {
     console.error('Advisor Chat Gemini error:', error?.message || error);
-    const { advisor, userProfile, message, userName, userScore } = req.body;
+    const { advisor, userProfile, message, userName, userScore, isEvaluationSession, evaluationStep } = req.body;
     const agentKey = typeof advisor === 'string' ? advisor : (advisor?.id || 'financial');
     const localFallback = generateLocalAgentResponse(
       agentKey,
       message || '',
       userProfile?.name || userName || 'صديقنا',
       advisor,
-      userScore || 5
+      userScore || 5,
+      isEvaluationSession,
+      evaluationStep
     );
     return res.json(localFallback);
   }

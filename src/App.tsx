@@ -148,9 +148,15 @@ export default function App() {
         [advisorId]: score,
       };
 
+      const newCompletedDates = {
+        ...(prev.completedDates || {}),
+        [advisorId]: Date.now(),
+      };
+
       return {
         ...prev,
         completedAdvisors: newCompleted,
+        completedDates: newCompletedDates,
         scores: newScores,
       };
     });
@@ -337,7 +343,12 @@ export default function App() {
               onFinishAdvisor={handleFinishAdvisor}
               onCompleteAll={handleCompleteAll}
               completedAdvisors={appState.completedAdvisors}
+              completedDates={appState.completedDates}
               onNavigateToDashboard={() => setActiveScreen('dashboard')}
+              onNavigateToAdvisorChat={(advisorId) => {
+                setSelectedAdvisorId(advisorId);
+                setActiveScreen('advisor_chat');
+              }}
             />
           )}
 
