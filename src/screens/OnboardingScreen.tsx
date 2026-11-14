@@ -11,10 +11,15 @@ import {
   Check,
   User,
   Lightbulb,
+  ChevronDown,
+  Zap,
+  Brain,
+  Scale,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { AdvisorConfig, LifeAreaId } from '../types/lifeBalance';
 import { calculateScoreForAdvisor, extractInsightsFromAnswers } from '../utils/storage';
+import { AI_MODES, AiModelMode } from './AdvisorChatScreen';
 
 interface EvaluationChatMessage {
   id: string;
@@ -52,6 +57,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [showCelebration, setShowCelebration] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
+  const [aiMode, setAiMode] = useState<AiModelMode>(() => {
+    return (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
+  });
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
+
+  const handleSelectAiMode = (mode: AiModelMode) => {
+    setAiMode(mode);
+    localStorage.setItem('tadbeer_ai_mode', mode);
+  };
+
+  const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
 
   // Chat conversation state per advisor
   const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
@@ -203,6 +219,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           history,
           answers,
           userScore: calculateScoreForAdvisor(currentAdvisor, answers),
+          aiMode,
         }),
       });
 
@@ -357,6 +374,81 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* AI Model Mode Selector */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowModeDropdown(!showModeDropdown)}
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs hover:shadow-sm"
+                style={{
+                  backgroundColor: currentModeConfig.bgColor,
+                  borderColor: `${currentModeConfig.color}40`,
+                  color: currentModeConfig.color,
+                }}
+                title="تغيير نمط تفكير الذكاء الاصطناعي"
+              >
+                <currentModeConfig.icon className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline font-black">{currentModeConfig.title}</span>
+                <span className="sm:hidden font-black">{currentModeConfig.shortTitle}</span>
+                <ChevronDown className={`w-3 h-3 transition-transform ${showModeDropdown ? 'rotate-180' : ''}`} />
+              </button>
+
+              {showModeDropdown && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowModeDropdown(false)} />
+                  <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl border border-[#ded7c8] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 border-b border-[#f0eae0] mb-1">
+                      <span className="text-[11px] font-black text-[#1d2e2b] block">مستوى تفكير الذكاء الاصطناعي (Gemini)</span>
+                      <span className="text-[9px] text-[#7a8c88]">اختر سرعة وعمق التحليل أثناء الحوار</span>
+                    </div>
+
+                    <div className="space-y-1">
+                      {AI_MODES.map((mode) => {
+                        const isSelected = mode.id === aiMode;
+                        const IconComponent = mode.icon;
+                        return (
+                          <button
+                            key={mode.id}
+                            type="button"
+                            onClick={() => {
+                              handleSelectAiMode(mode.id);
+                              setShowModeDropdown(false);
+                            }}
+                            className={`w-full text-right p-2 rounded-xl transition-all flex items-start gap-2 border ${
+                              isSelected
+                                ? 'border-[#1b605b] shadow-xs'
+                                : 'border-transparent hover:bg-[#FAF7F2]'
+                            }`}
+                            style={isSelected ? { backgroundColor: mode.bgColor } : {}}
+                          >
+                            <div
+                              className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                              style={{ backgroundColor: `${mode.color}15`, color: mode.color }}
+                            >
+                              <IconComponent className="w-3.5 h-3.5" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black text-[#1d2e2b]">{mode.title}</span>
+                                <span
+                                  className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
+                                  style={{ backgroundColor: `${mode.color}20`, color: mode.color }}
+                                >
+                                  {mode.badge}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-[#536561] leading-tight mt-0.5">{mode.desc}</p>
+                            </div>
+                            {isSelected && <Check className="w-4 h-4 text-[#1b605b] flex-shrink-0 mt-1" />}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={handleFinishCurrentAdvisor}
@@ -419,7 +511,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
               <div className="p-3 rounded-2xl bg-white border border-[#eae3d5] text-xs text-[#536561] flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5 text-[#bd9240] animate-spin" />
-                <span>{currentAdvisor.name} يفكر ويكتب تحليله لك الآن...</span>
+                <span>
+                  {aiMode === 'fast' && `${currentAdvisor.name} يكتب لك نصيحة سريعة ومركزة ⚡...`}
+                  {aiMode === 'deep' && `${currentAdvisor.name} يحلل إجابتك بعمق وتفكير استراتيجي 🧠...`}
+                  {aiMode === 'balanced' && `${currentAdvisor.name} يفكر ويكتب تحليله لك الآن ⚖️...`}
+                </span>
               </div>
             </div>
           )}

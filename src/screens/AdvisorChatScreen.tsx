@@ -12,6 +12,9 @@ import {
   HelpCircle,
   Loader2,
   ChevronDown,
+  Zap,
+  Brain,
+  Scale,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import {
@@ -20,6 +23,50 @@ import {
   LifeAreaId,
   UserProfile,
 } from '../types/lifeBalance';
+
+export type AiModelMode = 'fast' | 'balanced' | 'deep';
+
+export const AI_MODES: {
+  id: AiModelMode;
+  title: string;
+  shortTitle: string;
+  icon: any;
+  color: string;
+  bgColor: string;
+  badge: string;
+  desc: string;
+}[] = [
+  {
+    id: 'fast',
+    title: 'الوضع السريع ⚡',
+    shortTitle: 'سريع ⚡',
+    icon: Zap,
+    color: '#0284c7',
+    bgColor: '#f0f9ff',
+    badge: 'استجابة سريعة',
+    desc: 'إجابات فورية، مباشرة، وموجزة للأسئلة والحلول السريعة',
+  },
+  {
+    id: 'balanced',
+    title: 'الوضع المتوازن ⚖️',
+    shortTitle: 'متوازن ⚖️',
+    icon: Scale,
+    color: '#1b605b',
+    bgColor: '#ecfdf5',
+    badge: 'موصى به',
+    desc: 'توازن ذكي بين سرعة التفاعل وعمق التوجيه الإرشادي',
+  },
+  {
+    id: 'deep',
+    title: 'التحليل العميق 🧠',
+    shortTitle: 'تفكير عميق 🧠',
+    icon: Brain,
+    color: '#7c3aed',
+    bgColor: '#f5f3ff',
+    badge: 'تفكير استراتيجي',
+    desc: 'تفكيك جذري للتحديات، تحليل الدوافع النفسية، وخطط استراتيجية شاملة',
+  },
+];
 
 interface AdvisorChatScreenProps {
   currentAdvisorId: LifeAreaId;
@@ -55,7 +102,18 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [addedGoals, setAddedGoals] = useState<Record<string, boolean>>({});
+  const [aiMode, setAiMode] = useState<AiModelMode>(() => {
+    return (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
+  });
+  const [showModeDropdown, setShowModeDropdown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  const handleSelectAiMode = (mode: AiModelMode) => {
+    setAiMode(mode);
+    localStorage.setItem('tadbeer_ai_mode', mode);
+  };
+
+  const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
 
   // Initialize welcoming message for this advisor if empty
   useEffect(() => {
@@ -127,6 +185,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           userAnswers: answers,
           message: text,
           history: conversationHistory,
+          aiMode,
         }),
       });
 
@@ -298,12 +357,94 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
               </div>
             </div>
 
-            {/* Current Score Tag */}
-            <div className="bg-white px-3 py-1.5 rounded-xl border border-[#eae3d5] text-left shadow-xs">
-              <span className="text-[10px] text-[#7a8c88] block">درجتك في هذا الجانب</span>
-              <span className="text-sm font-black" style={{ color: currentAdvisor.themeColor }}>
-                {currentScore.toFixed(1)} / 10
-              </span>
+            {/* Header Right Side: AI Model Mode Selector & Score Tag */}
+            <div className="flex items-center gap-2 sm:gap-3">
+              {/* AI Model Mode Selector */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowModeDropdown(!showModeDropdown)}
+                  className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs hover:shadow-sm"
+                  style={{
+                    backgroundColor: currentModeConfig.bgColor,
+                    borderColor: `${currentModeConfig.color}40`,
+                    color: currentModeConfig.color,
+                  }}
+                  title="تغيير نمط تفكير الذكاء الاصطناعي"
+                >
+                  <currentModeConfig.icon className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline font-black">{currentModeConfig.title}</span>
+                  <span className="sm:hidden font-black">{currentModeConfig.shortTitle}</span>
+                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showModeDropdown ? 'rotate-180' : ''}`} />
+                </button>
+
+                {/* Dropdown Menu */}
+                {showModeDropdown && (
+                  <>
+                    <div
+                      className="fixed inset-0 z-40"
+                      onClick={() => setShowModeDropdown(false)}
+                    />
+                    <div className="absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl border border-[#ded7c8] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-2 border-b border-[#f0eae0] mb-1">
+                        <span className="text-[11px] font-black text-[#1d2e2b] block">مستوى تفكير الذكاء الاصطناعي (Gemini)</span>
+                        <span className="text-[10px] text-[#7a8c88]">اختر نمط الإجابة والتحليل المناسب لاحتياجك</span>
+                      </div>
+
+                      <div className="space-y-1">
+                        {AI_MODES.map((mode) => {
+                          const isSelected = mode.id === aiMode;
+                          const IconComponent = mode.icon;
+                          return (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() => {
+                                handleSelectAiMode(mode.id);
+                                setShowModeDropdown(false);
+                              }}
+                              className={`w-full text-right p-2.5 rounded-xl transition-all flex items-start gap-2.5 border ${
+                                isSelected
+                                  ? 'border-[#1b605b] shadow-xs'
+                                  : 'border-transparent hover:bg-[#FAF7F2]'
+                              }`}
+                              style={isSelected ? { backgroundColor: mode.bgColor } : {}}
+                            >
+                              <div
+                                className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
+                                style={{ backgroundColor: `${mode.color}15`, color: mode.color }}
+                              >
+                                <IconComponent className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-xs font-black text-[#1d2e2b]">{mode.title}</span>
+                                  <span
+                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
+                                    style={{ backgroundColor: `${mode.color}20`, color: mode.color }}
+                                  >
+                                    {mode.badge}
+                                  </span>
+                                </div>
+                                <p className="text-[10px] text-[#536561] leading-tight mt-1">{mode.desc}</p>
+                              </div>
+                              {isSelected && <Check className="w-4 h-4 text-[#1b605b] flex-shrink-0 mt-1" />}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Current Score Tag */}
+              <div className="bg-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#eae3d5] text-left shadow-xs">
+                <span className="text-[9px] sm:text-[10px] text-[#7a8c88] block">درجتك</span>
+                <span className="text-xs sm:text-sm font-black" style={{ color: currentAdvisor.themeColor }}>
+                  {currentScore.toFixed(1)} / 10
+                </span>
+              </div>
             </div>
           </div>
 
@@ -415,7 +556,11 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 </div>
                 <div className="bg-[#FAF7F2] p-3 rounded-2xl border border-[#eae3d5] flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin text-[#1b605b]" />
-                  <span>{currentAdvisor.name} يفكر في استشارتك بعناية...</span>
+                  <span>
+                    {aiMode === 'fast' && `${currentAdvisor.name} يصيغ لك نصيحة فورية سريعة ⚡...`}
+                    {aiMode === 'deep' && `${currentAdvisor.name} يفكك استشارتك بعمق وتحليل استراتيجي 🧠...`}
+                    {aiMode === 'balanced' && `${currentAdvisor.name} يفكر في استشارتك بعناية ⚖️...`}
+                  </span>
                 </div>
               </div>
             )}
@@ -439,7 +584,40 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           </div>
 
           {/* Chat Input Box */}
-          <div className="p-3 sm:p-4 border-t border-[#f0eae0] bg-white">
+          <div className="p-3 sm:p-4 border-t border-[#f0eae0] bg-white space-y-2.5">
+            {/* Quick AI Mode Selector Pill */}
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-[#7a8c88] font-bold">نمط التفكير:</span>
+                <div className="inline-flex rounded-xl p-0.5 bg-[#FAF7F2] border border-[#ded7c8]">
+                  {AI_MODES.map((m) => {
+                    const isSelected = m.id === aiMode;
+                    const IconC = m.icon;
+                    return (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => handleSelectAiMode(m.id)}
+                        className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                          isSelected
+                            ? 'bg-white shadow-xs'
+                            : 'text-[#7a8c88] hover:text-[#1d2e2b]'
+                        }`}
+                        style={isSelected ? { color: m.color } : {}}
+                        title={m.desc}
+                      >
+                        <IconC className="w-3 h-3" />
+                        <span>{m.shortTitle}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <span className="text-[10px] text-[#7a8c88] hidden md:inline font-medium">
+                {currentModeConfig.desc}
+              </span>
+            </div>
+
             <form
               onSubmit={(e) => {
                 e.preventDefault();

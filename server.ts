@@ -195,7 +195,7 @@ function generateLocalAgentResponse(
 // Endpoint: Advisor Chat
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
   try {
-    const { advisor, userProfile, answers, goals, message, history, userName, userScore, userGoals, userAnswers } = req.body;
+    const { advisor, userProfile, answers, goals, message, history, userName, userScore, userGoals, userAnswers, aiMode } = req.body;
 
     if (!message) {
       return res.status(400).json({ error: 'الرسالة مطلوبة' });
@@ -250,12 +250,36 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       return res.json(localResponse);
     }
 
+    // تحديد توجيهات النمط المختار من Gemini (سريع، متوازن، أو تفكير عميق استراتيجي)
+    let modeGuideline = '';
+    if (aiMode === 'fast') {
+      modeGuideline = `
+[النمط المختار: الوضع السريع ⚡ - Fast & Agile Response]
+- المستفيد اختار النمط السريع: أجب بتركيز وإيجاز ذكي وبلا إطناب.
+- ادخل في جوهر الموضوع مباشرة، وقدم خطوات تنفيذية سريعة جداً يمكن تطبيقها فوراً.
+`;
+    } else if (aiMode === 'deep') {
+      modeGuideline = `
+[النمط المختار: وضع التفكير والتحليل العميق 🧠 - Deep Strategic Thinker]
+- المستفيد اختار نمط التفكير العميق: قم بتحليل سيكولوجي واستراتيجي مفكك وشامل.
+- لا تقدم حلولاً سطحية، بل اربط التحدي بالدوافع الباطنة، وكاشفه بنقاط العمى (Blind spots) وبأثر هذا التحدي على بقية مجالات حياته.
+- قدم رؤية استراتيجية بعيدة المدى، وخطوات نوعية تحويلية، وسؤالاً تأملياً فلسفياً عميقاً يوسع وعيه.
+`;
+    } else {
+      modeGuideline = `
+[النمط المختار: الوضع المتوازن ⚖️ - Balanced Advisor Mode]
+- وازن بذكاء بين سرعة الفهم وعمق التوجيه الإرشادي العملي.
+`;
+    }
+
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
     const systemInstruction = `
 ${agentRoleDescription}
 
 أنت الآن تخوض محادثة تفاعلية حية ومباشرة بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة تدبير.
 أنت شخصية مستقلة، عميقة الفكر، حكيمة ودافئة، وتفكر مع المستفيد كمرشد وشريك حقيقي.
+
+${modeGuideline}
 
 قواعد الحوار والتفكير مع المستفيد:
 1. استمع لكل كلمة كتبها المستفيد وفكر معه في سياق مشاعره وحيرته وأفكاره.
