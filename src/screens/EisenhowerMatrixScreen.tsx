@@ -43,7 +43,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     areaId: 'health',
     completed: false,
     source: 'advisor',
-    advisorName: 'د. ليث البدني',
+    advisorName: 'د. ريان الصحي',
   },
   {
     id: 'g_daily_3',
@@ -84,7 +84,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     areaId: 'financial',
     completed: true,
     source: 'advisor',
-    advisorName: 'أ. زياد المالي',
+    advisorName: 'أ. كمال المالي',
   },
   {
     id: 'g3',
@@ -115,7 +115,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     areaId: 'learning',
     completed: true,
     source: 'advisor',
-    advisorName: 'د. إبراهيم المعرفي',
+    advisorName: 'بروفيسور زياد المعرفي',
   },
   {
     id: 'g6',
@@ -125,7 +125,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     areaId: 'financial',
     completed: false,
     source: 'advisor',
-    advisorName: 'أ. زياد المالي',
+    advisorName: 'أ. كمال المالي',
   },
   {
     id: 'g7',
@@ -146,7 +146,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     areaId: 'personal',
     completed: false,
     source: 'advisor',
-    advisorName: 'أ. سلمى الذاتية',
+    advisorName: 'د. ليلى الذاتية',
   },
   {
     id: 'g9',
@@ -167,7 +167,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     areaId: 'personal',
     completed: false,
     source: 'advisor',
-    advisorName: 'أ. سلمى الذاتية',
+    advisorName: 'د. ليلى الذاتية',
   },
   {
     id: 'g11',
@@ -177,7 +177,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     areaId: 'social',
     completed: false,
     source: 'advisor',
-    advisorName: 'د. فيصل الاجتماعي',
+    advisorName: 'أ. سامي الاجتماعي',
   },
 ];
 

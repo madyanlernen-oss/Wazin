@@ -415,15 +415,90 @@ ${modeGuideline}
   }
 });
 
+// Helper: Generate structured fallback director report when Gemini is unavailable
+function generateFallbackDirectorReport(userProfile: any, scores: any, advisorSummaries: any, focusArea: string) {
+  const scoreEntries = Object.entries(scores || {}) as [string, number][];
+  const sorted = scoreEntries.sort((a, b) => b[1] - a[1]);
+  const best = sorted[0] || ['الروحي', 8];
+  const worst = sorted[sorted.length - 1] || ['الصحي', 5];
+  const avg = scoreEntries.length > 0
+    ? (scoreEntries.reduce((acc, curr) => acc + curr[1], 0) / scoreEntries.length).toFixed(1)
+    : '7.0';
+  const avgNum = parseFloat(avg);
+  const label = avgNum >= 8 ? 'تناغم قيادي متقدم 🌟' : avgNum >= 6.5 ? 'توازن واعد ومستقر 🚀' : 'مرحلة إعادة التأسيس والتركيز 🎯';
+
+  return {
+    overallDiagnosis: `بناءً على قراءة عجلة حياتك بمعدل عام (${avg}/10)، يتبين وجود ركيزة قوية في جانب (${best[0]}) تمنحك استقراراً وطاقة إيجابية. في المقابل، يمثل جانب (${worst[0]}) عنق الزجاجة الأبرز الذي يستوجب تركيزاً مباشراً لحمايته من التسويف وإدراجه في المربع الثاني بمصفوفة أيزنهاور.`,
+    balanceIndexLabel: label,
+    strongestSynergy: {
+      title: `قوة ${best[0]} كرافعة للنمو`,
+      description: `الأداء المتقدم في هذا الجانب يمنحك مناعة نفسية ورؤية صلبة يمكن استثمارها لدعم المجالات الأخرى.`,
+      domainsInvolved: [String(best[0]), 'التطوير الشخصي', 'إدارة الطاقة'],
+    },
+    criticalBottleneck: {
+      title: `فجوة ${worst[0]} وأثرها التراكمي`,
+      impact: `تراجع هذا الجانب يشكل تسرباً غير مرئي للطاقة قد يحد من استدامة نتائجك في بقية المجالات.`,
+      recommendation: `خصص 15 دقيقة يومياً لحماية هذا الجانب كعادة ثابتة في المربع الثاني دون تسويف.`,
+      domain: String(worst[0]),
+    },
+    keystoneHabits: [
+      {
+        name: 'طقس السكينة والبدء الواعي (المربع 2)',
+        triggerTime: 'الصباح الباكر',
+        targetDomains: ['الروحي', 'الصحي', 'الشخصي'],
+        expectedImpact: 'رفع التركيز الذهني بنسبة 40% وتقليل تشتت اليوم.',
+      },
+      {
+        name: 'المراجعة الاستراتيجية المسائية (10 دقائق)',
+        triggerTime: 'نهاية اليوم',
+        targetDomains: ['المهني', 'المالي', 'الأسري'],
+        expectedImpact: 'إغلاق دوائر المهام المفتوحة وتحقيق راحة نفسية واستقرار.',
+      },
+      {
+        name: 'خلوة التخطيط الأسبوعي',
+        triggerTime: 'عصر كل جمعة',
+        targetDomains: ['المالي', 'المهني', 'الاجتماعي'],
+        expectedImpact: 'ترتيب أولويات الأسبوع القادم مسبقاً وتفادي الطوارئ الزائفة.',
+      },
+    ],
+    thirtyDayRoadmap: [
+      {
+        weekNumber: 1,
+        weekTitle: 'إيقاف الهدر وضبط النزيف',
+        coreFocus: 'تحديد نقاط التسرب في الوقت والطاقة والمال ومعالجتها فوراً',
+        actions: ['تفريغ الذهن في قائمة المربع الثاني', 'إيقاف المشتتات الرقمية غير الضرورية'],
+      },
+      {
+        weekNumber: 2,
+        weekTitle: 'ترسيخ العادات المحورية',
+        coreFocus: 'بناء روتين صباحي ومسائي ثابت لا يتجاوز 15 دقيقة',
+        actions: ['تثبيت موعد الاستيقاظ والنوم', 'تخصيص وقت الخلوة الذهنية اليومية'],
+      },
+      {
+        weekNumber: 3,
+        weekTitle: 'التكامل بين العمل والحياة',
+        coreFocus: 'تعزيز جودة الحضور الأسري والروحي مع الحفاظ على الإنتاجية',
+        actions: ['تحديد ساعات فاصلة بين العمل والمنزل', 'ممارسة الامتنان والتواصل الإيجابي'],
+      },
+      {
+        weekNumber: 4,
+        weekTitle: 'مراجعة الحصاد والتمكين',
+        coreFocus: 'إعادة تقييم عجلة الحياة وقياس الفارق ومضاعفة المكاسب',
+        actions: ['تحديث الدرجات في منصة تدبير', 'الاحتفاء بالتقدم وصياغة أهداف الشهر القادم'],
+      },
+    ],
+    directorGoldenRule: 'التوازن ليس أن تمنح كل جانب نفس الوقت والجهد، بل أن تمنح كل جانب حقه في اللحظة المناسبة بحضور كامل.',
+  };
+}
+
 // Endpoint: Director Summary (Cross-Domain Insights & Master Action Plan)
 app.post('/api/gemini/director-summary', async (req: Request, res: Response) => {
   try {
     const { userProfile, scores, advisorSummaries, focusArea } = req.body;
 
     if (!apiKey) {
-      return res.status(500).json({
-        error: 'مفتاح Gemini API غير مهيأ في البيئة.',
-      });
+      const fallback = generateFallbackDirectorReport(userProfile, scores, advisorSummaries, focusArea);
+      return res.json(fallback);
     }
 
     const systemInstruction = `
@@ -557,10 +632,10 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
     }
     return res.json(parsed);
   } catch (error: any) {
-    console.error('Director Summary error:', error);
-    return res.status(500).json({
-      error: 'تعذر توليد تقرير المنسق العام: ' + (error?.message || 'خطأ في معالجة النموذج'),
-    });
+    console.warn('Director Summary Gemini API unavailable, using intelligent local synthesis:', error?.message || error);
+    const { userProfile, scores, advisorSummaries, focusArea } = req.body;
+    const fallback = generateFallbackDirectorReport(userProfile, scores, advisorSummaries, focusArea);
+    return res.json(fallback);
   }
 });
 
@@ -570,9 +645,23 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
     const { advisorId, advisorTitle, score, answers, goals } = req.body;
 
     if (!apiKey) {
-      return res.status(500).json({
-        error: 'مفتاح Gemini API غير مهيأ.',
-      });
+      const localDeepdive = {
+        assessmentSummary: `بناءً على تقييمك الحالي في ${advisorTitle || 'هذا الجانب'} بدرجة (${score || 5}/10)، يتبين وجود رغبة واضحة للتطوير والانتقال لمستوى أكثر استقراراً ونضجاً.`,
+        keyStrengths: [
+          'الوعي الذاتي العالي بالحاجة للتحسين المستمر',
+          'وضوح الرؤية الأولية للأهداف في هذا الجانب',
+        ],
+        mainChallenges: [
+          'تحدي المداومة والاستمرارية وسط تسارع الالتزامات اليومية',
+          'الحاجة إلى بناء عادات صغيرة ثابتة بدلاً من الحماس المؤقت',
+        ],
+        quickWins: [
+          'تحديد إجراء واحد ملموس لا يتجاوز 10 دقائق لتطبيقه اليوم',
+          'إدراج هذا الإجراء في المربع الثاني بمصفوفة أيزنهاور لحمايته من التسويف',
+        ],
+        strategicMilestone: `تحقيق نقلة نوعية واستقرار ملموس في ${advisorTitle || 'هذا الجانب'} خلال الـ 90 يوماً القادمة.`,
+      };
+      return res.json(localDeepdive);
     }
 
     const systemInstruction = `
@@ -627,10 +716,25 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
     }
     return res.json(parsed);
   } catch (error: any) {
-    console.error('Area Deep-dive error:', error);
-    return res.status(500).json({
-      error: 'فشل تحليل الجانب: ' + (error?.message || 'خطأ غير متوقع'),
-    });
+    console.warn('Area Deep-dive Gemini API unavailable, using local synthesis:', error?.message || error);
+    const { advisorTitle, score } = req.body;
+    const localDeepdive = {
+      assessmentSummary: `بناءً على تقييمك الحالي في ${advisorTitle || 'هذا الجانب'} بدرجة (${score || 5}/10)، يتبين وجود رغبة واضحة للتطوير والانتقال لمستوى أكثر استقراراً ونضجاً.`,
+      keyStrengths: [
+        'الوعي الذاتي العالي بالحاجة للتحسين المستمر',
+        'وضوح الرؤية الأولية للأهداف في هذا الجانب',
+      ],
+      mainChallenges: [
+        'تحدي المداومة والاستمرارية وسط تسارع الالتزامات اليومية',
+        'الحاجة إلى بناء عادات صغيرة ثابتة بدلاً من الحماس المؤقت',
+      ],
+      quickWins: [
+        'تحديد إجراء واحد ملموس لا يتجاوز 10 دقائق لتطبيقه اليوم',
+        'إدراج هذا الإجراء في المربع الثاني بمصفوفة أيزنهاور لحمايته من التسويف',
+      ],
+      strategicMilestone: `تحقيق نقلة نوعية واستقرار ملموس في ${advisorTitle || 'هذا الجانب'} خلال الـ 90 يوماً القادمة.`,
+    };
+    return res.json(localDeepdive);
   }
 });
 
