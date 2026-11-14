@@ -260,7 +260,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     ];
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
       contents,
       config: {
         systemInstruction,
@@ -351,7 +351,7 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
 `;
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
       contents: prompt,
       config: {
         systemInstruction,
@@ -485,7 +485,7 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
 `;
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-2.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
       contents: prompt,
       config: {
         systemInstruction,
