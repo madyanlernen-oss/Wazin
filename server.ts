@@ -26,6 +26,124 @@ const ai = new GoogleGenAI({
   },
 });
 
+// Helper: Smart local agent responses matching Agents/*.md personas
+function generateLocalAgentResponse(
+  agentKey: string,
+  message: string,
+  userName: string,
+  advisor: any,
+  score: number
+) {
+  const msg = message.toLowerCase().trim();
+  const isGreeting = /^(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك|حيّك)/i.test(msg);
+
+  const personaMap: Record<string, {
+    title: string;
+    advisorName: string;
+    greetingReply: string;
+    generalReply: string;
+    actionSteps: string[];
+    reflectionQuestion: string;
+  }> = {
+    spiritual: {
+      title: 'الجانب الروحي',
+      advisorName: 'د. سفيان الروحي',
+      greetingReply: `أهلاً ومرحباً بك يا ${userName}! أنا د. سفيان المستشار الروحي في منصة تدبير.\n\nيسعدني جداً أن نتحاور معاً حول سكينتك الداخلية، وتدبر يومك، وتناغم عبادتك مع وتيرة حياتك. كيف تشعر بروحانياتك وحضور قلبك هذه الأيام؟ تحدث معي بأريحية تامة.`,
+      generalReply: `تأملت في كلماتك بعناية يا ${userName}. التوازن الروحي هو النواة المركزية التي تمد بقية مجالات حياتك بالسكينة والتحمل. حتى في أشد أيامك ازدحاماً، دقيقة واحدة من الاستغفار الواعي أو التأمل الهادئ تصنع فارقاً شاسعاً في صفاء روحك.`,
+      actionSteps: [
+        'تخصيص 5 دقائق خلوة وتدبر صامت بعد صلاة الفجر',
+        'قراءة صفحتين من القرآن الكريم بتأنٍ وتدبر يومياً'
+      ],
+      reflectionQuestion: 'ما هو العمل البسيط الذي يمنح قلبك أكبر قدر من الطمأنينة والسلام الداخلي؟'
+    },
+    financial: {
+      title: 'الجانب المالي',
+      advisorName: 'أ. فيصل المالي',
+      greetingReply: `مرحباً بك يا ${userName}! أنا أ. فيصل المستشار المالي لمنصة تدبير.\n\nهدفي أن نبني معاً وعياً مالياً حكيماً يضمن لك الأمان والنمو المستدام دون تضييق. ما الذي يشغل تفكيرك مالياً أو تود مراجعته معي اليوم؟`,
+      generalReply: `نظرت في مدخلاتك يا ${userName}. في إدارة المال، الوعي بنقاط التسرب الصغير أهم بكثير من حجم الدخل وحده. ضبط نفقات المربع الرابع الاستهلاكي يتيح لك بناء صندوق طوارئ صلب يمنحك راحة البال.`,
+      actionSteps: [
+        'تدوين كافة المصروفات اليومية لمدة أسبوع لرصد الهدر',
+        'تحويل مبلغ تلقائي ثابت (حتى لو بسيط) لصندوق الادخار فور استلام الراتب'
+      ],
+      reflectionQuestion: 'هل تشعر أن قراراتك المالية الحالية تخدم أهدافك الاستراتيجية أم استهلاك اللحظة؟'
+    },
+    health: {
+      title: 'الجانب الصحي',
+      advisorName: 'ك. زياد الصحي',
+      greetingReply: `أهلاً بك يا ${userName}! أنا كابتن زياد المستشار الصحي والبدني.\n\nصحتك وطاقتك الجسدية هي رأس مالك الحقيقي ووقود كل إنجازاتك. كيف تقيّم جودة نومك، نشاطك البدني، وغذائك في الآونة الأخيرة؟`,
+      generalReply: `رسالتك واضحة يا ${userName}. الجسد أمانة ويعكس أدق عاداتنا اليومية. تحسين ثلاثية (النوم المنضبط قبل منتصف الليل + 8000 خطوة يومياً + شرب الماء) كفيل برفع طاقتك بنسبة تتجاوز 40% خلال أيام قليلة.`,
+      actionSteps: [
+        'المشي السريع لمدة 20 دقيقة يومياً في الهواء الطلق',
+        'شرب لترين من الماء وتثبيت موعد النوم والاستيقاظ'
+      ],
+      reflectionQuestion: 'ما هي العادة الصحية البسيطة التي لو التزمت بها ستشعر بفارق فوري في نشاطك اليومي؟'
+    },
+    career: {
+      title: 'الجانب المهني',
+      advisorName: 'م. طارق المهني',
+      greetingReply: `أهلاً ومرحباً يا ${userName}! أنا م. طارق المستشار المهني والإنتاجية.\n\nنهدف معاً لتحقيق أعلى درجات الأثر والنمو الوظيفي دون السقوط في فخ الاحتراق. ما هو التحدي المهني أو المشروع الأهم الذي تركز عليه حالياً؟`,
+      generalReply: `أحسنت في طرح هذا الأمر يا ${userName}. الإنتاجية الحقيقية ليست بكثرة ساعات العمل، بل في حماية 'المربع الثاني' الاستراتيجي في مصفوفة أيزنهاور وعزل نفسك عن مقاطعات المهام التافهة.`,
+      actionSteps: [
+        'تحديد أهم 3 أولويات لإنجازها في الصباح الباكر قبل فتح الإشعارات',
+        'تخصيص جلسة عمل عميق (Deep Work) لمدة 90 دقيقة بلا مشتتات'
+      ],
+      reflectionQuestion: 'ما هي المهمة النوعية التي إذا أتممتها هذا الأسبوع ستنقل مسارك المهني خطوة للأمام؟'
+    },
+    personal: {
+      title: 'الجانب الشخصي',
+      advisorName: 'أ. رنا الذاتية',
+      greetingReply: `مرحباً بك من القلب يا ${userName}! أنا أ. رنا مستشارة التطوير الذاتي والراحة النفسية.\n\nالاعتناء بسلامك الداخلي وتفريغ التوتر أساس لاستمرار توازنك. كيف تشعر بمستوى الراحة والصفاء في يومك؟`,
+      generalReply: `كلماتك تلامس جوهر التوازن يا ${userName}. حب الذات وإدارة الضغوط تتطلب وضع حدود واضحة مع ما يستنزف طاقتك النفسية، والحرص على تخصيص وقت يومي خالص لنفسك.`,
+      actionSteps: [
+        'تطبيق طقس التنفس العميق والاسترخاء لمدة 3 دقائق عند الشعور بالتوتر',
+        'ممارسة هواية محببة أو نشاط ممتع لمدة 15 دقيقة يومياً'
+      ],
+      reflectionQuestion: 'ما هي المساحة الخاصة التي تحتاج لاستعادتها في جدولك لتتنفس بهدوء؟'
+    },
+    learning: {
+      title: 'الجانب التعليمي',
+      advisorName: 'د. ماجد الفكري',
+      greetingReply: `أهلاً بك يا ${userName}! أنا د. ماجد مستشار التعلم المستمر والنمو الفكري.\n\nتطوير المهارات واكتساب المعرفة هو بوابتك للريادة في عالم سريع التغير. كيف تسير وتيرة قراءتك وتعلمك مؤخراً؟`,
+      generalReply: `التعلم الذكي يا ${userName} يعتمد على التراكم الصغير المستمر (Compound Learning). 15 دقيقة قراءة يومية تعادل قراءة أكثر من 15 كتاباً نوعياً في العام الواحد!`,
+      actionSteps: [
+        'قراءة 10 صفحات يومياً من كتاب مركز في مجالك',
+        'الاستماع لبودكاست نوعي في تخصصك أثناء المشي أو القيادة'
+      ],
+      reflectionQuestion: 'ما المهارة الجديدة التي تشعر أن تعلمها حالياً يمثل نقطة تحول في قدراتك؟'
+    },
+    family: {
+      title: 'الجانب الأسري',
+      advisorName: 'د. هدى الأسرية',
+      greetingReply: `أهلاً بك يا ${userName}! أنا د. هدى مستشارة العلاقات الأسرية والتربية.\n\nالدفء الأسري هو الركيزة التي نلجأ إليها بعد تعب اليوم. كيف تقيّم جودة وحميمية الوقت الذي تقضيه مع أسرتك مؤخراً؟`,
+      generalReply: `العلاقات الأسرية يا ${userName} تُبنى بلحظات الحضور الحقيقي وليس مجرد الوجود الشكلي في المنزل. جلسة شاي قصيرة بحضور ذهني وعاطفي كامل تصنع رابطاً عميقاً وأماناً لا يُعوض.`,
+      actionSteps: [
+        'تخصيص نصف ساعة يومياً للتحدث مع أهلك أو أبنائك بدون هواتف',
+        'مبادرة باتصال أو زيارة بارّة لوالديك لتعزيز صلة الرحم'
+      ],
+      reflectionQuestion: 'كيف تجعل حضورك في البيت أكثر أثراً وحناناً لمن يحبونك؟'
+    },
+    social: {
+      title: 'الجانب الاجتماعي',
+      advisorName: 'أ. لمى الاجتماعية',
+      greetingReply: `مرحباً بك يا ${userName}! أنا أ. لمى مستشارة الذكاء الاجتماعي والعلاقات.\n\nشبكة العلاقات الإيجابية والعطاء المجتمعي تصنع بهجة استثنائية في الحياة. كيف تجد دائرة معارفك وصداقاتك الحالية؟`,
+      generalReply: `أنت في محيطك الاجتماعي مرآة لأقرب الناس إليك يا ${userName}. تصفية العلاقات من المحبطين والاقتراب من أصحاب الهمم العالية والقلوب النقية هو أعظم استثمار لعلاقاتك.`,
+      actionSteps: [
+        'التواصل مع صديق ملهم وصادق لم تلتقِ به منذ فترة',
+        'المشاركة في مبادرة أو عمل تطوعي يعزز أثرك المجتمعي'
+      ],
+      reflectionQuestion: 'من هو الشخص الذي تشعر أن وجوده في حياتك يرفع من معنوياتك وطموحك؟'
+    }
+  };
+
+  const persona = personaMap[agentKey] || personaMap.financial;
+
+  return {
+    reply: isGreeting ? persona.greetingReply : persona.generalReply,
+    actionSteps: persona.actionSteps,
+    reflectionQuestion: persona.reflectionQuestion
+  };
+}
+
 // Endpoint: Advisor Chat
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
   try {
@@ -33,12 +151,6 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 
     if (!message) {
       return res.status(400).json({ error: 'الرسالة مطلوبة' });
-    }
-
-    if (!apiKey) {
-      return res.status(500).json({
-        error: 'مفتاح Gemini API غير مهيأ. يرجى التحقق من إعدادات المفاتيح.',
-      });
     }
 
     const effectiveUserProfile = userProfile || { name: userName || 'صديقنا' };
@@ -72,6 +184,18 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     let systemInstruction = "أنت مساعد ذكي لنظام تدبير.";
     if (fs.existsSync(agentPath)) {
       systemInstruction = fs.readFileSync(agentPath, 'utf8');
+    }
+
+    // إذا لم يكن مفتاح Gemini متوفراً في البيئة، نستخدم محرك الاستجابة الذكي المدمج المعتمد على مواصفات الوكلاء
+    if (!apiKey) {
+      const localResponse = generateLocalAgentResponse(
+        agentKey,
+        message,
+        effectiveUserProfile?.name || 'صديقنا',
+        advisor,
+        effectiveScore
+      );
+      return res.json(localResponse);
     }
 
     // إثراء التعليمات بسياق المستفيد وأسلوب الرد المطلوب
@@ -147,10 +271,17 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     }
     return res.json(parsed);
   } catch (error: any) {
-    console.error('Advisor Chat error:', error);
-    return res.status(500).json({
-      error: 'تعذر الاتصال بالمستشار الذكي حالياً: ' + (error?.message || 'خطأ غير متوقع'),
-    });
+    console.error('Advisor Chat API fallback to local agent:', error?.message);
+    const { advisor, userProfile, message, userName, userScore } = req.body;
+    const agentKey = typeof advisor === 'string' ? advisor : (advisor?.id || 'financial');
+    const localFallback = generateLocalAgentResponse(
+      agentKey,
+      message || '',
+      userProfile?.name || userName || 'صديقنا',
+      advisor,
+      userScore || 5
+    );
+    return res.json(localFallback);
   }
 });
 

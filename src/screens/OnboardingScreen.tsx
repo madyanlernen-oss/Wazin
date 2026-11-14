@@ -51,6 +51,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [isRecording, setIsRecording] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [speechSupported, setSpeechSupported] = useState(false);
+  const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
 
   // Chat conversation state per advisor
   const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
@@ -144,10 +145,22 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, currentAdvisorIndex]);
 
-  // Handle user response
-  const handleSendAnswer = (textToSend?: string) => {
+  // Finish and approve current advisor assessment
+  const handleFinishCurrentAdvisor = () => {
+    const calculatedScore = calculateScoreForAdvisor(currentAdvisor, answers);
+    onFinishAdvisor(currentAdvisor.id, calculatedScore);
+    confetti({
+      particleCount: 60,
+      spread: 60,
+      origin: { y: 0.7 },
+    });
+    setShowCelebration(true);
+  };
+
+  // Handle user response with REAL AI Agent invocation
+  const handleSendAnswer = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
-    if (!text) return;
+    if (!text || isAdvisorReplying) return;
 
     const advisorKey = currentAdvisor.id;
     const userMsg: EvaluationChatMessage = {
@@ -166,50 +179,76 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const nextStep = currentStep + 1;
     setAdvisorStep((prev) => ({ ...prev, [advisorKey]: nextStep }));
 
-    // If within standard question bank (up to 8)
-    if (nextStep < currentAdvisor.questions.length) {
-      const nextQ = currentAdvisor.questions[nextStep];
+    // Immediately display user message
+    setChatMessages((prev) => ({
+      ...prev,
+      [advisorKey]: [...currentList, userMsg],
+    }));
+
+    setIsAdvisorReplying(true);
+
+    try {
+      const history = currentList.slice(-6).map((m) => ({
+        role: m.sender === 'user' ? 'user' : 'model',
+        content: m.text,
+      }));
+
+      // Call AI Agent API
+      const res = await fetch('/api/gemini/advisor-chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          advisor: currentAdvisor,
+          message: text,
+          history,
+          answers,
+          userScore: calculateScoreForAdvisor(currentAdvisor, answers),
+        }),
+      });
+
+      if (!res.ok) throw new Error('فشل استجابة الوكيل');
+      const data = await res.json();
+      let replyContent = data.reply || data.advice || data.summary || 'أنا معك وأستمع إليك باهتمام.';
+
+      // If user is still in early exploration and asks questions or answers, weave in the next reflection smoothly
+      if (nextStep < currentAdvisor.questions.length && !text.match(/^(مرحبا|أهلا|سلام)/i)) {
+        const nextQ = currentAdvisor.questions[nextStep];
+        replyContent += `\n\n📌 **استكشاف إضافي:** ${nextQ.title}${
+          nextQ.description ? `\n💡 ${nextQ.description}` : ''
+        }`;
+      }
+
+      const nextAdvisorMsg: EvaluationChatMessage = {
+        id: `agent_${Date.now()}`,
+        sender: 'advisor',
+        text: replyContent,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setChatMessages((prev) => ({
+        ...prev,
+        [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
+      }));
+    } catch (err) {
+      console.error('Advisor chat error in onboarding:', err);
+      // Fallback
+      let fallbackText = `أهلاً بك! أنا معك كوكيل ومستشار في ${currentAdvisor.title}. تفضل بمشاركتي المزيد لنحلله معاً.`;
+      if (nextStep < currentAdvisor.questions.length) {
+        const nextQ = currentAdvisor.questions[nextStep];
+        fallbackText += `\n\n${nextQ.title}${nextQ.description ? `\n\n💡 ${nextQ.description}` : ''}`;
+      }
       const nextAdvisorMsg: EvaluationChatMessage = {
         id: `q_${nextStep}`,
         sender: 'advisor',
-        text: `أشكرك على هذه الإجابة الواعية.\n\n${nextQ.title}${
-          nextQ.description ? `\n\n💡 ${nextQ.description}` : ''
-        }`,
+        text: fallbackText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
-
       setChatMessages((prev) => ({
         ...prev,
-        [advisorKey]: [...currentList, userMsg, nextAdvisorMsg],
+        [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
-    } else {
-      // Completed the foundational questions
-      const updatedAnswers = {
-        ...answers,
-        [`${currentAdvisor.id}_${currentQId}`]: text,
-      };
-      const calculatedScore = calculateScoreForAdvisor(currentAdvisor, updatedAnswers);
-      onFinishAdvisor(currentAdvisor.id, calculatedScore);
-
-      const completionMsg: EvaluationChatMessage = {
-        id: `finish_${Date.now()}`,
-        sender: 'advisor',
-        text: `رائع جداً! استطعتُ تكوين رؤية شاملة ودقيقة حول ${currentAdvisor.title}، وتم تقدير نتيجتك بـ (${calculatedScore}/10).\n\nيمكنك الآن إتمام هذا الجانب والانتقال للجانب التالي، أو إذا رغبت في توضيح أو إضافة أي تفصيل آخر يمكنك متابعة الحديث وسأجيبك بكل سرور.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setChatMessages((prev) => ({
-        ...prev,
-        [advisorKey]: [...currentList, userMsg, completionMsg],
-      }));
-
-      confetti({
-        particleCount: 60,
-        spread: 60,
-        origin: { y: 0.7 },
-      });
-
-      setShowCelebration(true);
+    } finally {
+      setIsAdvisorReplying(false);
     }
   };
 
@@ -318,7 +357,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF7F2] border border-[#eae3d5] text-xs font-semibold text-[#1b605b]">
+            <button
+              type="button"
+              onClick={handleFinishCurrentAdvisor}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>اعتماد النتيجة ({currentAdvisorScore}/10)</span>
+            </button>
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FAF7F2] border border-[#eae3d5] text-xs font-semibold text-[#1b605b]">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               مستشار نشط
             </span>
@@ -362,6 +409,20 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
             );
           })}
+          {isAdvisorReplying && (
+            <div className="flex gap-3 max-w-3xl mr-auto items-center animate-pulse">
+              <div
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 border shadow-xs"
+                style={{ backgroundColor: `${currentAdvisor.themeColor}20` }}
+              >
+                {currentAdvisor.avatarSvg}
+              </div>
+              <div className="p-3 rounded-2xl bg-white border border-[#eae3d5] text-xs text-[#536561] flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#bd9240] animate-spin" />
+                <span>{currentAdvisor.name} يفكر ويكتب تحليله لك الآن...</span>
+              </div>
+            </div>
+          )}
           <div ref={messagesEndRef} />
         </div>
 
@@ -470,7 +531,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             {/* Send Button */}
             <button
               type="submit"
-              disabled={!inputText.trim()}
+              disabled={!inputText.trim() || isAdvisorReplying}
               className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95"
               style={{ backgroundColor: currentAdvisor.themeColor }}
             >
