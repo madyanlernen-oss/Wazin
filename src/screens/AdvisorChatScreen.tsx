@@ -111,7 +111,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         .slice(-8)
         .map((m) => ({
           role: m.sender === 'user' ? 'user' : 'model',
-          parts: [{ text: m.content }],
+          content: m.content,
         }));
 
       const res = await fetch('/api/gemini/advisor-chat', {

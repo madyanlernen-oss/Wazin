@@ -36,12 +36,22 @@ function generateLocalAgentResponse(
 ) {
   const msg = message.toLowerCase().trim();
   const isGreeting = /^(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك|حيّك)/i.test(msg);
+  const advName = advisor?.name || (
+    agentKey === 'spiritual' ? 'د. سفيان الروحي' :
+    agentKey === 'financial' ? 'أ. كمال المالي' :
+    agentKey === 'health' ? 'د. ريان الصحي' :
+    agentKey === 'career' ? 'م. طارق المهني' :
+    agentKey === 'personal' ? 'د. ليلى الذاتية' :
+    agentKey === 'learning' ? 'بروفيسور زياد المعرفي' :
+    agentKey === 'family' ? 'د. مريم الأسرية' :
+    agentKey === 'social' ? 'أ. سامي الاجتماعي' : 'مستشار تدبير'
+  );
 
   // 1. Domain: Spiritual (د. سفيان الروحي)
   if (agentKey === 'spiritual') {
     if (isGreeting) {
       return {
-        reply: `أهلاً ومرحباً بك يا ${userName}! أنا د. سفيان المستشار الروحي في منصة تدبير.\n\nيسعدني جداً أن نتحاور معاً حول سكينتك الداخلية، وتدبر يومك، وتناغم عبادتك مع وتيرة حياتك. كيف تشعر بروحانياتك وحضور قلبك هذه الأيام؟ تحدث معي بأريحية تامة.`,
+        reply: `أهلاً ومرحباً بك يا ${userName}! أنا ${advName} المستشار الروحي في منصة تدبير.\n\nيسعدني جداً أن نتحاور معاً حول سكينتك الداخلية، وتدبر يومك، وتناغم عبادتك مع وتيرة حياتك. كيف تشعر بروحانياتك وحضور قلبك هذه الأيام؟ تحدث معي بأريحية تامة.`,
         actionSteps: [
           'تخصيص 5 دقائق خلوة وتدبر صامت بعد صلاة الفجر',
           'قراءة صفحتين من القرآن الكريم بتأنٍ وتدبر يومياً'
@@ -73,7 +83,7 @@ function generateLocalAgentResponse(
     }
 
     return {
-      reply: `أسمعك بوعي تام يا ${userName}. ما تشعر به من تذبذب في المشاعر أو فتور هو أمر يمر به كل إنسان يبحث عن الاستقرار الروحي.\nالنفس كالطائر؛ تحتاج إلى التغذية الهادئة والمداومة على القليل الدائم. لا تتردد في مشاركتي أي هاجس أو تساؤل يدور في خلدك لنفككه معاً بخطوات عملية وسكينة تامة.`,
+      reply: `أسمعك بوعي تام يا ${userName}. ما طرحته: "${message}" يعكس تساؤلاً مشروعاً في رحلة البحث عن الاتزان الروحي.\nالنفس كالطائر؛ تحتاج إلى التغذية الهادئة والمداومة على القليل الدائم. لا تجعل العبادة عبئاً ثقيلاً، بل اجعلها استراحة تتنفس بها من ضغوط العالم.`,
       actionSteps: [
         'المشي لمدة 15 دقيقة مع الاستماع لشيء يلهم روحك ويهدئ فكرك',
         'تخصيص وقت استراحة بين المهام لاستعادة التنفس الهادئ'
@@ -82,16 +92,27 @@ function generateLocalAgentResponse(
     };
   }
 
-  // 2. Domain: Financial (أ. فيصل المالي)
+  // 2. Domain: Financial (أ. كمال المالي)
   if (agentKey === 'financial') {
     if (isGreeting) {
       return {
-        reply: `مرحباً بك يا ${userName}! أنا أ. فيصل المستشار المالي لمنصة تدبير.\n\nهدفي أن نبني معاً وعياً مالياً حكيماً يضمن لك الأمان والنمو المستدام دون تضييق. ما الذي يشغل تفكيرك مالياً أو تود مراجعته معي اليوم؟`,
+        reply: `مرحباً بك يا ${userName}! أنا ${advName} المستشار المالي لمنصة تدبير.\n\nهدفي أن نبني معاً وعياً مالياً حكيماً يضمن لك الأمان والنمو المستدام دون تضييق. ما الذي يشغل تفكيرك مالياً أو تود مراجعته معي اليوم؟`,
         actionSteps: [
           'تدوين كافة المصروفات اليومية لمدة أسبوع لرصد الهدر',
           'تحويل مبلغ تلقائي ثابت (حتى لو بسيط) لصندوق الادخار فور استلام الراتب'
         ],
         reflectionQuestion: 'هل تشعر أن قراراتك المالية الحالية تخدم أهدافك الاستراتيجية أم استهلاك اللحظة؟'
+      };
+    }
+
+    if (msg.includes('وضح') || msg.includes('توضح') || msg.includes('لا ادري') || msg.includes('لا أدري') || msg.includes('كيف')) {
+      return {
+        reply: `يسعدني جداً أن أفسر لك الفكرة ببساطة وعمق يا ${userName}.\n\nالمال ليس مجرد لغة حسابية جافة، بل هو انعكاس لقراراتنا النفسية اليومية. التوضيح العملي الذي أقصده يتلخص في ثلاث ركائز رئيسية:\n\n1. **فصل الاحتياج عن الرغبة**: الاحتياج هو ما لا تستقيم حياتك بدونه (مسكن، طعام، فواتير أساسية). أما الرغبة فهي ما يمنحك متعة لحظية لكن تأجيله لا يضرك.\n2. **صمام الأمان (صندوق الطوارئ)**: أن تملك مبلغاً يكفيك لـ 3 إلى 6 أشهر في حساب منفصل يمنحك حرية نفسية هائلة ولا يجعلك رهينة لأي ضغط وظيفي أو طارئ مفاجئ.\n3. **الأتمتة الذكية**: ادخر واستثمر فور نزول الدخل تلقائياً، ثم عِش بما تبقى، بدلاً من أن تنفق وتنتظر ما يفيض.`,
+        actionSteps: [
+          'تحديد بند واحد من المصاريف الاستهلاكية وتخفيضه بنسبة 20% هذا الشهر',
+          'فتح حساب ادخار فرعي منفصل تماماً عن بطاقة الشراء اليومية'
+        ],
+        reflectionQuestion: 'إذا راجعت مشترياتك في الشهر الماضي، ما هو الشيء الذي اشتريته واكتشفت أنك لم تكن بحاجته حقاً؟'
       };
     }
 
@@ -107,7 +128,7 @@ function generateLocalAgentResponse(
     }
 
     return {
-      reply: `وجهة نظر تستحق الوقوف عندها يا ${userName}. إدارة المال ليست مجرد أرقام، بل هي سلوك وعادات نفسية. عندما تضع حدوداً واضحة بين 'الاحتياجات' و'الرغبات اللحظية'، ستلاحظ أنك قادر على الادخار دون أن تشعر بالحرمان.`,
+      reply: `أفهم مقصدك تماماً يا ${userName}. عندما ننظر في رسالتك: "${message}"، نجد أن التحدي الحقيقي في المال ليس معرفة القواعد، بل الالتزام بالعادات الصغيرة المنتظمة.`,
       actionSteps: [
         'تطبيق قاعدة الـ 24 ساعة قبل شراء أي سلعة غير ضرورية',
         'مراجعة الاشتراكات الرقمية المتكررة وإلغاء ما لا يُستخدم'
@@ -116,11 +137,11 @@ function generateLocalAgentResponse(
     };
   }
 
-  // 3. Domain: Health (ك. زياد الصحي)
+  // 3. Domain: Health (د. ريان الصحي)
   if (agentKey === 'health') {
     if (isGreeting) {
       return {
-        reply: `أهلاً بك يا ${userName}! أنا كابتن زياد المستشار الصحي والبدني.\n\nصحتك وطاقتك الجسدية هي رأس مالك الحقيقي ووقود كل إنجازاتك. كيف تقيّم جودة نومك، نشاطك البدني، وغذائك في الآونة الأخيرة؟`,
+        reply: `أهلاً بك يا ${userName}! أنا ${advName} المستشار الصحي والبدني.\n\nصحتك وطاقتك الجسدية هي رأس مالك الحقيقي ووقود كل إنجازاتك. كيف تقيّم جودة نومك، نشاطك البدني، وغذائك في الآونة الأخيرة؟`,
         actionSteps: [
           'المشي السريع لمدة 20 دقيقة يومياً في الهواء الطلق',
           'شرب لترين من الماء وتثبيت موعد النوم والاستيقاظ'
@@ -153,13 +174,13 @@ function generateLocalAgentResponse(
   // 4. Default persona for other domains
   const fallbackAdvisors: Record<string, { role: string; name: string }> = {
     career: { role: 'المستشار المهني', name: 'م. طارق المهني' },
-    personal: { role: 'مستشارة التطوير الذاتي', name: 'أ. رنا الذاتية' },
-    learning: { role: 'مستشار التعلم والنمو الفكري', name: 'د. ماجد الفكري' },
-    family: { role: 'مستشارة العلاقات الأسرية', name: 'د. هدى الأسرية' },
-    social: { role: 'مستشارة الذكاء الاجتماعي', name: 'أ. لمى الاجتماعية' },
+    personal: { role: 'أخصائية تطوير الذات', name: 'د. ليلى الذاتية' },
+    learning: { role: 'مستشار التعلم والنمو المعرفي', name: 'بروفيسور زياد المعرفي' },
+    family: { role: 'استشارية الترابط الأسري', name: 'د. مريم الأسرية' },
+    social: { role: 'مستشار الذكاء الاجتماعي', name: 'أ. سامي الاجتماعي' },
   };
 
-  const advInfo = fallbackAdvisors[agentKey] || { role: 'مستشار توازن الحياة', name: 'مستشار تدبير' };
+  const advInfo = fallbackAdvisors[agentKey] || { role: advisor?.role || 'مستشار توازن الحياة', name: advName };
 
   return {
     reply: `أهلاً بك يا ${userName}، معك ${advInfo.name} (${advInfo.role}).\n\nتأملت في رسالتك: "${message}".\nما تطرحه يعبر عن رغبة حقيقية في النمو والتطور. لتحقيق نقلة نوعية في هذا الجانب، نحتاج للتركيز على الخطوة الإجرائية التالية المباشرة بدلاً من حمل الهموم دفعة واحدة.`,
@@ -207,11 +228,15 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       agentPath = path.join(process.cwd(), 'Agents', selectedFile);
     }
 
-    // قراءة تعليمات الوكيل من ملف الـ Markdown الخاص به بدقة
-    let systemInstruction = "أنت مساعد ذكي لنظام تدبير.";
+    // قراءة تعليمات الوكيل من ملف الـ Markdown الخاص به بدقة وتجريدها من القوالب القديمة
+    let agentRoleDescription = "أنت مساعد ذكي ومستشار شخصي في منصة تدبير لتوازن الحياة.";
     if (fs.existsSync(agentPath)) {
-      systemInstruction = fs.readFileSync(agentPath, 'utf8');
+      const rawDoc = fs.readFileSync(agentPath, 'utf8');
+      agentRoleDescription = rawDoc.replace(/يجب أن تكون إجابتك دائماً بصيغة JSON[\s\S]*/, '').trim();
     }
+
+    const advisorName = advisor?.name || (typeof advisor === 'string' ? advisor : 'مستشار تدبير');
+    const advisorRole = advisor?.role || advisor?.title || 'مستشار الحياة';
 
     // إذا لم يكن مفتاح Gemini متوفراً في البيئة، نستخدم محرك الاستجابة الذكي المدمج المعتمد على مواصفات الوكلاء
     if (!apiKey) {
@@ -225,39 +250,93 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       return res.json(localResponse);
     }
 
-    // إثراء التعليمات بسياق المستفيد وأسلوب الرد المطلوب
-    systemInstruction += `
+    // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
+    const systemInstruction = `
+${agentRoleDescription}
+
+أنت الآن تخوض محادثة تفاعلية حية ومباشرة بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة تدبير.
+أنت شخصية مستقلة، عميقة الفكر، حكيمة ودافئة، وتفكر مع المستفيد كمرشد وشريك حقيقي.
+
+قواعد الحوار والتفكير مع المستفيد:
+1. استمع لكل كلمة كتبها المستفيد وفكر معه في سياق مشاعره وحيرته وأفكاره.
+2. لا تكرر إجابات نمطية أو عامة أبداً، بل تجاوب مباشرة مع سؤاله الأخير في سياق المحادثة الجارية.
+3. تحدث باللغة العربية الفصحى الراقية، الواضحة، والملهمة.
+4. قدّم نصيحة جوهرية عملية مصحوبة بخطوتين إجرائيتين سريعتين (Micro-habits) يمكن البدء بهما فوراً.
+5. اختم بسؤال تأملي ذكي يفتح للمستفيد أفقاً جديداً في إدراك ذاته وإدارة حياته.
 
 سياق المستفيد من منصة تدبير:
 - الاسم: ${effectiveUserProfile?.name || 'صديقنا'}
 - الدرجة الحالية في هذا الجانب: ${effectiveScore}/10
-- التحديات الحالية: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
+- التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف الحالية: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
 - إجابات التقييم السابقة: ${JSON.stringify(effectiveAnswers)}
 
-مهمتك الإضافية:
-1. التحدث باللغة العربية الفصحى الدافئة، الحكيمة والملهمة.
-2. تقديم نصيحة عملية وتحديد خطوات إجرائية سريعة (Micro-habits).
-3. إرجاع الرد بصيغة JSON مهيكلة:
+أرجع الرد دائماً بصيغة JSON مهيكلة وفق المخطط التالي:
 {
-  "reply": "نص الرد والإرشاد العملي الشامل والمشجع من الوكيل",
-  "actionSteps": ["خطوة عملية 1", "خطوة عملية 2"],
+  "reply": "نص الرد الحواري المشخصن والتفاعلي المباشر من المستشار متفاعلاً مع ما قاله المستفيد",
+  "actionSteps": ["خطوة عملية أولى", "خطوة عملية ثانية"],
   "reflectionQuestion": "سؤال تأملي ذكي للمستفيد"
 }
 `;
 
-    const contents = [
-      ...(Array.isArray(history)
-        ? history.map((h: { role: string; content: string }) => ({
-            role: h.role === 'user' ? 'user' : 'model',
-            parts: [{ text: h.content }],
-          }))
-        : []),
-      {
+    // تطهير وبناء تسلسل المحادثة التفاعلية بما يتوافق بدقة مع متطلبات Google GenAI
+    const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
+
+    if (Array.isArray(history)) {
+      for (const h of history) {
+        if (!h) continue;
+        const role: 'user' | 'model' =
+          h.role === 'model' || h.role === 'advisor' || h.sender === 'advisor' || h.sender === 'model'
+            ? 'model'
+            : 'user';
+
+        let text = '';
+        if (typeof h === 'string') {
+          text = h;
+        } else if (typeof h.content === 'string') {
+          text = h.content;
+        } else if (typeof h.text === 'string') {
+          text = h.text;
+        } else if (Array.isArray(h.parts) && h.parts.length > 0) {
+          text = h.parts
+            .map((p: any) => (typeof p === 'string' ? p : p?.text || ''))
+            .filter(Boolean)
+            .join('\n');
+        }
+
+        text = text.trim();
+        if (!text) continue;
+
+        if (contents.length > 0 && contents[contents.length - 1].role === role) {
+          // دمج الرسائل المتتالية من نفس الطرف لضمان التبادل المنتظم
+          contents[contents.length - 1].parts[0].text += `\n\n${text}`;
+        } else {
+          contents.push({
+            role,
+            parts: [{ text }],
+          });
+        }
+      }
+    }
+
+    // إضافة رسالة المستخدم الحالية
+    const currentMsgText = message.trim();
+    if (contents.length > 0 && contents[contents.length - 1].role === 'user') {
+      contents[contents.length - 1].parts[0].text += `\n\n${currentMsgText}`;
+    } else {
+      contents.push({
         role: 'user',
-        parts: [{ text: message }],
-      },
-    ];
+        parts: [{ text: currentMsgText }],
+      });
+    }
+
+    // متطلبات Gemini: يجب أن تبدأ المحادثة دائماً بـ user
+    if (contents.length > 0 && contents[0].role === 'model') {
+      contents.unshift({
+        role: 'user',
+        parts: [{ text: 'مرحباً، أود بدء الجلسة الاستشارية معك.' }],
+      });
+    }
 
     const response = await ai.models.generateContent({
       model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
@@ -270,7 +349,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
           properties: {
             reply: {
               type: Type.STRING,
-              description: 'نص الرد التفصيلي والمشجع من المستشار',
+              description: 'نص الرد التفصيلي والمشجع من المستشار المتحدث مباشرة للمستفيد',
             },
             actionSteps: {
               type: Type.ARRAY,
@@ -298,7 +377,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     }
     return res.json(parsed);
   } catch (error: any) {
-    console.error('Advisor Chat API fallback to local agent:', error?.message);
+    console.error('Advisor Chat Gemini error:', error?.message || error);
     const { advisor, userProfile, message, userName, userScore } = req.body;
     const agentKey = typeof advisor === 'string' ? advisor : (advisor?.id || 'financial');
     const localFallback = generateLocalAgentResponse(
