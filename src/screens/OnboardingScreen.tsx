@@ -190,6 +190,21 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     setShowCelebration(true);
   };
 
+  // Reset and restart evaluation for current advisor
+  const handleResetCurrentAdvisor = () => {
+    const advisorKey = currentAdvisor.id;
+    setAdvisorStep((prev) => ({ ...prev, [advisorKey]: 0 }));
+    const initialMsgs: EvaluationChatMessage[] = [
+      {
+        id: `welcome_${Date.now()}`,
+        sender: 'advisor',
+        text: `مرحباً بك مجدداً في عيادة التقييم الأسبوعي الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nأنا معك للإصغاء والتقييم من جديد بكل أريحية وتجربة كل الأسئلة بحرية.\n\nكيف تصف حالك وشعورك العام في هذا الجانب الآن؟ وما تقييمك لمستوى رضاك من 1 إلى 10؟`,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      },
+    ];
+    setChatMessages((prev) => ({ ...prev, [advisorKey]: initialMsgs }));
+  };
+
   // Move to next incomplete advisor
   const handleGoToNextAdvisor = () => {
     setShowCelebration(false);
@@ -213,10 +228,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  // Handle user response with structured 3-phase clinical session
+  // Handle user response with structured clinical session (Open Testing Mode)
   const handleSendAnswer = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
-    if (!text || isAdvisorReplying || isLocked) return;
+    if (!text || isAdvisorReplying) return;
 
     const advisorKey = currentAdvisor.id;
     const userMsg: EvaluationChatMessage = {
@@ -280,10 +295,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       if (!replyContent) {
         if (nextStep === 1) {
           replyContent = `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت تقييمك ومشاعرك بوعي تام.\n\nكطبيب ومرشد لك في ${currentAdvisor.title}، كل مرحلة نمر بها هي فرصة للاتزان وإعادة الضبط. بالنظر إلى وتيرة أسبوعك المنصرم، ما هو أكبر تحدٍ أو عائق نفسي أو عملي واجهك وشعرت أنه يسحب من طاقتك وتركيزك في هذا الجانب؟`;
-        } else {
+        } else if (nextStep === 2) {
           const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
           const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
-          replyContent = `✅ أحسنت يا صديقنا. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية لهذا الأسبوع.\n\nرصدنا درجتك المعتمدة في ${currentAdvisor.title}: (${finalScore}/10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\n🔒 **تم حفظ جلستك وإقفال هذا الجانب لهذا الأسبوع**، لتمنح نفسك مساحة هادئة للتطبيق العملي حتى موعد جلستنا مطلع الأسبوع القادم.\n\nإذا كان لديك أي سؤال لاحق أو رغبت في حوار حر ومفتوح في أي وقت، يمكنك دائماً التوجه إلى قسم **(استشارة المستشارين)** في القائمة الجانبية.\n\nفلننتقل الآن إلى الجانب التالي.`;
+          replyContent = `✅ أحسنت يا صديقنا. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية.\n\nرصدنا درجتك المعتمدة في ${currentAdvisor.title}: (${finalScore > 0 ? finalScore : 7}/10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح، وباب الحوار مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية. يمكنك الانتقال للجانب التالي أو مواصلة الحديث معي بحرية.`;
+        } else {
+          replyContent = `أنا معك وأتابع ما تطرحه باهتمام في مجال ${currentAdvisor.title}. خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة وتجاوزت التسويف. كيف تحب أن نطور هذا الجانب أكثر؟`;
         }
       }
 
@@ -299,8 +316,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
 
-      // When step 2 completes, automatically close the session and lock the domain for the week
-      if (nextStep >= 2) {
+      // When step 2 completes, record completion badge
+      if (nextStep === 2) {
         const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
         const scoreToSave = finalScore > 0 ? finalScore : 7.0;
         onFinishAdvisor(currentAdvisor.id, scoreToSave);
@@ -593,61 +610,64 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* LOCKED STATE BANNER (When this domain was evaluated and locked for the week) */}
-        {isLocked ? (
-          <div className="p-4 sm:p-5 bg-gradient-to-b from-[#FAF7F2] to-white border-t border-[#eae3d5] flex-shrink-0 space-y-3">
-            <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-              <div className="flex items-center gap-3 text-right">
-                <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
-                  <Lock className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-black text-emerald-950">
-                    جلسة هذا الأسبوع مكتملة ومقفلة بنجاح ({currentAdvisorScore}/10)
-                  </h4>
-                  <p className="text-[11px] text-emerald-800 mt-0.5">
-                    تتجدد جلسة التقييم القادمة بعد {daysRemaining} أيام لتمنح نفسك فرصة هادئة للتطبيق العملي.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                {onNavigateToAdvisorChat && (
-                  <button
-                    type="button"
-                    onClick={() => onNavigateToAdvisorChat(currentAdvisor.id)}
-                    className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-[#1b605b] hover:bg-[#164e4a] text-white text-xs font-bold transition-all shadow-xs"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>حوار مفتوح مع {currentAdvisor.name}</span>
-                  </button>
-                )}
+        {/* Completion Status Bar when evaluated (Open Mode enabled) */}
+        {isCompleted && (
+          <div className="px-4 py-2.5 bg-emerald-50/90 border-t border-emerald-200/90 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
+              <span className="text-xs font-black text-emerald-950">
+                تم رصد تقييم هذا الجانب ({currentAdvisorScore > 0 ? currentAdvisorScore : 7}/10)
+              </span>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900">
+                الوضع المفتوح مفعل 🔓
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleResetCurrentAdvisor}
+                className="px-2.5 py-1 rounded-xl bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                title="إعادة بدء التقييم الإكلينيكي لهذا المستشار"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>إعادة التقييم</span>
+              </button>
+              {onNavigateToAdvisorChat && (
                 <button
                   type="button"
-                  onClick={handleGoToNextAdvisor}
-                  className="flex-1 sm:flex-initial inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl bg-white hover:bg-emerald-50 text-emerald-900 border border-emerald-300 text-xs font-bold transition-all shadow-xs"
+                  onClick={() => onNavigateToAdvisorChat(currentAdvisor.id)}
+                  className="px-2.5 py-1 rounded-xl bg-[#1b605b] hover:bg-[#164e4a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
                 >
-                  <span>الجانب التالي</span>
-                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>غرفة الاستشارة</span>
                 </button>
-              </div>
+              )}
+              <button
+                type="button"
+                onClick={handleGoToNextAdvisor}
+                className="px-3 py-1 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+              >
+                <span>الجانب التالي</span>
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
-        ) : (
-          /* ACTIVE CLINIC INPUT BAR (Phase 0 and Phase 1) */
-          <>
-            {/* Quick Choices bar depending on current clinic step */}
-            <div className="px-4 py-2.5 bg-[#FAF7F2] border-t border-[#f0eae0] flex-shrink-0">
-              <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
-                <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
-                  <Sparkles className="w-3 h-3 text-[#bd9240]" />
-                  {currentStep === 0 ? 'اختر رضاك التقريبي:' : 'خيارات سريعة للعوائق:'}
-                </span>
+        )}
 
-                {/* Step 0: Quick 1 to 10 rating pills */}
-                {currentStep === 0 && (
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+        {/* ACTIVE CLINIC INPUT BAR (Always Open for Testing and Continuous Conversation) */}
+        <>
+          {/* Quick Choices bar depending on current clinic step */}
+          <div className="px-4 py-2.5 bg-[#FAF7F2] border-t border-[#f0eae0] flex-shrink-0">
+            <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+              <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
+                <Sparkles className="w-3 h-3 text-[#bd9240]" />
+                {currentStep === 0 ? 'اختر رضاك التقريبي:' : 'خيارات سريعة للعوائق:'}
+              </span>
+
+              {/* Step 0: Quick 1 to 10 rating pills */}
+              {currentStep === 0 && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                       <button
                         key={num}
                         type="button"
@@ -750,7 +770,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
             </div>
           </>
-        )}
       </div>
 
       {/* Celebration Modal when an Advisor's evaluation completes */}

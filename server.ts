@@ -59,11 +59,11 @@ function generateLocalAgentResponse(
         actionSteps: advisor?.defaultGoals?.slice(0, 1) || ['تحديد العائق الرئيسي للتعامل معه بمرونة'],
         reflectionQuestion: 'ما الذي يجعلك تشعر أن هذا العائق يستحق التركيز عليه الآن؟'
       };
-    } else if (evaluationStep && evaluationStep >= 2) {
-      // المحطة الختامية: التشخيص الأسبوعي والعادة الذهبية وإقفال الجلسة للأسبوع القادم
+    } else if (evaluationStep === 2) {
+      // المحطة الختامية: التشخيص الأسبوعي والعادة الذهبية ورصد التقييم
       const goldenHabit = advisor?.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
       return {
-        reply: `✅ أحسنت يا ${userName}. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية لهذا الأسبوع.\n\nرصدنا درجتك المعتمدة في ${advRole}: (${score > 0 ? score.toFixed(1) : '7.0'} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\n🔒 **تم حفظ جلستك وإقفال هذا الجانب لهذا الأسبوع**، لتمنح نفسك مساحة هادئة للتطبيق العملي حتى موعد جلستنا مطلع الأسبوع القادم.\n\nإذا كان لديك أي سؤال لاحق أو رغبت في حوار حر ومفتوح في أي وقت، يمكنك دائماً التوجه إلى قسم **(استشارة المستشارين)** في القائمة الجانبية.\n\nفلننتقل الآن إلى الجانب التالي.`,
+        reply: `✅ أحسنت يا ${userName}. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية لهذا الأسبوع.\n\nرصدنا درجتك المعتمدة في ${advRole}: (${score > 0 ? score.toFixed(1) : '7.0'} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح، وباب الحوار والاستشارة مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية. يمكنك الانتقال للجانب التالي أو استئناف الحديث معي في أي وقت.`,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || [goldenHabit],
         reflectionQuestion: 'كيف يمكنك تهيئة بيئتك اليوم لتلتزم بهذه العادة طوال الأسبوع؟'
       };
@@ -321,13 +321,18 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 - اسأله سؤالاً واحداً فقط لاستكشاف التحدي أو العائق الأكبر الذي أثر عليه هذا الأسبوع في هذا الجانب.
 - لا تسأل أسئلة متعددة ولا تستجوبه، بل اجعله يشعر بالأمان والاحتواء.
 `;
-      } else if (evaluationStep >= 2) {
+      } else if (evaluationStep === 2) {
         clinicSpecialGuideline = `
-[المحطة الختامية للتقييم الأسبوعي الإكلينيكي 🔒]
+[المحطة الختامية للتقييم الأسبوعي الإكلينيكي 🌿]
 - هذه الجلسة الختامية للتقييم الأسبوعي لهذا الجانب.
 - لخص ما سمعته منه، واعتمد درجته لهذا الأسبوع (${effectiveScore}/10).
 - قدم له التوصية والعادة الذهبية الواحدة لأسبوعه.
-- اختم الجلسة رسمياً وبمحبة: أخبره أن جلسة التقييم اكتملت بنجاح وحفظت، وأن هذا الجانب مغلق الآن حتى الأسبوع القادم ليتفرغ للتطبيق العملي، وأنه لأي استفسارات إضافية مفتوحة يمكنه زيارة قسم (استشارة المستشارين).
+- أخبره أن التقييم تم رصده بنجاح، وأن باب الحوار مفتوح معه دائماً لأي استفسارات أو تفاصيل إضافية.
+`;
+      } else {
+        clinicSpecialGuideline = `
+[حوار استشاري وتعمق إضافي مع المستشار 💬]
+- تفاعل مباشرة مع سؤال المستفيد أو ما يطرحه الآن، وقدم له إجابة واعية وحلولاً عملية.
 `;
       }
     }
@@ -424,7 +429,7 @@ ${clinicSpecialGuideline}
     }
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
       contents,
       config: {
         systemInstruction,
@@ -592,7 +597,7 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
 `;
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
       contents: prompt,
       config: {
         systemInstruction,
@@ -740,7 +745,7 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
 `;
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash',
+      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
       contents: prompt,
       config: {
         systemInstruction,
