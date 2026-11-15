@@ -262,7 +262,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         نقاط القوة المستخلصة:
                       </span>
                       <ul className="space-y-1 text-xs text-[#2c3d39]">
-                        {areaInsights?.strengths.map((str, idx) => (
+                        {(areaInsights?.strengths || []).map((str, idx) => (
                           <li key={idx} className="flex items-start gap-1.5">
                             <span className="text-emerald-600 mt-0.5">•</span>
                             <span>{str}</span>
@@ -277,7 +277,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                         التحديات ونقاط الضعف:
                       </span>
                       <ul className="space-y-1 text-xs text-[#2c3d39]">
-                        {areaInsights?.challenges.map((ch, idx) => (
+                        {(areaInsights?.challenges || []).map((ch, idx) => (
                           <li key={idx} className="flex items-start gap-1.5">
                             <span className="text-amber-600 mt-0.5">•</span>
                             <span>{ch}</span>

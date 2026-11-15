@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import {
   Send,
@@ -338,6 +338,25 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const currentAdvisorScore = calculateScoreForAdvisor(currentAdvisor, answers);
   const insights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
   const activeConversation = chatMessages[currentAdvisor.id] || [];
+
+  // Quick reflection suggestions derived safely from advisor data without ever crashing
+  const quickReflectionPills = useMemo(() => {
+    const questionOptions = currentAdvisor.questions?.flatMap((q) => q.options?.map((o) => o.label) || []) || [];
+    const suggestions = currentAdvisor.suggestedQuestions || [];
+    const goals = currentAdvisor.defaultGoals || [];
+    const pills = [
+      ...questionOptions.slice(0, 3),
+      ...suggestions.slice(0, 2),
+      ...goals.slice(0, 1),
+    ];
+    return pills.length > 0
+      ? pills
+      : [
+          'ضيق الوقت وتسارع الروتين اليومي',
+          'التشتت بكثرة المهام والأجهزة',
+          'التسويف وصعوبة الالتزام بالعادة',
+        ];
+  }, [currentAdvisor]);
 
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-5 bg-[#FAF7F2]">
@@ -680,15 +699,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   </div>
                 )}
 
-                {/* Step 1: Suggested challenges or quick reflection pills */}
+                {/* Step 1+: Suggested reflection pills and questions */}
                 {currentStep >= 1 && (
                   <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {currentAdvisor.challenges.map((ch, idx) => (
+                    {quickReflectionPills.map((ch, idx) => (
                       <button
                         key={idx}
                         type="button"
                         onClick={() => handleSendAnswer(ch)}
-                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs"
+                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2]"
                       >
                         {ch}
                       </button>
@@ -696,7 +715,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                     <button
                       type="button"
                       onClick={() => handleSendAnswer('الحمد لله، الأمور تسير بهدوء ودون عوائق كبيرة')}
-                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs"
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2]"
                     >
                       الأمور مستقرة وهادئة 🌿
                     </button>
@@ -828,7 +847,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   أبرز مواطن القوة:
                 </span>
                 <ul className="list-disc list-inside text-[#2c3d39] space-y-0.5">
-                  {insights.strengths.slice(0, 2).map((str, i) => (
+                  {(insights?.strengths || []).slice(0, 2).map((str, i) => (
                     <li key={i}>{str}</li>
                   ))}
                 </ul>
@@ -840,7 +859,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   فرص التحسين:
                 </span>
                 <ul className="list-disc list-inside text-[#2c3d39] space-y-0.5">
-                  {insights.challenges.slice(0, 2).map((ch, i) => (
+                  {(insights?.challenges || []).slice(0, 2).map((ch, i) => (
                     <li key={i}>{ch}</li>
                   ))}
                 </ul>

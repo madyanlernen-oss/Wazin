@@ -549,7 +549,7 @@ export const YearlyAndWeeklyAnalytics: React.FC = () => {
                     انتصارات الأسبوع الصغيرة:
                   </span>
                   <ul className="space-y-1 text-[#2c3d39]">
-                    {wk.wins.map((win, i) => (
+                    {(wk.wins || []).map((win, i) => (
                       <li key={i} className="flex items-start gap-1.5">
                         <span className="text-emerald-600 font-bold">•</span>
                         <span>{win}</span>
@@ -564,7 +564,7 @@ export const YearlyAndWeeklyAnalytics: React.FC = () => {
                     تحديات وتوصية التعديل:
                   </span>
                   <ul className="space-y-1 text-[#2c3d39]">
-                    {wk.challenges.map((ch, i) => (
+                    {(wk.challenges || []).map((ch, i) => (
                       <li key={i} className="flex items-start gap-1.5">
                         <span className="text-amber-600 font-bold">•</span>
                         <span>{ch}</span>
