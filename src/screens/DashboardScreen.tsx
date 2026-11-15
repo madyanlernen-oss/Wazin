@@ -452,7 +452,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           أبرز القوة:
                         </span>
                         <p className="text-[#536561] line-clamp-2">
-                          {areaInsights?.strengths[0] || 'وعي جيد بطبيعة هذا الجانب'}
+                          {areaInsights?.strengths?.[0] || 'وعي جيد بطبيعة هذا الجانب'}
                         </p>
                       </div>
 
@@ -461,7 +461,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                           التحدي الأبرز:
                         </span>
                         <p className="text-[#536561] line-clamp-2">
-                          {areaInsights?.challenges[0] || 'تثبيت خطة أسبوعية واضحة'}
+                          {areaInsights?.challenges?.[0] || 'تثبيت خطة أسبوعية واضحة'}
                         </p>
                       </div>
                     </>

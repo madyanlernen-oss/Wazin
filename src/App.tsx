@@ -232,6 +232,8 @@ export default function App() {
     onboarding: 'تقييم أبعاد الحياة',
     advisor_chat: 'استشارة المستشارين',
     director_summary: 'تقرير المنسق العام',
+    goals_matrix: 'أهدافي (مصفوفة أيزنهاور)',
+    comparison: 'المقارنة والتحليلات',
   };
 
   // If on landing or login screen, render with clean top navbar

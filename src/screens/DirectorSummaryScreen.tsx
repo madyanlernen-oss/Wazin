@@ -341,7 +341,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
                 {report.strongestSynergy.description}
               </p>
               <div className="pt-2 flex flex-wrap gap-1.5">
-                {report.strongestSynergy.domainsInvolved.map((dom, i) => (
+                {(report.strongestSynergy?.domainsInvolved || []).map((dom, i) => (
                   <span
                     key={i}
                     className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200"
@@ -384,7 +384,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {report.keystoneHabits.map((habit, idx) => (
+              {(report.keystoneHabits || []).map((habit, idx) => (
                 <div
                   key={idx}
                   className="bg-[#FAF7F2] border border-[#eae3d5] rounded-2xl p-5 flex flex-col justify-between space-y-3 shadow-xs"
@@ -403,7 +403,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
                   </div>
 
                   <div className="pt-2 border-t border-[#ded7c8] flex flex-wrap gap-1">
-                    {habit.targetDomains.map((dom, dIdx) => (
+                    {(habit.targetDomains || []).map((dom, dIdx) => (
                       <span
                         key={dIdx}
                         className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white text-[#2c3d39] border border-[#ded7c8]"
@@ -432,7 +432,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {report.thirtyDayRoadmap.map((week) => (
+              {(report.thirtyDayRoadmap || []).map((week) => (
                 <div
                   key={week.weekNumber}
                   className="bg-[#FAF7F2] border border-[#eae3d5] rounded-2xl p-5 space-y-3"
@@ -451,7 +451,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
                   </p>
 
                   <div className="space-y-2 pt-1">
-                    {week.actions.map((act, aIdx) => {
+                    {(week.actions || []).map((act, aIdx) => {
                       const actId = `w${week.weekNumber}_a${aIdx}`;
                       const isDone = completedRoadmapActions[actId];
 
