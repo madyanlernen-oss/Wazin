@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { VoiceInput } from '../components/VoiceInput';
 import {
   Send,
   Sparkles,
@@ -625,11 +626,18 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
               }}
               className="flex items-center gap-2"
             >
+              <VoiceInput
+                onTranscript={(transcript) =>
+                  setInputMessage((prev) => (prev ? `${prev} ${transcript}` : transcript))
+                }
+                disabled={isLoading}
+              />
+
               <input
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder={`اطرح سؤالك أو تحديك على ${currentAdvisor.name}...`}
+                placeholder={`اطرح سؤالك أو تحدث بصوتك مع ${currentAdvisor.name}...`}
                 className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
                 dir="rtl"
                 disabled={isLoading}

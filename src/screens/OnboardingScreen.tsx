@@ -1,9 +1,8 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
+import { VoiceInput } from '../components/VoiceInput';
 import {
   Send,
-  Mic,
-  MicOff,
   Sparkles,
   CheckCircle2,
   TrendingUp,
@@ -65,9 +64,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   });
 
   const [inputText, setInputText] = useState('');
-  const [isRecording, setIsRecording] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
-  const [speechSupported, setSpeechSupported] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
     return (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
@@ -88,8 +85,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // 1: Exploring Core Obstacle / Challenge
   // 2: Weekly Diagnosis, Golden Prescription & Domain Locked
   const [advisorStep, setAdvisorStep] = useState<Record<string, number>>({});
-
-  const recognitionRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
@@ -102,58 +97,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // All 8 domains completed state
   const isAllCompleted = completedAdvisors.length >= 8;
-
-  // Speech Recognition Setup (Web Speech API) - Voice Input only (Speech to Text)
-  useEffect(() => {
-    const SpeechRecognition =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (SpeechRecognition) {
-      setSpeechSupported(true);
-      const recognition = new SpeechRecognition();
-      recognition.lang = 'ar-SA';
-      recognition.continuous = false;
-      recognition.interimResults = false;
-
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        if (transcript) {
-          setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript));
-        }
-        setIsRecording(false);
-      };
-
-      recognition.onerror = () => {
-        setIsRecording(false);
-      };
-
-      recognition.onend = () => {
-        setIsRecording(false);
-      };
-
-      recognitionRef.current = recognition;
-    }
-  }, []);
-
-  // Toggle voice recording (Speech to text)
-  const toggleRecording = () => {
-    if (!speechSupported || !recognitionRef.current) {
-      alert('ميزة الميكروفون غير مفعلة أو غير مدعومة في متصفحك. يمكنك الكتابة مباشرة.');
-      return;
-    }
-
-    if (isRecording) {
-      recognitionRef.current.stop();
-      setIsRecording(false);
-    } else {
-      try {
-        recognitionRef.current.start();
-        setIsRecording(true);
-      } catch (err) {
-        setIsRecording(false);
-      }
-    }
-  };
 
   // Initialize welcoming message for weekly clinic evaluation
   useEffect(() => {
@@ -733,19 +676,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 }}
                 className="flex items-center gap-2"
               >
-                {/* Mic Button for Voice Dictation */}
-                <button
-                  type="button"
-                  onClick={toggleRecording}
-                  title={isRecording ? 'إيقاف التسجيل الصوتي' : 'تحدث بالصوت'}
-                  className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0 ${
-                    isRecording
-                      ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-600/30'
-                      : 'bg-[#FAF7F2] border border-[#ded7c8] text-[#536561] hover:text-[#1b605b] hover:border-[#1b605b]'
-                  }`}
-                >
-                  {isRecording ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
-                </button>
+                {/* Mic Button for Voice Dictation (Speech to Text) */}
+                <VoiceInput
+                  onTranscript={(transcript) =>
+                    setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript))
+                  }
+                  disabled={isAdvisorReplying}
+                  showStatusBadge={false}
+                />
 
                 {/* Free Text Input */}
                 <input
@@ -753,11 +691,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   placeholder={
-                    isRecording
-                      ? 'جارٍ الاستماع لصوتك باللغة العربية...'
-                      : currentStep === 0
-                      ? 'اكتب شعورك أو تقييمك (مثلاً: راضٍ بنسبة 7 من 10)...'
-                      : 'اكتب العائق أو التحدي الأبرز بحرية تامة...'
+                    currentStep === 0
+                      ? 'اكتب أو تحدث بصوتك (مثلاً: راضٍ بنسبة 7 من 10)...'
+                      : 'اكتب أو تحدث بصوتك عن العائق أو التحدي الأبرز...'
                   }
                   className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
                   dir="rtl"
