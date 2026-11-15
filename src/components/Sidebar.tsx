@@ -53,7 +53,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'onboarding' as const,
       label: 'قيّم أسبوعك الآن',
       icon: ClipboardList,
-      badge: 'جلسة أسبوعية 🔒',
+      badge: 'مفتوح للتقييم 🌿',
       badgeColor: 'bg-emerald-100 text-emerald-800',
     },
     {

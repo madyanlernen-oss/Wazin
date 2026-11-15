@@ -89,27 +89,20 @@ export default function App() {
     setActiveScreen('dashboard');
   };
 
-  // Handler: Login Success (If demo user, load 1-year rich sample analytics state)
+  // Handler: Login Success (demo@tadbeer.ai starts clean and open without pre-filled evaluations)
   const handleLoginSuccess = (profile: UserProfile) => {
     saveStoredUser(profile);
     const isDemo =
       profile.email?.toLowerCase() === 'demo@tadbeer.ai' ||
-      profile.name.toLowerCase() === 'demo' ||
-      profile.name.includes('ضيف');
+      profile.name?.toLowerCase() === 'demo' ||
+      profile.name?.includes('ضيف');
 
-    if (isDemo) {
-      const sample = loadSampleState();
-      setAppState({
-        ...sample,
-        userProfile: profile,
-      });
-    } else {
-      const fresh = getDefaultInitialState();
-      setAppState({
-        ...fresh,
-        userProfile: profile,
-      });
-    }
+    // Fresh clean state without pre-filled evaluations
+    const fresh = getDefaultInitialState();
+    setAppState({
+      ...fresh,
+      userProfile: profile,
+    });
     setActiveScreen('dashboard');
   };
 

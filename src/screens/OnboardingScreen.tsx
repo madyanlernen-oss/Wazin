@@ -415,7 +415,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               >
                 <span>{advisor.avatarSvg}</span>
                 <span>{advisor.title}</span>
-                {isAdvCompleted && <Lock className="w-3 h-3 text-emerald-600" />}
+                {isAdvCompleted && <Check className="w-3.5 h-3.5 text-emerald-600" />}
               </button>
             );
           })}
@@ -452,10 +452,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 >
                   {currentAdvisor.badge}
                 </span>
-                {isLocked && (
+                {isCompleted && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
-                    <Lock className="w-2.5 h-2.5" />
-                    مكتمل للأسبوع
+                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
+                    تم التقييم بنجاح
                   </span>
                 )}
               </div>
@@ -785,8 +785,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
             <div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <Lock className="w-3.5 h-3.5 text-emerald-600" />
-                اكتملت جلسة هذا الأسبوع وأُقفل الجانب بنجاح
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                اكتمل تقييم هذا الجانب بنجاح
               </div>
               <h3 className="text-2xl font-black text-[#1d2e2b]">
                 أحسنت! أنهيت جولة {currentAdvisor.name}

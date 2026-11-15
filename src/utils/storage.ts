@@ -73,10 +73,11 @@ export const loadStoredState = (): StoredAppState => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return getDefaultInitialState();
     const parsed = JSON.parse(raw);
-    // If the saved state contains old legacy sample answers or 8 completed areas automatically, reset cleanly
+    // If the saved state contains old legacy sample answers or demo user with 8 completed areas, reset cleanly
     if (
       (parsed.completedAdvisors && parsed.completedAdvisors.length === 8 && parsed.answers?.spiritual_q5) ||
-      parsed.userProfile?.name?.includes('عبدالرحمن')
+      parsed.userProfile?.name?.includes('عبدالرحمن') ||
+      parsed.userProfile?.email?.toLowerCase() === 'demo@tadbeer.ai'
     ) {
       return getDefaultInitialState();
     }
