@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VoiceInput } from '../components/VoiceInput';
+import { ReasoningBox } from '../components/ReasoningBox';
 import {
   Send,
   Sparkles,
@@ -196,12 +197,38 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
       const data = await res.json();
 
+      let parsedReasoning = data.reasoning || '';
+      let parsedSummary = data.summary || '';
+      let parsedAdvice = data.advice || '';
+      let parsedReply = data.reply || '';
+
+      // Defensive parsing if reply or body is a raw agent JSON string
+      if (typeof parsedReply === 'string' && (parsedReply.startsWith('{') || parsedReply.includes('"reasoning"'))) {
+        try {
+          const innerMatch = parsedReply.match(/\{[\s\S]*\}/);
+          if (innerMatch) {
+            const inner = JSON.parse(innerMatch[0]);
+            parsedReasoning = inner.reasoning || parsedReasoning;
+            parsedSummary = inner.summary || parsedSummary;
+            parsedAdvice = inner.advice || parsedAdvice;
+            parsedReply = inner.advice || inner.summary || inner.reply || '';
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const cleanContent = parsedReply || parsedAdvice || parsedSummary || 'أنا معك، فلنحدد خطوة إجرائية واضحة تناسب واقعك الحالي.';
+
       const advisorReply: ChatMessage = {
         id: `advisor_${Date.now()}`,
         sender: 'advisor',
-        content: data.reply || 'أنا معك، فلنحدد خطوة إجرائية واضحة تناسب واقعك الحالي.',
+        content: cleanContent,
+        reasoning: parsedReasoning,
+        summary: parsedSummary,
+        advice: parsedAdvice,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-        actionSteps: data.actionSteps || [],
+        actionSteps: data.actionSteps || (parsedAdvice ? [parsedAdvice] : []),
         reflectionQuestion: data.reflectionQuestion,
       };
 
@@ -473,6 +500,11 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
                   {/* Bubble */}
                   <div className={`max-w-[85%] sm:max-w-[75%] space-y-3`}>
+                    {/* Dedicated Reasoning Box (التفكير والتحليل العميق) */}
+                    {!isUser && msg.reasoning && (
+                      <ReasoningBox reasoning={msg.reasoning} />
+                    )}
+
                     <div
                       className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
                         isUser

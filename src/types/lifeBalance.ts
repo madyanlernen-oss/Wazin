@@ -121,4 +121,7 @@ export interface ChatMessage {
   timestamp: string;
   actionSteps?: string[];
   reflectionQuestion?: string;
+  reasoning?: string;
+  summary?: string;
+  advice?: string;
 }
