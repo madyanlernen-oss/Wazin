@@ -424,6 +424,8 @@ function generateLocalAgentResponse(
     learning: { role: 'مستشار التعلم والنمو المعرفي', name: 'بروفيسور زياد المعرفي' },
     family: { role: 'استشارية الترابط الأسري', name: 'د. مريم الأسرية' },
     social: { role: 'مستشار الذكاء الاجتماعي', name: 'أ. سامي الاجتماعي' },
+    aggregator: { role: 'وكيل التجميع والتكامل الشامل ومحلل النظم الحياتية', name: 'م. معتز التكاملي' },
+    advisor: { role: 'المستشار التوجيهي ورئيس الداشبورد', name: 'د. هاني الموجه' },
   };
 
   const advInfo = fallbackAdvisors[agentKey] || { role: advisor?.role || 'مستشار توازن الحياة', name: advName };
