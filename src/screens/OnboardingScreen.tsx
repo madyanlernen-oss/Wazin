@@ -102,15 +102,22 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // All 8 domains completed state
   const isAllCompleted = completedAdvisors.length >= 8;
 
-  // Initialize welcoming message for weekly clinic evaluation
+  const totalQuestions = currentAdvisor.questions?.length || 8;
+  const currentQuestion = currentAdvisor.questions?.[Math.min(currentStep, totalQuestions - 1)];
+
+  // Initialize welcoming message for weekly clinic evaluation with Question 1 of 8
   useEffect(() => {
     const advisorKey = currentAdvisor.id;
     if (!chatMessages[advisorKey] || chatMessages[advisorKey].length === 0) {
+      const q1 = currentAdvisor.questions?.[0] || {
+        title: 'كيف تصف حالك وشعورك العام في هذا الجانب هذا الأسبوع؟',
+        description: 'ما تقييمك لمستوى رضاك الحالي من 1 إلى 10؟',
+      };
       const initialMsgs: EvaluationChatMessage[] = [
         {
           id: 'welcome',
           sender: 'advisor',
-          text: `مرحباً بك يا ضيف تدبير في عيادة التقييم الأسبوعي الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nهذه الجلسة هي مساحتك الآمنة للتنفس والمصارحة دون أي أحكام مسبقة.\n\nكيف تصف حالك وشعورك العام في هذا الجانب هذا الأسبوع؟ وما تقييمك لمستوى رضاك الحالي من 1 إلى 10؟`,
+          text: `مرحباً بك يا ضيف تدبير في عيادة التقييم الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nسنخوض معاً تقييماً شاملاً يتكون من 8 محطات رئيسية لتشخيص هذا الجانب بعناية وبناء خطوات عملية متزنة.\n\n📌 **السؤال (1 من 8):**\n${q1.title}${q1.description ? `\n💡 ${q1.description}` : ''}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ];
@@ -127,7 +134,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // Finish and approve current advisor assessment immediately
   const handleFinishCurrentAdvisor = () => {
     const calculatedScore = calculateScoreForAdvisor(currentAdvisor, answers);
-    const scoreToSave = calculatedScore > 0 ? calculatedScore : 7.0;
+    const scoreToSave = calculatedScore > 0 ? calculatedScore : 7.5;
     onFinishAdvisor(currentAdvisor.id, scoreToSave);
     confetti({
       particleCount: 60,
@@ -141,11 +148,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const handleResetCurrentAdvisor = () => {
     const advisorKey = currentAdvisor.id;
     setAdvisorStep((prev) => ({ ...prev, [advisorKey]: 0 }));
+    const q1 = currentAdvisor.questions?.[0] || {
+      title: 'كيف تصف حالك وشعورك العام في هذا الجانب هذا الأسبوع؟',
+      description: 'ما تقييمك لمستوى رضاك الحالي من 1 إلى 10؟',
+    };
     const initialMsgs: EvaluationChatMessage[] = [
       {
         id: `welcome_${Date.now()}`,
         sender: 'advisor',
-        text: `مرحباً بك مجدداً في عيادة التقييم الأسبوعي الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nأنا معك للإصغاء والتقييم من جديد بكل أريحية وتجربة كل الأسئلة بحرية.\n\nكيف تصف حالك وشعورك العام في هذا الجانب الآن؟ وما تقييمك لمستوى رضاك من 1 إلى 10؟`,
+        text: `مرحباً بك مجدداً في عيادة "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nأنا معك لبدء التقييم من جديد بكل أريحية عبر محطاته الـ 8 الكاملة.\n\n📌 **السؤال (1 من 8):**\n${q1.title}${q1.description ? `\n💡 ${q1.description}` : ''}`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       },
     ];
@@ -175,7 +186,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  // Handle user response with structured clinical session (Open Testing Mode)
+  // Handle user response with structured 8-question clinical assessment
   const handleSendAnswer = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isAdvisorReplying) return;
@@ -188,19 +199,32 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
-    // Save answer and check if user provided a numeric rating
-    const ratingMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:من\s*10|\/10)?/);
-    if (ratingMatch && currentStep === 0) {
-      const num = Math.min(10, Math.max(1, parseFloat(ratingMatch[1])));
-      onSaveAnswer(currentAdvisor.id, 'score_rating', num);
-    } else {
-      onSaveAnswer(currentAdvisor.id, `phase_${currentStep + 1}`, text);
-    }
-
     setInputText('');
     const currentList = chatMessages[advisorKey] || [];
-    const nextStep = currentStep + 1;
-    setAdvisorStep((prev) => ({ ...prev, [advisorKey]: nextStep }));
+
+    // Check if user is asking casual greeting or how the advisor is doing
+    const isCasual = /(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك|انا اسالك|كيف انت|من انت|من أنت|مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك)/i.test(text.toLowerCase());
+
+    const currentQ = currentAdvisor.questions?.[currentStep] || currentAdvisor.questions?.[0];
+
+    // If it's an answer to the current question (not just casual greeting)
+    let nextStep = currentStep;
+    if (!isCasual && currentStep < totalQuestions) {
+      const ratingMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:من\s*10|\/10)?/);
+      if (currentQ.type === 'rating' && ratingMatch) {
+        const num = Math.min(10, Math.max(1, parseFloat(ratingMatch[1])));
+        onSaveAnswer(currentAdvisor.id, currentQ.id, num);
+      } else if (currentQ.type === 'multiple_choice') {
+        const matchedOpt = currentQ.options?.find((o) => o.label === text || o.id === text);
+        onSaveAnswer(currentAdvisor.id, currentQ.id, matchedOpt ? matchedOpt.id : text);
+      } else if (currentQ.type === 'multi_select') {
+        onSaveAnswer(currentAdvisor.id, currentQ.id, [text]);
+      } else {
+        onSaveAnswer(currentAdvisor.id, currentQ.id, text);
+      }
+      nextStep = currentStep + 1;
+      setAdvisorStep((prev) => ({ ...prev, [advisorKey]: nextStep }));
+    }
 
     // Display user message immediately
     setChatMessages((prev) => ({
@@ -216,7 +240,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         content: m.text,
       }));
 
-      // Call AI Agent API with assessment session mode
+      // Call AI Agent API
       const res = await fetch('/api/gemini/advisor-chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -261,25 +285,29 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         }
       }
 
-      // If reply is empty, generate contextual clinical response with reasoning
-      if (!replyContent) {
-        if (nextStep === 1) {
-          reasoningContent = `تحليل تفكيري أولي لمدخلات المستفيد في جلسة التقييم الأسبوعي: تقييم المشاعر والرضا عن الجانب (${currentAdvisor.title})، والخطوة المنطقية التالية هي توجيه التركيز لاستخلاص العائق الأكبر بدقة واحتواء.`;
-          summaryContent = `استماع لتقييم المستفيد في ${currentAdvisor.title} والبدء في استكشاف التحدي الأبرز.`;
-          adviceContent = `ما هو أكبر تحدٍ أو عائق نفسي أو عملي واجهك وشعرت أنه يسحب من طاقتك وتركيزك في هذا الجانب؟`;
-          replyContent = `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت تقييمك ومشاعرك بوعي تام.\n\nكطبيب ومرشد لك في ${currentAdvisor.title}، كل مرحلة نمر بها هي فرصة للاتزان وإعادة الضبط. بالنظر إلى وتيرة أسبوعك المنصرم، ما هو أكبر تحدٍ أو عائق نفسي أو عملي واجهك وشعرت أنه يسحب من طاقتك وتركيزك في هذا الجانب؟`;
-        } else if (nextStep === 2) {
-          const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-          const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
-          reasoningContent = `تحليل استراتيجي ختامي: ترسيخ التقييم (${finalScore > 0 ? finalScore : 7}/10) وتحديد العادة الذهبية المحورية لضمان الاستمرارية وحمايتها من التسويف عبر المربع الثاني بمصفوفة أيزنهاور.`;
-          summaryContent = `اعتماد التقييم في ${currentAdvisor.title} بدرجة (${finalScore > 0 ? finalScore : 7}/10) واعتماد التوصية الذهبية للأسبوع.`;
-          adviceContent = `التوصية الذهبية: ${goldenHabit}`;
-          replyContent = `✅ أحسنت يا صديقنا. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية.\n\nرصدنا درجتك المعتمدة في ${currentAdvisor.title}: (${finalScore > 0 ? finalScore : 7}/10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح، وباب الحوار مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية. يمكنك الانتقال للجانب التالي أو مواصلة الحديث معي بحرية.`;
+      // If user was asking how the advisor is doing or greeting
+      if (isCasual) {
+        reasoningContent = `تحليل حواري إنساني: المستفيد يسأل بلطف عن حال المستشار ("${text}"). التجاوب الطبيعي الدافئ مطلوب لكسر الجمود وتقديم الإجابة الإنسانية أولاً، ثم تذكيره بالمحطة الحالية.`;
+        summaryContent = `تفاعل حواري ودي واطمئنان متبادل مع المستفيد.`;
+        adviceContent = `أنا بخير وبأحسن حال وسعيد جداً بسؤالك ووجودك معي يا صديقنا! 🌿`;
+        replyContent = `أهلاً وسهلاً بك يا صديقنا الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nأنا معك هنا بكامل حضوري وتركيزي لنرتقي معاً في ${currentAdvisor.title}.\nتفضل بمشاركتي إجابتك على المحطة الحالية:\n📌 **السؤال (${Math.min(currentStep + 1, totalQuestions)} من ${totalQuestions}):**\n${currentAdvisor.questions[Math.min(currentStep, totalQuestions - 1)]?.title}`;
+      } else if (!replyContent) {
+        // Fallback response for evaluation step progression across 8 questions
+        if (nextStep < totalQuestions) {
+          const nextQ = currentAdvisor.questions[nextStep];
+          reasoningContent = `تحليل مرحلي لإجابة المستفيد على السؤال (${currentStep + 1} من ${totalQuestions}): رصد المعطيات وربطها بأبعاد ${currentAdvisor.title} والانتقال المنهجي للسؤال التالي.`;
+          summaryContent = `إكمال السؤال ${currentStep + 1} من ${totalQuestions} بنجاح.`;
+          adviceContent = `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة.`;
+          replyContent = `سجلت إجابتك بوعي وتقدير تام يا صديقنا. ننتقل الآن إلى المحطة التالية:\n\n📌 **السؤال (${nextStep + 1} من ${totalQuestions}):**\n${nextQ.title}${nextQ.description ? `\n💡 ${nextQ.description}` : ''}`;
         } else {
-          reasoningContent = `تحليل استشاري إضافي: التفاعل المباشر مع استفسار المستفيد ومساعدته على تحويل الأفكار إلى خطوات صغيرة ملموسة في ${currentAdvisor.title}.`;
-          summaryContent = `متابعة الحوار الاستشاري في ${currentAdvisor.title}.`;
-          adviceContent = `التركيز على العادات الصغيرة وتجنب التسويف يضمن التقدم المستمر.`;
-          replyContent = `أنا معك وأتابع ما تطرحه باهتمام في مجال ${currentAdvisor.title}. خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة وتجاوزت التسويف. كيف تحب أن نطور هذا الجانب أكثر؟`;
+          // Completed all 8 questions!
+          const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
+          const scoreToSave = finalScore > 0 ? finalScore : 7.5;
+          const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+          reasoningContent = `تحليل استراتيجي ختامي شامل (8 محطات مكتملة): استكمال تقييم الجانب بكافة أبعاده، وتحليل نقاط القوة ومواضع التعزيز، وإدراج العادة الذهبية في المربع الثاني بمصفوفة أيزنهاور لحمايتها وضمان الاستدامة وتوازن عجلة الحياة.`;
+          summaryContent = `إتمام كافة الأسئلة الـ 8 في ${currentAdvisor.title} واعتماد النتيجة الموثقة (${scoreToSave.toFixed(1)}/10).`;
+          adviceContent = `التوصية الذهبية لهذا الأسبوع: ${goldenHabit}`;
+          replyContent = `🎉 مبارك يا صديقنا! أكملت بنجاح كافة محطات التقييم الـ 8 في عيادة ${currentAdvisor.title}.\n\nرصدنا درجتك المعتمدة: (${scoreToSave.toFixed(1)} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار والاستشارة مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`;
         }
       }
 
@@ -298,43 +326,45 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
 
-      // When step 2 completes, record completion badge
-      if (nextStep === 2) {
+      // When ALL 8 questions are complete, record completion badge
+      if (!isCasual && nextStep >= totalQuestions) {
         const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-        const scoreToSave = finalScore > 0 ? finalScore : 7.0;
+        const scoreToSave = finalScore > 0 ? finalScore : 7.5;
         onFinishAdvisor(currentAdvisor.id, scoreToSave);
         confetti({
-          particleCount: 50,
-          spread: 60,
+          particleCount: 70,
+          spread: 70,
           origin: { y: 0.7 },
         });
         setShowCelebration(true);
       }
     } catch (err) {
       console.error('Advisor chat error in onboarding:', err);
-      // Resilient clinical fallback even on network failure so the advisor NEVER goes silent!
+      // Resilient fallback logic
       let fallbackReply = '';
       let fallbackReasoning = '';
       let fallbackSummary = '';
       let fallbackAdvice = '';
 
-      if (nextStep === 1) {
-        fallbackReasoning = `تحليل استيعابي لمدخلات المستفيد: الإنصات للتقييم الأولي والشعور العام في ${currentAdvisor.title} وتوجيه السؤال نحو العائق الأساسي بهدوء.`;
-        fallbackSummary = `رصد الشعور والتقييم في ${currentAdvisor.title}.`;
-        fallbackAdvice = `ما هو التحدي أو العائق الأكبر الذي أثر عليك هذا الأسبوع؟`;
-        fallbackReply = `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت ما شاركته بوعي تام.\n\nكطبيب ومرشد لك في ${currentAdvisor.title}، كل مرحلة نمر بها هي فرصة للاتزان وإعادة الضبط. بالنظر إلى وتيرة أسبوعك المنصرم، ما هو أكبر تحدٍ أو عائق نفسي أو عملي واجهك وشعرت أنه يسحب من طاقتك وتركيزك في هذا الجانب؟`;
-      } else if (nextStep === 2) {
-        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-        const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
-        fallbackReasoning = `تحليل ختامي محكم: رصد الدرجة (${finalScore > 0 ? finalScore : 7}/10) واعتماد العادة الذهبية لضمان التدرج والاستمرار.`;
-        fallbackSummary = `اعتماد التقييم والعادة الذهبية في ${currentAdvisor.title}.`;
-        fallbackAdvice = `التوصية الذهبية: ${goldenHabit}`;
-        fallbackReply = `✅ أحسنت يا صديقنا. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية.\n\nرصدنا درجتك المعتمدة في ${currentAdvisor.title}: (${finalScore > 0 ? finalScore : 7}/10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح، وباب الحوار مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية. يمكنك الانتقال للجانب التالي أو مواصلة الحديث معي بحرية.`;
+      if (isCasual) {
+        fallbackReasoning = `تحليل حواري إنساني: المستفيد يسأل عن حال المستشار.`;
+        fallbackSummary = `تفاعل ودي واطمئنان متبادل.`;
+        fallbackAdvice = `أنا بخير وبأحسن حال وبكامل حضوري معك يا صديقنا! 🌿`;
+        fallbackReply = `أهلاً بك يا صديقنا الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nأنا معك بكامل حضوري لنرتقي في ${currentAdvisor.title}.\nتفضل بمشاركتي إجابتك على:\n📌 **السؤال (${Math.min(currentStep + 1, totalQuestions)} من ${totalQuestions}):**\n${currentAdvisor.questions[Math.min(currentStep, totalQuestions - 1)]?.title}`;
+      } else if (nextStep < totalQuestions) {
+        const nextQ = currentAdvisor.questions[nextStep];
+        fallbackReasoning = `تحليل استيعابي لمدخلات المستفيد في المحطة (${currentStep + 1} من ${totalQuestions}): رصد الإجابة والانتقال للمحطة التالية.`;
+        fallbackSummary = `إكمال السؤال ${currentStep + 1} من ${totalQuestions}.`;
+        fallbackAdvice = `كل خطوة تقربك أكثر من التوازن المستدام.`;
+        fallbackReply = `سجلت إجابتك بوعي واهتمام يا صديقنا. ننتقل الآن إلى المحطة التالية:\n\n📌 **السؤال (${nextStep + 1} من ${totalQuestions}):**\n${nextQ.title}${nextQ.description ? `\n💡 ${nextQ.description}` : ''}`;
       } else {
-        fallbackReasoning = `تحليل استشاري: توجيه المستفيد نحو التطبيق العملي والخطوات اليومية في ${currentAdvisor.title}.`;
-        fallbackSummary = `حوار استشاري وتطوير مستمر في ${currentAdvisor.title}.`;
-        fallbackAdvice = `التركيز على العادات الصغيرة وتجاوز التسويف.`;
-        fallbackReply = `أنا معك وأتابع ما تطرحه باهتمام في مجال ${currentAdvisor.title}. خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة وتجاوزت التسويف. كيف تحب أن نطور هذا الجانب أكثر؟`;
+        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
+        const scoreToSave = finalScore > 0 ? finalScore : 7.5;
+        const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+        fallbackReasoning = `تحليل ختامي محكم: رصد الدرجة المعتمدة (${scoreToSave.toFixed(1)}/10) واعتماد العادة الذهبية بعد استكمال الأسئلة الـ 8.`;
+        fallbackSummary = `اعتماد تقييم ${currentAdvisor.title} بعد إتمام الأسئلة الـ 8.`;
+        fallbackAdvice = `التوصية الذهبية: ${goldenHabit}`;
+        fallbackReply = `🎉 مبارك يا صديقنا! أكملت بنجاح كافة محطات التقييم الـ 8 في عيادة ${currentAdvisor.title}.\n\nرصدنا درجتك المعتمدة: (${scoreToSave.toFixed(1)} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`;
       }
 
       const nextAdvisorMsg: EvaluationChatMessage = {
@@ -352,13 +382,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
 
-      if (nextStep === 2) {
+      if (!isCasual && nextStep >= totalQuestions) {
         const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-        const scoreToSave = finalScore > 0 ? finalScore : 7.0;
+        const scoreToSave = finalScore > 0 ? finalScore : 7.5;
         onFinishAdvisor(currentAdvisor.id, scoreToSave);
         confetti({
-          particleCount: 50,
-          spread: 60,
+          particleCount: 70,
+          spread: 70,
           origin: { y: 0.7 },
         });
         setShowCelebration(true);
@@ -596,13 +626,36 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               <button
                 type="button"
                 onClick={handleFinishCurrentAdvisor}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                 title="اعتماد النتيجة الفورية وإقفال الجلسة"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>اعتماد ({currentAdvisorScore > 0 ? currentAdvisorScore : 7}/10)</span>
               </button>
             )}
+          </div>
+        </div>
+
+        {/* Assessment Progress Bar (Questions 1 to 8) */}
+        <div className="px-6 py-2 bg-[#FAF7F2] border-b border-[#f0eae0] flex items-center justify-between gap-4 text-xs flex-shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-black text-[#1b605b] text-[11px] sm:text-xs flex-shrink-0">
+              {currentStep < totalQuestions ? `المحطة (${currentStep + 1} من ${totalQuestions})` : 'اكتملت الأسئلة الـ 8 بنجاح ✨'}
+            </span>
+            <span className="text-[11px] text-[#536561] hidden sm:inline truncate">
+              {currentStep < totalQuestions ? currentQuestion?.title : 'تم رصد واعتماد النتيجة الموثقة'}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className="w-24 sm:w-36 bg-[#eae3d5] h-2 rounded-full overflow-hidden">
+              <div
+                className="bg-[#1b605b] h-full rounded-full transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%` }}
+              />
+            </div>
+            <span className="text-[10px] font-bold text-[#536561]">
+              {Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%
+            </span>
           </div>
         </div>
 
@@ -715,86 +768,129 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         {/* ACTIVE CLINIC INPUT BAR (Always Open for Testing and Continuous Conversation) */}
         <>
-          {/* Quick Choices bar depending on current clinic step */}
+          {/* Quick Choices bar dynamically adapting to current question type */}
           <div className="px-4 py-2.5 bg-[#FAF7F2] border-t border-[#f0eae0] flex-shrink-0">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
               <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
                 <Sparkles className="w-3 h-3 text-[#bd9240]" />
-                {currentStep === 0 ? 'اختر رضاك التقريبي:' : 'خيارات سريعة للعوائق:'}
+                {currentStep < totalQuestions && currentQuestion ? (
+                  currentQuestion.type === 'rating'
+                    ? 'اختر تقييمك (من 1 إلى 10):'
+                    : currentQuestion.type === 'multiple_choice'
+                    ? 'خيارات الإجابة المقترحة:'
+                    : currentQuestion.type === 'multi_select'
+                    ? 'خيارات مقترحة:'
+                    : 'أفكار سريعة للإجابة:'
+                ) : 'استشارة وتطوير مستمر:'}
               </span>
 
-              {/* Step 0: Quick 1 to 10 rating pills */}
-              {currentStep === 0 && (
+              {/* If rating question: 1 to 10 pills */}
+              {currentStep < totalQuestions && currentQuestion?.type === 'rating' && (
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                      <button
-                        key={num}
-                        type="button"
-                        onClick={() => handleSendAnswer(`تقييمي لرضاي الحالي: ${num} من 10`)}
-                        className="px-2.5 py-1 rounded-lg bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#1d2e2b] hover:text-[#1b605b] text-xs font-bold transition-all shadow-xs"
-                      >
-                        {num}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Step 1+: Suggested reflection pills and questions */}
-                {currentStep >= 1 && (
-                  <div className="flex items-center gap-1.5 flex-shrink-0">
-                    {quickReflectionPills.map((ch, idx) => (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleSendAnswer(ch)}
-                        className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2]"
-                      >
-                        {ch}
-                      </button>
-                    ))}
                     <button
+                      key={num}
                       type="button"
-                      onClick={() => handleSendAnswer('الحمد لله، الأمور تسير بهدوء ودون عوائق كبيرة')}
-                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2]"
+                      onClick={() => handleSendAnswer(`تقييمي: ${num} من 10`)}
+                      className="px-2.5 py-1 rounded-lg bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#1d2e2b] hover:text-[#1b605b] text-xs font-bold transition-all shadow-xs cursor-pointer"
                     >
-                      الأمور مستقرة وهادئة 🌿
+                      {num}
                     </button>
-                  </div>
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
+
+              {/* If multiple choice question: show question options */}
+              {currentStep < totalQuestions && currentQuestion?.type === 'multiple_choice' && currentQuestion.options && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {currentQuestion.options.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => handleSendAnswer(opt.label)}
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* If multi_select question: show question options */}
+              {currentStep < totalQuestions && currentQuestion?.type === 'multi_select' && currentQuestion.options && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {currentQuestion.options.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => handleSendAnswer(opt.label)}
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* If open_text or open consultation: show quick suggestions */}
+              {(currentStep >= totalQuestions || currentQuestion?.type === 'open_text') && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {quickReflectionPills.map((ch, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSendAnswer(ch)}
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    >
+                      {ch}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleSendAnswer('الحمد لله، الأمور تسير بهدوء ودون عوائق كبيرة')}
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                  >
+                    الأمور مستقرة وهادئة 🌿
+                  </button>
+                </div>
+              )}
             </div>
+          </div>
 
-            {/* Input Bar: Text + Mic + Send */}
-            <div className="p-3 sm:p-4 bg-white border-t border-[#f0eae0] flex-shrink-0">
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSendAnswer();
-                }}
-                className="flex items-center gap-2"
-              >
-                {/* Mic Button for Voice Dictation (Speech to Text) */}
-                <VoiceInput
-                  onTranscript={(transcript) =>
-                    setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript))
-                  }
-                  disabled={isAdvisorReplying}
-                  showStatusBadge={false}
-                />
+          {/* Input Bar: Text + Mic + Send */}
+          <div className="p-3 sm:p-4 bg-white border-t border-[#f0eae0] flex-shrink-0">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendAnswer();
+              }}
+              className="flex items-center gap-2"
+            >
+              {/* Mic Button for Voice Dictation (Speech to Text) */}
+              <VoiceInput
+                onTranscript={(transcript) =>
+                  setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript))
+                }
+                disabled={isAdvisorReplying}
+                showStatusBadge={false}
+              />
 
-                {/* Free Text Input */}
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder={
-                    currentStep === 0
-                      ? 'اكتب أو تحدث بصوتك (مثلاً: راضٍ بنسبة 7 من 10)...'
-                      : 'اكتب أو تحدث بصوتك عن العائق أو التحدي الأبرز...'
-                  }
-                  className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
-                  dir="rtl"
-                />
+              {/* Free Text Input */}
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={
+                  isCompleted
+                    ? 'اكتب استشارتك أو سؤالك للمستشار بحرية...'
+                    : currentQuestion?.placeholder ||
+                      (currentQuestion?.type === 'rating'
+                        ? 'اكتب تقييمك (مثال: 8 من 10) أو اسأل المستشار أي سؤال...'
+                        : 'اكتب إجابتك أو تحدث بصوتك، أو اسأل المستشار بحرية...')
+                }
+                className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
+                dir="rtl"
+              />
 
                 {/* Send Button */}
                 <button
