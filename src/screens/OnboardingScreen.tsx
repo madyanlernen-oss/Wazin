@@ -51,6 +51,85 @@ interface OnboardingScreenProps {
   onNavigateToAdvisorChat?: (advisorId: LifeAreaId) => void;
 }
 
+// Helper: Local client intelligence engine for all advisors (for offline, static hosting, or API fallback)
+function getClientAdvisorResponse(
+  advisor: AdvisorConfig,
+  text: string,
+  currentStep: number,
+  totalQuestions: number,
+  userScore: number,
+  currentQ?: any
+) {
+  const msg = text.toLowerCase().trim();
+  const advName = advisor.name;
+  const advRole = advisor.role;
+  const advTitle = advisor.title;
+
+  // 1. Anger, despair, swearing, life cursing ("اسب", "العن", "اللعن", "الحياة")
+  if (/(اسب|أسب|العن|اللعن|ألعن|السب|اللعن|اللعنة|الشتيمة|اشتم|أشتم)/i.test(msg)) {
+    return {
+      isQuestionOrInquiry: true,
+      reasoning: `تفكيك مشاعر الغضب والألم الوجودي الكامن خلف الرغبة في التعبير الصادم ("${text}")، واحتواء الإنسان دون إطلاق أحكام مسبقة، وتبيان أن الرغبة في الصراخ أو السخط هي صرخة استغاثة تعبر عن ألم حقيقي، وتوجيه الطاقة نحو التفريغ الصحي الآمن دون تدمير الذات أو إثقال الروح.`,
+      summary: `احتواء مباشر لمشاعر الغضب والألم والضغط النفسي الشديد دون أحكام، والتوجيه نحو التفريغ الآمن.`,
+      advice: `تفريغ الغضب يكون بالبوح والتنفس واللجوء لمن بيده تدبير الأمر، فالسب واللعن لن يغيّر ما حدث بل يزيد القلب قسوة ومرارة.`,
+      reply: `أشعر بحجم الألم والثقل الذي تحمله في صدرك يا صديقنا العزيز. حين تبلغ بنا الخيبة والتعب مداها، تتولد في دواخلنا رغبة عارمة في الصراخ واللعن كصرخة استغاثة للبحث عن متنفس.\n\nمن حقك تماماً أن تشعر بالألم والغضب، وأنا هنا لست لأحاكمك أو أملي عليك ما تشعر به، بل لأحتويك وأسمعك بصدق. لكن اعلم بقلبك أن سب الحياة أو لعن الأقدار لن يرفع الهم ولن يشفي الجرح، بل يترك في روحك مرارة مضاعفة.\n\nخذ نفساً عميقاً، وأفرغ ما في صدرك؛ ما هو الشيء الأكثر إيلاماً الذي يضغط على روحك الآن وتود لو تتخلص منه؟`,
+    };
+  }
+
+  // 2. Greetings / How are you ("كيف حالك", "كيفك", "أنا أسألك", "أهلاً")
+  if (/(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك|انا اسالك|كيف انت|من انت|من أنت|مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك)/i.test(msg)) {
+    return {
+      isQuestionOrInquiry: true,
+      reasoning: `تحليل حواري إنساني: المستفيد يسأل باهتمام وود عن حال المستشار ("${text}"). التفكير الحكيم يقتضي التجاوب الطبيعي الصادق ومبادلته التحية والاطمئنان الدافئ كمرشد ورفيق درب، مع إزالة أي جمود أو قوالب نمطية.`,
+      summary: `تفاعل إنساني دافئ واطمئنان متبادل مع المستفيد في ${advTitle}.`,
+      advice: `أنا بخير وصحة ممتازة وسعيد وممتن جداً بسؤالك الطيب! كامل حضوري وتركيزي معك لنرتقي معاً في كل أبعاد ${advTitle}.`,
+      reply: `أهلاً وسهلاً بك يا صديقنا الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${advName} (${advRole})، أنا معك هنا بكامل حضوري وطاقتي لأصغي إليك وأفكر معك خطوة بخطوة في رحلتك نحو التوازن.\n\nكيف تشعر اليوم؟ وما الذي يشغل بالك لنبدأ به معاً؟`,
+    };
+  }
+
+  // 3. Sadness, grief, feeling lost, distress ("حزين", "تعبان", "مكتئب", "مخنوق", "ضايق")
+  if (/(حزين|حزن|تعبان|تعب|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|انتحار|الموت|الحياة صعبة|الحياة قاسية|تعبت)/i.test(msg)) {
+    return {
+      isQuestionOrInquiry: true,
+      reasoning: `تحليل مشاعر الإنهاك والحزن والضيق النفسي لدى المستفيد: إدراك أن المشاعر المتألمة تحتاج إلى إنصات واحتواء إنساني دافئ قبل أي نصائح عملية، وكسر حلقة العزلة والضغط الداخلي.`,
+      summary: `احتواء إنساني دافئ لمشاعر الحزن والتعب والضيق، وتقديم سند معنوي يخفف وطأة المشاعر.`,
+      advice: `الحزن والإنهاك رسائل من الجسد والروح بحاجتهما للراحة والتفريغ؛ لا تكابر وامنح نفسك فرصة لالتقاط الأنفاس.`,
+      reply: `سلامة قلبك وروحك يا صديقنا. يؤلمني حقاً أن تشعر بهذا الحزن أو التعب، لكن اعلم أن مرور الإنسان بفترات انطفاء وثقل هو أمر إنساني طبيعي جداً، ولست وحدك في هذا الشعور.\n\nخذ نفساً عميقاً ولا تقسُ على نفسك؛ أنا هنا معك بكامل حضوري لأسمعك وأفكر معك دون أي قيود أو أحكام. ما الذي حدث وجعلك تشعر بهذا الثقل اليوم؟ شاركني ما في قلبك.`,
+    };
+  }
+
+  // 4. Questions & Inquiries ("هل", "كيف", "لماذا", "ليه", "ماذا", "؟", "?")
+  if (msg.includes('؟') || msg.includes('?') || /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(msg)) {
+    let specificReply = `سؤال وجيه ومهم جداً يا صديقنا. رداً على استفسارك المباشر بخصوص ${advTitle}:\n\nالاتزان الحقيقي لا يعني ألا نمر بأوقات صعبة، بل يعني أن نملك البصيرة والمرونة للتعامل معها بهدوء. ما طرحته يعكس وعيك ورغبتك في الفهم، والخطوة الأهم هي أن تأخذ الأمور بتدرج ورفق دون جلد للذات.`;
+    if (advisor.id === 'spiritual') {
+      specificReply = `سؤالك في صميم الروحانية والسكينة يا صديقنا. الإجابة المباشرة: الروحانية ليست قائمة واجبات جافة، بل هي سلام داخلي وحضور قلب وحسن ظن بالله. حين تتشابك عليك الأمور، الجأ إلى السكينة البسيطة: صلاة خاشعة، ودعاء صادق، وتفريغ لشتات الذهن.`;
+    } else if (advisor.id === 'financial') {
+      specificReply = `رداً على استفسارك المالي المباشر: القاعدة الذهبية هي ضبط النفقات العاطفية، وبناء صندوق طوارئ يمنحك الأمان النفسي، والتركيز على العادات المالية التراكمية اليومية قبل البحث عن حلول سريعة.`;
+    } else if (advisor.id === 'health') {
+      specificReply = `رداً على استفسارك الصحي المباشر: الطاقة والحيوية تنبع من أبسط العادات اليومية: نوم منتظم وعميق (7-8 ساعات)، شرب كميات كافية من الماء، وتخصيص 20 دقيقة حركة يومية. ابدأ بهذه الأساسيات وستلاحظ الفرق في تركيزك ومزاجك.`;
+    } else if (advisor.id === 'career') {
+      specificReply = `رداً على استفسارك المهني المباشر: النجاح المهني يتطلب وضوح البوصلة، والتركيز على بناء مهارة استثنائية (Deep Work) تمنحك قيمة سوقية حقيقية، مع تنظيم الأولويات وحماية وقتك من المهام الهامشية.`;
+    }
+
+    return {
+      isQuestionOrInquiry: true,
+      reasoning: `تحليل استفسار المستفيد المباشر في ${advTitle} ("${text}"): تقديم إجابة شافية وواضحة تركز على جوهر السؤال وتمنحه فهماً عملياً مباشراً.`,
+      summary: `إجابة استشارية مباشرة وتفاعل حي مع سؤال المستفيد.`,
+      advice: `الاتزان يبدأ بالوضوح والتركيز على خطوة واحدة قابلة للتطبيق اليوم.`,
+      reply: specificReply,
+    };
+  }
+
+  // 5. User is answering an evaluation question
+  return {
+    isQuestionOrInquiry: false,
+    reasoning: `تحليل إجابة المستفيد على المحطة (${currentStep + 1} من ${totalQuestions}): رصد المعطيات وربطها بأبعاد ${advTitle} وتحديد أثرها على عجلة الحياة.`,
+    summary: `رصد إجابة المحطة ${currentStep + 1} من ${totalQuestions} بنجاح.`,
+    advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات اليومية المستدامة.`,
+    reply: `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت إجابتك بوعي تام.`,
+  };
+}
+
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   initialAdvisorId = 'spiritual',
   answers,
@@ -68,6 +147,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   });
 
   const [inputText, setInputText] = useState('');
+  const [clinicMode, setClinicMode] = useState<'evaluation' | 'free_chat'>('evaluation');
   const [showCelebration, setShowCelebration] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
@@ -186,7 +266,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  // Handle user response with structured 8-question clinical assessment
+  // Handle user response with structured 8-question clinical assessment or direct conversation
   const handleSendAnswer = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isAdvisorReplying) return;
@@ -202,14 +282,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     setInputText('');
     const currentList = chatMessages[advisorKey] || [];
 
-    // Check if user is asking casual greeting or how the advisor is doing
-    const isCasual = /(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك|انا اسالك|كيف انت|من انت|من أنت|مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك)/i.test(text.toLowerCase());
+    // Check if user input is a Question, Casual conversation, or Emotional Venting
+    const isQuestionOrInquiry =
+      clinicMode === 'free_chat' ||
+      text.includes('؟') ||
+      text.includes('?') ||
+      /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|كيفك|كيف حالك|أنت|انت|مين)(\s|\?|؟|$)/i.test(text) ||
+      /(اسب|أسب|العن|اللعن|ألعن|السب|اللعن|اللعنة|الشتيمة|اشتم|أشتم|حزين|حزن|تعبان|تعب|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|انتحار|الموت|الحياة صعبة|الحياة قاسية|تعبت|مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك)/i.test(text);
 
     const currentQ = currentAdvisor.questions?.[currentStep] || currentAdvisor.questions?.[0];
 
-    // If it's an answer to the current question (not just casual greeting)
+    // If it's an answer to the current evaluation question (NOT a question or free thought)
     let nextStep = currentStep;
-    if (!isCasual && currentStep < totalQuestions) {
+    if (!isQuestionOrInquiry && currentStep < totalQuestions) {
       const ratingMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:من\s*10|\/10)?/);
       if (currentQ.type === 'rating' && ratingMatch) {
         const num = Math.min(10, Math.max(1, parseFloat(ratingMatch[1])));
@@ -241,73 +326,87 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }));
 
       // Call AI Agent API
-      const res = await fetch('/api/gemini/advisor-chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          advisor: currentAdvisor,
-          message: text,
-          history,
-          answers,
-          userScore: calculateScoreForAdvisor(currentAdvisor, answers),
-          aiMode,
-          isEvaluationSession: true,
-          evaluationStep: nextStep,
-        }),
-      });
-
       let replyContent = '';
       let reasoningContent = '';
       let summaryContent = '';
       let adviceContent = '';
 
-      if (res.ok) {
-        const data = await res.json();
-        reasoningContent = data.reasoning || '';
-        summaryContent = data.summary || '';
-        adviceContent = data.advice || '';
-        replyContent = data.reply || adviceContent || summaryContent || '';
+      try {
+        const res = await fetch('/api/gemini/advisor-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            advisor: currentAdvisor,
+            message: text,
+            history,
+            answers,
+            userScore: calculateScoreForAdvisor(currentAdvisor, answers),
+            aiMode,
+            isEvaluationSession: !isQuestionOrInquiry && clinicMode === 'evaluation',
+            evaluationStep: nextStep,
+          }),
+        });
 
-        // Defensive check if replyContent is a raw JSON string
-        if (typeof replyContent === 'string' && (replyContent.startsWith('{') || replyContent.includes('"reasoning"'))) {
-          try {
-            const innerMatch = replyContent.match(/\{[\s\S]*\}/);
-            if (innerMatch) {
-              const inner = JSON.parse(innerMatch[0]);
-              reasoningContent = inner.reasoning || reasoningContent;
-              summaryContent = inner.summary || summaryContent;
-              adviceContent = inner.advice || adviceContent;
-              replyContent = inner.advice || inner.summary || inner.reply || '';
+        if (res.ok) {
+          const data = await res.json();
+          reasoningContent = data.reasoning || '';
+          summaryContent = data.summary || '';
+          adviceContent = data.advice || '';
+          replyContent = data.reply || adviceContent || summaryContent || '';
+
+          // Defensive check if replyContent is a raw JSON string
+          if (typeof replyContent === 'string' && (replyContent.startsWith('{') || replyContent.includes('"reasoning"'))) {
+            try {
+              const innerMatch = replyContent.match(/\{[\s\S]*\}/);
+              if (innerMatch) {
+                const inner = JSON.parse(innerMatch[0]);
+                reasoningContent = inner.reasoning || reasoningContent;
+                summaryContent = inner.summary || summaryContent;
+                adviceContent = inner.advice || adviceContent;
+                replyContent = inner.reply || inner.advice || inner.summary || '';
+              }
+            } catch {
+              // keep
             }
-          } catch {
-            // keep
           }
         }
+      } catch (fetchErr) {
+        console.warn('API call failed or offline, activating client intelligence engine:', fetchErr);
       }
 
-      // If user was asking how the advisor is doing or greeting
-      if (isCasual) {
-        reasoningContent = `تحليل حواري إنساني: المستفيد يسأل بلطف عن حال المستشار ("${text}"). التجاوب الطبيعي الدافئ مطلوب لكسر الجمود وتقديم الإجابة الإنسانية أولاً، ثم تذكيره بالمحطة الحالية.`;
-        summaryContent = `تفاعل حواري ودي واطمئنان متبادل مع المستفيد.`;
-        adviceContent = `أنا بخير وبأحسن حال وسعيد جداً بسؤالك ووجودك معي يا صديقنا! 🌿`;
-        replyContent = `أهلاً وسهلاً بك يا صديقنا الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nأنا معك هنا بكامل حضوري وتركيزي لنرتقي معاً في ${currentAdvisor.title}.\nتفضل بمشاركتي إجابتك على المحطة الحالية:\n📌 **السؤال (${Math.min(currentStep + 1, totalQuestions)} من ${totalQuestions}):**\n${currentAdvisor.questions[Math.min(currentStep, totalQuestions - 1)]?.title}`;
-      } else if (!replyContent) {
-        // Fallback response for evaluation step progression across 8 questions
+      // If reply is empty, activate local client intelligence
+      if (!replyContent) {
+        const local = getClientAdvisorResponse(
+          currentAdvisor,
+          text,
+          currentStep,
+          totalQuestions,
+          calculateScoreForAdvisor(currentAdvisor, answers),
+          currentQ
+        );
+        reasoningContent = local.reasoning;
+        summaryContent = local.summary;
+        adviceContent = local.advice;
+        replyContent = local.reply;
+      }
+
+      // If user was asking a question or sharing an emotional feeling
+      if (isQuestionOrInquiry) {
+        // If in evaluation mode and there are remaining questions, append a gentle prompt at the end
+        if (clinicMode === 'evaluation' && currentStep < totalQuestions) {
+          replyContent += `\n\n📌 *محطة التقييم الحالية (${currentStep + 1} من ${totalQuestions})*: "${currentQ.title}". متى ما رغبت في المتابعة، يمكنك اختيار أحد الخيارات السريعة بالأسفل أو مشاركتي إجابتك.`;
+        }
+      } else {
+        // User answered the evaluation question!
         if (nextStep < totalQuestions) {
           const nextQ = currentAdvisor.questions[nextStep];
-          reasoningContent = `تحليل مرحلي لإجابة المستفيد على السؤال (${currentStep + 1} من ${totalQuestions}): رصد المعطيات وربطها بأبعاد ${currentAdvisor.title} والانتقال المنهجي للسؤال التالي.`;
-          summaryContent = `إكمال السؤال ${currentStep + 1} من ${totalQuestions} بنجاح.`;
-          adviceContent = `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة.`;
-          replyContent = `سجلت إجابتك بوعي وتقدير تام يا صديقنا. ننتقل الآن إلى المحطة التالية:\n\n📌 **السؤال (${nextStep + 1} من ${totalQuestions}):**\n${nextQ.title}${nextQ.description ? `\n💡 ${nextQ.description}` : ''}`;
+          replyContent += `\n\n📌 **السؤال (${nextStep + 1} من ${totalQuestions}):**\n${nextQ.title}${nextQ.description ? `\n💡 ${nextQ.description}` : ''}`;
         } else {
           // Completed all 8 questions!
           const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
           const scoreToSave = finalScore > 0 ? finalScore : 7.5;
           const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
-          reasoningContent = `تحليل استراتيجي ختامي شامل (8 محطات مكتملة): استكمال تقييم الجانب بكافة أبعاده، وتحليل نقاط القوة ومواضع التعزيز، وإدراج العادة الذهبية في المربع الثاني بمصفوفة أيزنهاور لحمايتها وضمان الاستدامة وتوازن عجلة الحياة.`;
-          summaryContent = `إتمام كافة الأسئلة الـ 8 في ${currentAdvisor.title} واعتماد النتيجة الموثقة (${scoreToSave.toFixed(1)}/10).`;
-          adviceContent = `التوصية الذهبية لهذا الأسبوع: ${goldenHabit}`;
-          replyContent = `🎉 مبارك يا صديقنا! أكملت بنجاح كافة محطات التقييم الـ 8 في عيادة ${currentAdvisor.title}.\n\nرصدنا درجتك المعتمدة: (${scoreToSave.toFixed(1)} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار والاستشارة مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`;
+          replyContent += `\n\n🎉 مبارك يا صديقنا! أكملت بنجاح كافة محطات التقييم الـ 8 في عيادة ${currentAdvisor.title}.\n\nرصدنا درجتك المعتمدة: (${scoreToSave.toFixed(1)} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار والاستشارة مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`;
         }
       }
 
@@ -327,7 +426,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }));
 
       // When ALL 8 questions are complete, record completion badge
-      if (!isCasual && nextStep >= totalQuestions) {
+      if (!isQuestionOrInquiry && nextStep >= totalQuestions) {
         const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
         const scoreToSave = finalScore > 0 ? finalScore : 7.5;
         onFinishAdvisor(currentAdvisor.id, scoreToSave);
@@ -340,40 +439,22 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }
     } catch (err) {
       console.error('Advisor chat error in onboarding:', err);
-      // Resilient fallback logic
-      let fallbackReply = '';
-      let fallbackReasoning = '';
-      let fallbackSummary = '';
-      let fallbackAdvice = '';
-
-      if (isCasual) {
-        fallbackReasoning = `تحليل حواري إنساني: المستفيد يسأل عن حال المستشار.`;
-        fallbackSummary = `تفاعل ودي واطمئنان متبادل.`;
-        fallbackAdvice = `أنا بخير وبأحسن حال وبكامل حضوري معك يا صديقنا! 🌿`;
-        fallbackReply = `أهلاً بك يا صديقنا الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nأنا معك بكامل حضوري لنرتقي في ${currentAdvisor.title}.\nتفضل بمشاركتي إجابتك على:\n📌 **السؤال (${Math.min(currentStep + 1, totalQuestions)} من ${totalQuestions}):**\n${currentAdvisor.questions[Math.min(currentStep, totalQuestions - 1)]?.title}`;
-      } else if (nextStep < totalQuestions) {
-        const nextQ = currentAdvisor.questions[nextStep];
-        fallbackReasoning = `تحليل استيعابي لمدخلات المستفيد في المحطة (${currentStep + 1} من ${totalQuestions}): رصد الإجابة والانتقال للمحطة التالية.`;
-        fallbackSummary = `إكمال السؤال ${currentStep + 1} من ${totalQuestions}.`;
-        fallbackAdvice = `كل خطوة تقربك أكثر من التوازن المستدام.`;
-        fallbackReply = `سجلت إجابتك بوعي واهتمام يا صديقنا. ننتقل الآن إلى المحطة التالية:\n\n📌 **السؤال (${nextStep + 1} من ${totalQuestions}):**\n${nextQ.title}${nextQ.description ? `\n💡 ${nextQ.description}` : ''}`;
-      } else {
-        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-        const scoreToSave = finalScore > 0 ? finalScore : 7.5;
-        const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
-        fallbackReasoning = `تحليل ختامي محكم: رصد الدرجة المعتمدة (${scoreToSave.toFixed(1)}/10) واعتماد العادة الذهبية بعد استكمال الأسئلة الـ 8.`;
-        fallbackSummary = `اعتماد تقييم ${currentAdvisor.title} بعد إتمام الأسئلة الـ 8.`;
-        fallbackAdvice = `التوصية الذهبية: ${goldenHabit}`;
-        fallbackReply = `🎉 مبارك يا صديقنا! أكملت بنجاح كافة محطات التقييم الـ 8 في عيادة ${currentAdvisor.title}.\n\nرصدنا درجتك المعتمدة: (${scoreToSave.toFixed(1)} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`;
-      }
+      const local = getClientAdvisorResponse(
+        currentAdvisor,
+        text,
+        currentStep,
+        totalQuestions,
+        calculateScoreForAdvisor(currentAdvisor, answers),
+        currentQ
+      );
 
       const nextAdvisorMsg: EvaluationChatMessage = {
         id: `agent_${Date.now()}`,
         sender: 'advisor',
-        text: fallbackReply,
-        reasoning: fallbackReasoning,
-        summary: fallbackSummary,
-        advice: fallbackAdvice,
+        text: local.reply,
+        reasoning: local.reasoning,
+        summary: local.summary,
+        advice: local.advice,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
 
@@ -381,18 +462,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         ...prev,
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
-
-      if (!isCasual && nextStep >= totalQuestions) {
-        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-        const scoreToSave = finalScore > 0 ? finalScore : 7.5;
-        onFinishAdvisor(currentAdvisor.id, scoreToSave);
-        confetti({
-          particleCount: 70,
-          spread: 70,
-          origin: { y: 0.7 },
-        });
-        setShowCelebration(true);
-      }
     } finally {
       setIsAdvisorReplying(false);
     }
@@ -546,6 +615,34 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {/* Clinic Mode Toggle (Evaluation 8 Stations vs Free Direct Consultation) */}
+            <div className="flex items-center gap-1 p-0.5 bg-[#f0eae0] rounded-xl border border-[#ded7c8]">
+              <button
+                type="button"
+                onClick={() => setClinicMode('evaluation')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  clinicMode === 'evaluation'
+                    ? 'bg-white text-[#1b605b] shadow-xs'
+                    : 'text-[#697c77] hover:text-[#1d2e2b]'
+                }`}
+                title="تقييم إكلينيكي منظم عبر 8 محطات"
+              >
+                جلسة تقييم (8 محطات)
+              </button>
+              <button
+                type="button"
+                onClick={() => setClinicMode('free_chat')}
+                className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                  clinicMode === 'free_chat'
+                    ? 'bg-[#1b605b] text-white shadow-xs'
+                    : 'text-[#697c77] hover:text-[#1d2e2b]'
+                }`}
+                title="حوار حر واستشارة مباشرة بدون قيود"
+              >
+                حوار واستشارة حرة 💬
+              </button>
+            </div>
+
             {/* AI Model Mode Selector */}
             <div className="relative">
               <button
@@ -636,28 +733,49 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </div>
         </div>
 
-        {/* Assessment Progress Bar (Questions 1 to 8) */}
-        <div className="px-6 py-2 bg-[#FAF7F2] border-b border-[#f0eae0] flex items-center justify-between gap-4 text-xs flex-shrink-0">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-black text-[#1b605b] text-[11px] sm:text-xs flex-shrink-0">
-              {currentStep < totalQuestions ? `المحطة (${currentStep + 1} من ${totalQuestions})` : 'اكتملت الأسئلة الـ 8 بنجاح ✨'}
-            </span>
-            <span className="text-[11px] text-[#536561] hidden sm:inline truncate">
-              {currentStep < totalQuestions ? currentQuestion?.title : 'تم رصد واعتماد النتيجة الموثقة'}
-            </span>
-          </div>
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <div className="w-24 sm:w-36 bg-[#eae3d5] h-2 rounded-full overflow-hidden">
-              <div
-                className="bg-[#1b605b] h-full rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%` }}
-              />
+        {/* Assessment Progress Bar OR Free Consultation Bar */}
+        {clinicMode === 'evaluation' ? (
+          <div className="px-6 py-2 bg-[#FAF7F2] border-b border-[#f0eae0] flex items-center justify-between gap-4 text-xs flex-shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="font-black text-[#1b605b] text-[11px] sm:text-xs flex-shrink-0">
+                {currentStep < totalQuestions ? `المحطة (${currentStep + 1} من ${totalQuestions})` : 'اكتملت الأسئلة الـ 8 بنجاح ✨'}
+              </span>
+              <span className="text-[11px] text-[#536561] hidden sm:inline truncate">
+                {currentStep < totalQuestions ? currentQuestion?.title : 'تم رصد واعتماد النتيجة الموثقة'}
+              </span>
             </div>
-            <span className="text-[10px] font-bold text-[#536561]">
-              {Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%
-            </span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <div className="w-24 sm:w-36 bg-[#eae3d5] h-2 rounded-full overflow-hidden">
+                <div
+                  className="bg-[#1b605b] h-full rounded-full transition-all duration-300"
+                  style={{ width: `${Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%` }}
+                />
+              </div>
+              <span className="text-[10px] font-bold text-[#536561]">
+                {Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%
+              </span>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="px-6 py-2 bg-emerald-50/80 border-b border-emerald-100 flex items-center justify-between gap-4 text-xs flex-shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse flex-shrink-0" />
+              <span className="font-bold text-emerald-950 text-xs flex-shrink-0">
+                وضع الحوار والاستشارة الحرة مع {currentAdvisor.name} 🌿
+              </span>
+              <span className="text-[11px] text-emerald-800 hidden sm:inline truncate">
+                تفاعل مباشر وإنساني يجيب على أي سؤال أو مشاعر تشاركها دون قيود
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setClinicMode('evaluation')}
+              className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline flex-shrink-0 cursor-pointer"
+            >
+              العودة للتقييم الأسبوعي
+            </button>
+          </div>
+        )}
 
         {/* Messages Stream */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#fcfbfa]">
@@ -773,19 +891,55 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
               <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
                 <Sparkles className="w-3 h-3 text-[#bd9240]" />
-                {currentStep < totalQuestions && currentQuestion ? (
-                  currentQuestion.type === 'rating'
+                {clinicMode === 'free_chat'
+                  ? 'محاور واستفسارات مقترحة:'
+                  : currentStep < totalQuestions && currentQuestion
+                  ? (currentQuestion.type === 'rating'
                     ? 'اختر تقييمك (من 1 إلى 10):'
                     : currentQuestion.type === 'multiple_choice'
                     ? 'خيارات الإجابة المقترحة:'
                     : currentQuestion.type === 'multi_select'
                     ? 'خيارات مقترحة:'
-                    : 'أفكار سريعة للإجابة:'
-                ) : 'استشارة وتطوير مستمر:'}
+                    : 'أفكار سريعة للإجابة:')
+                  : 'استشارة وتطوير مستمر:'}
               </span>
 
+              {/* Free Chat Quick Inquiries */}
+              {clinicMode === 'free_chat' && (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => handleSendAnswer('كيف أتغلب على الحزن والضيق الداخلي؟')}
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                  >
+                    كيف أتغلب على الحزن والضيق؟ 🌿
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendAnswer('ما هي الخطوة الأولى لتحقيق التوازن في هذا الجانب؟')}
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                  >
+                    أول خطوة للتوازن 🎯
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendAnswer('كيف أحمي طاقتي من التشتت والضغوط اليومية؟')}
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                  >
+                    حماية طاقتي من الضغوط 🛡️
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSendAnswer('كيف حالك يا دكتور؟')}
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                  >
+                    كيف حالك يا دكتور؟ 👋
+                  </button>
+                </div>
+              )}
+
               {/* If rating question: 1 to 10 pills */}
-              {currentStep < totalQuestions && currentQuestion?.type === 'rating' && (
+              {clinicMode === 'evaluation' && currentStep < totalQuestions && currentQuestion?.type === 'rating' && (
                 <div className="flex items-center gap-1.5 flex-shrink-0">
                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
                     <button
