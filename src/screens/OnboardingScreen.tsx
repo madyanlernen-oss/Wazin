@@ -65,6 +65,19 @@ function getClientAdvisorResponse(
   const advRole = advisor.role;
   const advTitle = advisor.title;
 
+  // 0. بروتوكول استثناء طوارئ إنساني حاسم ومطلق (Safety & Empathy Override) - الأولوية القصوى المطلقة
+  const isCrisisOrSelfHarm = /(انتحار|الانتحار|انتحر|أنتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|اموت|أموت|اريد الموت|أريد الموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي)/i.test(msg);
+  if (isCrisisOrSelfHarm) {
+    return {
+      isCrisis: true,
+      isQuestionOrInquiry: true,
+      reasoning: `تدخل إنساني طارئ (Safety & Empathy Override): المستفيد يعبر عن أزمة نفسية حادة ورغبة في إيذاء النفس أو الانتحار ("${text}"). تم فوراً تعليق وتجميد كافة مسارات التقييم الأسبوعي والأسئلة الروتينية، وتكريس كامل الحضور النفسي لاحتواء هذا الألم الوجودي الحاد، والتأكيد القاطع على قيمة حياته، وتقديم الدعم الإنساني والمساندة العاجلة دون أي قوالب جامدة أو تأجيل.`,
+      summary: `تدخل إنساني طارئ واحتواء عاجل لأزمة نفسية حادة تتعلق بأمان المستفيد وحفظ حياته.`,
+      advice: `حياتك غالية وألمك حقيقي ومسموع؛ أرجوك لا تبقَ وحدك في هذا الثقل وتواصل فوراً مع شخص تثق به أو مع جهة دعم نفسي ومختصين لمساندتك.`,
+      reply: `أسمعك بكل جوارحي وبكل ألم واهتمام يا صديقنا العزيز، وكلماتك هذه تهمّني أكثر من أي تقييم أو أي أمر آخر. 🌿\n\nأرجوك أن تتوقف لحظة وتلتقط أنفاسك بهدوء؛ اعلم أنني هنا معك ولست وحدك أبداً. الألم الهائل الذي تشعر به الآن حقيقي وثقيل جداً، لكن رغبتك في الانتحار هي صرخة لإنهاء هذا الوجع والضغط الشديد، وليست رغبة حقيقية في إنهاء وجودك ونفسك الغالية.\n\nحياتك لها قيمة عظيمة ومكانتك محفوظة حتى لو انطمست الرؤية في هذه اللحظة المظلمة. أرجوك من كل قلبي ألا تبقى وحدك مع هذه المشاعر الثقيلة؛ تحدث الآن مع شخص مقرب تثق به، أو تواصل فوراً مع مختص نفسي أو خط مساندة طارئ ليقف بجانبك ويساعدك على تجاوز هذا الظرف الصعب. أنا هنا معك وأريد لك السلامة والأمان.`,
+    };
+  }
+
   // 1. Anger, despair, swearing, life cursing ("اسب", "العن", "اللعن", "الحياة")
   if (/(اسب|أسب|العن|اللعن|ألعن|السب|اللعن|اللعنة|الشتيمة|اشتم|أشتم)/i.test(msg)) {
     return {
@@ -282,8 +295,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     setInputText('');
     const currentList = chatMessages[advisorKey] || [];
 
+    // 0. بروتوكول استثناء طوارئ إنساني فوري (Safety & Empathy Override)
+    const isCrisisOrSelfHarm = /(انتحار|الانتحار|انتحر|أنتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|اموت|أموت|اريد الموت|أريد الموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي)/i.test(text.toLowerCase());
+
     // Check if user input is a Question, Casual conversation, or Emotional Venting
     const isQuestionOrInquiry =
+      isCrisisOrSelfHarm ||
       clinicMode === 'free_chat' ||
       text.includes('؟') ||
       text.includes('?') ||
@@ -392,8 +409,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
       // If user was asking a question or sharing an emotional feeling
       if (isQuestionOrInquiry) {
-        // If in evaluation mode and there are remaining questions, append a gentle prompt at the end
-        if (clinicMode === 'evaluation' && currentStep < totalQuestions) {
+        // If in evaluation mode and there are remaining questions, append a gentle prompt at the end ONLY IF NOT IN CRISIS
+        if (!isCrisisOrSelfHarm && clinicMode === 'evaluation' && currentStep < totalQuestions) {
           replyContent += `\n\n📌 *محطة التقييم الحالية (${currentStep + 1} من ${totalQuestions})*: "${currentQ.title}". متى ما رغبت في المتابعة، يمكنك اختيار أحد الخيارات السريعة بالأسفل أو مشاركتي إجابتك.`;
         }
       } else {
