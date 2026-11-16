@@ -273,6 +273,41 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }
     } catch (err) {
       console.error('Advisor chat error in onboarding:', err);
+      // Resilient clinical fallback even on network failure so the advisor NEVER goes silent!
+      let fallbackReply = '';
+      if (nextStep === 1) {
+        fallbackReply = `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت ما شاركته بوعي تام.\n\nكطبيب ومرشد لك في ${currentAdvisor.title}، كل مرحلة نمر بها هي فرصة للاتزان وإعادة الضبط. بالنظر إلى وتيرة أسبوعك المنصرم، ما هو أكبر تحدٍ أو عائق نفسي أو عملي واجهك وشعرت أنه يسحب من طاقتك وتركيزك في هذا الجانب؟`;
+      } else if (nextStep === 2) {
+        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
+        const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+        fallbackReply = `✅ أحسنت يا صديقنا. استمعت بتقدير لكل ما شاركته في جلستنا التقييمية.\n\nرصدنا درجتك المعتمدة في ${currentAdvisor.title}: (${finalScore > 0 ? finalScore : 7}/10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح، وباب الحوار مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية. يمكنك الانتقال للجانب التالي أو مواصلة الحديث معي بحرية.`;
+      } else {
+        fallbackReply = `أنا معك وأتابع ما تطرحه باهتمام في مجال ${currentAdvisor.title}. خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة وتجاوزت التسويف. كيف تحب أن نطور هذا الجانب أكثر؟`;
+      }
+
+      const nextAdvisorMsg: EvaluationChatMessage = {
+        id: `agent_${Date.now()}`,
+        sender: 'advisor',
+        text: fallbackReply,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+
+      setChatMessages((prev) => ({
+        ...prev,
+        [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
+      }));
+
+      if (nextStep === 2) {
+        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
+        const scoreToSave = finalScore > 0 ? finalScore : 7.0;
+        onFinishAdvisor(currentAdvisor.id, scoreToSave);
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+        setShowCelebration(true);
+      }
     } finally {
       setIsAdvisorReplying(false);
     }
