@@ -58,7 +58,8 @@ function getClientAdvisorResponse(
   currentStep: number,
   totalQuestions: number,
   userScore: number,
-  currentQ?: any
+  currentQ?: any,
+  isExplicitAnswer?: boolean
 ) {
   const msg = text.toLowerCase().trim();
   const advName = advisor.name;
@@ -78,8 +79,52 @@ function getClientAdvisorResponse(
     };
   }
 
-  // 1. Anger, despair, swearing, life cursing ("اسب", "العن", "اللعن", "الحياة")
-  if (/(اسب|أسب|العن|اللعن|ألعن|السب|اللعن|اللعنة|الشتيمة|اشتم|أشتم)/i.test(msg)) {
+  // 1. فحص هل المدخل إجابة تقييمية صريحة (درجة رقمية أو خيار محدد أو شريحة تفكير)
+  const ratingMatch = msg.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i) || msg.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
+  const isOptionMatch = Boolean(currentQ?.options?.some((o: any) => o.label?.toLowerCase().trim() === msg || o.id?.toLowerCase().trim() === msg));
+  const isAnswer = isExplicitAnswer || Boolean(ratingMatch) || isOptionMatch || text.startsWith('تقييمي:');
+
+  if (isAnswer) {
+    if (ratingMatch) {
+      const scoreNum = Math.min(10, Math.max(1, parseFloat(ratingMatch[1] || '5')));
+      if (scoreNum <= 4) {
+        return {
+          isQuestionOrInquiry: false,
+          reasoning: `تحليل تقييم مرحلي منخفض (${scoreNum}/10) في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: رصد معطيات الضغط أو الفتور، وتقديم احتواء نفسي دافئ يؤكد أن الصراحة في التقييم هي نقطة الانطلاق الأساسية لإعادة التوازن دون جلد الذات.`,
+          summary: `تسجيل تقييم (${scoreNum}/10) في المحطة ${currentStep + 1} واحتواء التحدي بمرونة واهتمام.`,
+          advice: `الاعتراف بالضغط الحالي هو أولى خطوات التعافي؛ خطوة يومية صغيرة تكفي لاستعادة التوازن.`,
+          reply: `أحيّيك على صدقك وشفافيتك في مشاركة هذا التقييم (${scoreNum} من 10) يا صديقنا العزيز. مرورك بفترة تراجع أو ضغط في ${advTitle} هو أمر يمر به الكثيرون وسط تسارع الحياة وصعوباتها. هدفنا هنا ليس المحاكمة، بل تفكيك هذا الثقل معاً وبناء سكينتك واتزانك خطوة بخطوة.`,
+        };
+      } else if (scoreNum <= 7) {
+        return {
+          isQuestionOrInquiry: false,
+          reasoning: `تحليل تقييم مرحلي متزن (${scoreNum}/10) في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: رصد وجود قاعدة استقرار جيدة مع وجود مساحة تطوير ملموسة لتعميق الأثر وتحقيق الاستدامة.`,
+          summary: `تسجيل تقييم متزن (${scoreNum}/10) في المحطة ${currentStep + 1} وتحديد فرص التطوير.`,
+          advice: `البناء على نقاط القوة الحالية وحماية وقتك وطاقتك من المشتتات العابرة.`,
+          reply: `تقييمك المتزن (${scoreNum} من 10) يعكس وعياً طيباً بقاعدتك الحالية في ${advTitle}. لديك أساس جيد يمكنك البناء عليه لتعميق الأثر والوصول إلى مستويات أعلى من الرضا والاستقرار.`,
+        };
+      } else {
+        return {
+          isQuestionOrInquiry: false,
+          reasoning: `تحليل تقييم مرحلي متقدم (${scoreNum}/10) في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: رصد نضج وانسجام متميز في هذا البعد، والتركيز على تعزيز الاستدامة وتجنب الانتكاس.`,
+          summary: `تسجيل تقييم متقدم (${scoreNum}/10) في المحطة ${currentStep + 1} يبرز القوة والانسجام.`,
+          advice: `الاستمرار على العادات الراسخة والبيئة المحفزة التي أوصلتك لهذا المستوى الممتاز.`,
+          reply: `ما شاء الله، نتيجة ملهمة ومبهجة (${scoreNum} من 10) تعكس صفاءً حقيقياً وعملاً متواصلاً في ${advTitle}. هذا الاستقرار هو مكسب كبير لحياتك يستحق الحفاظ عليه ودعمه.`,
+        };
+      }
+    }
+
+    return {
+      isQuestionOrInquiry: false,
+      reasoning: `تحليل خيار المستفيد في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: تفكيك المعطى وربطه بمنهجية تدبير لبناء عادات مستدامة.`,
+      summary: `رصد إجابة المحطة ${currentStep + 1} من ${totalQuestions} بنجاح.`,
+      advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات اليومية المستدامة.`,
+      reply: `سجلت إجابتك بوعي وتقدير تام يا صديقنا؛ هذا الوضوح يمنحنا رؤية أدق لتوجيه مسارك نحو أقصى درجات الاتزان.`,
+    };
+  }
+
+  // 2. مشاعر الغضب والسب ولعن الحياة ("اسب", "العن", "اللعن", "الحياة")
+  if (/(اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)/i.test(msg)) {
     return {
       isQuestionOrInquiry: true,
       reasoning: `تفكيك مشاعر الغضب والألم الوجودي الكامن خلف الرغبة في التعبير الصادم ("${text}")، واحتواء الإنسان دون إطلاق أحكام مسبقة، وتبيان أن الرغبة في الصراخ أو السخط هي صرخة استغاثة تعبر عن ألم حقيقي، وتوجيه الطاقة نحو التفريغ الصحي الآمن دون تدمير الذات أو إثقال الروح.`,
@@ -89,7 +134,7 @@ function getClientAdvisorResponse(
     };
   }
 
-  // 2. Greetings / How are you ("كيف حالك", "كيفك", "أنا أسألك", "أهلاً")
+  // 3. التحيات والسؤال عن الحال ("كيف حالك", "كيفك", "أنا أسألك", "أهلاً")
   if (/(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك|انا اسالك|كيف انت|من انت|من أنت|مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك)/i.test(msg)) {
     return {
       isQuestionOrInquiry: true,
@@ -100,8 +145,8 @@ function getClientAdvisorResponse(
     };
   }
 
-  // 3. Sadness, grief, feeling lost, distress ("حزين", "تعبان", "مكتئب", "مخنوق", "ضايق")
-  if (/(حزين|حزن|تعبان|تعب|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|انتحار|الموت|الحياة صعبة|الحياة قاسية|تعبت)/i.test(msg)) {
+  // 4. الحزن والتعب والضيق والفضفضة النفسية
+  if (/(حزين|حزن|تعبان|تعب|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|تعبت)/i.test(msg)) {
     return {
       isQuestionOrInquiry: true,
       reasoning: `تحليل مشاعر الإنهاك والحزن والضيق النفسي لدى المستفيد: إدراك أن المشاعر المتألمة تحتاج إلى إنصات واحتواء إنساني دافئ قبل أي نصائح عملية، وكسر حلقة العزلة والضغط الداخلي.`,
@@ -111,8 +156,8 @@ function getClientAdvisorResponse(
     };
   }
 
-  // 4. Questions & Inquiries ("هل", "كيف", "لماذا", "ليه", "ماذا", "؟", "?")
-  if (msg.includes('؟') || msg.includes('?') || /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(msg)) {
+  // 5. الأسئلة والاستفسارات المباشرة (مع منع تطابق حرف الجر "من")
+  if (msg.includes('؟') || msg.includes('?') || /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من هو|من هي|من هم|من أنت|من انت|مين|من الذي|من التي|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(msg)) {
     let specificReply = `سؤال وجيه ومهم جداً يا صديقنا. رداً على استفسارك المباشر بخصوص ${advTitle}:\n\nالاتزان الحقيقي لا يعني ألا نمر بأوقات صعبة، بل يعني أن نملك البصيرة والمرونة للتعامل معها بهدوء. ما طرحته يعكس وعيك ورغبتك في الفهم، والخطوة الأهم هي أن تأخذ الأمور بتدرج ورفق دون جلد للذات.`;
     if (advisor.id === 'spiritual') {
       specificReply = `سؤالك في صميم الروحانية والسكينة يا صديقنا. الإجابة المباشرة: الروحانية ليست قائمة واجبات جافة، بل هي سلام داخلي وحضور قلب وحسن ظن بالله. حين تتشابك عليك الأمور، الجأ إلى السكينة البسيطة: صلاة خاشعة، ودعاء صادق، وتفريغ لشتات الذهن.`;
@@ -133,13 +178,13 @@ function getClientAdvisorResponse(
     };
   }
 
-  // 5. User is answering an evaluation question
+  // 6. الافتراضي للإجابات
   return {
     isQuestionOrInquiry: false,
     reasoning: `تحليل إجابة المستفيد على المحطة (${currentStep + 1} من ${totalQuestions}): رصد المعطيات وربطها بأبعاد ${advTitle} وتحديد أثرها على عجلة الحياة.`,
     summary: `رصد إجابة المحطة ${currentStep + 1} من ${totalQuestions} بنجاح.`,
     advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات اليومية المستدامة.`,
-    reply: `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت إجابتك بوعي تام.`,
+    reply: `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت ما شاركته بوعي تام.`,
   };
 }
 
@@ -298,23 +343,30 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     // 0. بروتوكول استثناء طوارئ إنساني فوري (Safety & Empathy Override)
     const isCrisisOrSelfHarm = /(انتحار|الانتحار|انتحر|أنتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|اموت|أموت|اريد الموت|أريد الموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي)/i.test(text.toLowerCase());
 
-    // Check if user input is a Question, Casual conversation, or Emotional Venting
+    const currentQ = currentAdvisor.questions?.[currentStep] || currentAdvisor.questions?.[0];
+
+    // 1. فحص هل المدخل إجابة صريحة على السؤال التقييمي الحالي
+    const ratingMatch = text.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i) || text.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
+    const isOptionAnswer = Boolean(currentQ?.options?.some((o) => o.label?.trim() === text.trim() || o.id === text.trim()));
+    const isEvaluationPrefix = text.startsWith('تقييمي:');
+    const isDirectEvaluationAnswer = !isCrisisOrSelfHarm && (Boolean(ratingMatch) || isOptionAnswer || isEvaluationPrefix);
+
+    // 2. فحص هل المدخل استفسار، دردشة حرة، أو تنفيس عاطفي
     const isQuestionOrInquiry =
       isCrisisOrSelfHarm ||
-      clinicMode === 'free_chat' ||
-      text.includes('؟') ||
-      text.includes('?') ||
-      /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|كيفك|كيف حالك|أنت|انت|مين)(\s|\?|؟|$)/i.test(text) ||
-      /(اسب|أسب|العن|اللعن|ألعن|السب|اللعن|اللعنة|الشتيمة|اشتم|أشتم|حزين|حزن|تعبان|تعب|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|انتحار|الموت|الحياة صعبة|الحياة قاسية|تعبت|مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك)/i.test(text);
-
-    const currentQ = currentAdvisor.questions?.[currentStep] || currentAdvisor.questions?.[0];
+      (!isDirectEvaluationAnswer && (
+        clinicMode === 'free_chat' ||
+        text.includes('؟') ||
+        text.includes('?') ||
+        /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من هو|من هي|من هم|من أنت|من انت|مين|من الذي|من التي|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|كيفك|كيف حالك|أنت|انت)(\s|\?|؟|$)/i.test(text) ||
+        /(اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم|حزين|حزن|تعبان|تعب|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|تعبت|مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح|مساء|هلا|هاي|حيّاك)/i.test(text)
+      ));
 
     // If it's an answer to the current evaluation question (NOT a question or free thought)
     let nextStep = currentStep;
-    if (!isQuestionOrInquiry && currentStep < totalQuestions) {
-      const ratingMatch = text.match(/(\d+(?:\.\d+)?)\s*(?:من\s*10|\/10)?/);
+    if (isDirectEvaluationAnswer && !isQuestionOrInquiry && currentStep < totalQuestions) {
       if (currentQ.type === 'rating' && ratingMatch) {
-        const num = Math.min(10, Math.max(1, parseFloat(ratingMatch[1])));
+        const num = Math.min(10, Math.max(1, parseFloat(ratingMatch[1] || '5')));
         onSaveAnswer(currentAdvisor.id, currentQ.id, num);
       } else if (currentQ.type === 'multiple_choice') {
         const matchedOpt = currentQ.options?.find((o) => o.label === text || o.id === text);
@@ -399,7 +451,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           currentStep,
           totalQuestions,
           calculateScoreForAdvisor(currentAdvisor, answers),
-          currentQ
+          currentQ,
+          isDirectEvaluationAnswer
         );
         reasoningContent = local.reasoning;
         summaryContent = local.summary;
@@ -407,14 +460,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         replyContent = local.reply;
       }
 
-      // If user was asking a question or sharing an emotional feeling
-      if (isQuestionOrInquiry) {
-        // If in evaluation mode and there are remaining questions, append a gentle prompt at the end ONLY IF NOT IN CRISIS
-        if (!isCrisisOrSelfHarm && clinicMode === 'evaluation' && currentStep < totalQuestions) {
-          replyContent += `\n\n📌 *محطة التقييم الحالية (${currentStep + 1} من ${totalQuestions})*: "${currentQ.title}". متى ما رغبت في المتابعة، يمكنك اختيار أحد الخيارات السريعة بالأسفل أو مشاركتي إجابتك.`;
-        }
-      } else {
-        // User answered the evaluation question!
+      // If user was answering an evaluation question, advance smoothly to next question
+      if (!isQuestionOrInquiry && isDirectEvaluationAnswer) {
         if (nextStep < totalQuestions) {
           const nextQ = currentAdvisor.questions[nextStep];
           replyContent += `\n\n📌 **السؤال (${nextStep + 1} من ${totalQuestions}):**\n${nextQ.title}${nextQ.description ? `\n💡 ${nextQ.description}` : ''}`;

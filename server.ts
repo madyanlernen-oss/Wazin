@@ -154,8 +154,16 @@ function generateLocalAgentResponse(
     });
   }
 
-  // أولوية التفاعل الإنساني 4: الأسئلة والاستفسارات المباشرة (Direct Questions & Inquiries)
-  const isDirectQuestion = msg.includes('؟') || msg.includes('?') || /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(msg);
+  // فحص هل المدخل هو إجابة تقييمية (درجة أو خيار)
+  const isRatingAns = /(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i.test(msg) || /^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i.test(msg);
+  const isAnswerToEvaluation = (isEvaluationSession && !isCurseOrAnger && !isCasualOrHowAreYou && !isGriefOrSadness) || isRatingAns || msg.startsWith('تقييمي:');
+
+  // أولوية التفاعل الإنساني 4: الأسئلة والاستفسارات المباشرة (Direct Questions & Inquiries) مع حماية حرف الجر "من"
+  const isDirectQuestion = !isAnswerToEvaluation && (
+    msg.includes('؟') ||
+    msg.includes('?') ||
+    /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من هو|من هي|من هم|من أنت|من انت|مين|من الذي|من التي|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(msg)
+  );
   if (isDirectQuestion) {
     // إجابات تخصصية مباشرة وفق تخصص المستشار
     if (agentKey === 'spiritual') {
@@ -214,7 +222,7 @@ function generateLocalAgentResponse(
   }
 
   // إذا كانت جلسة تقييم أسبوعية في العيادة ولم يكن المدخل سؤالاً أو تنفيساً (Weekly Assessment Ritual)
-  if (isEvaluationSession) {
+  if (isAnswerToEvaluation) {
     if (evaluationStep !== undefined && evaluationStep >= 8) {
       // المحطة الختامية للأسئلة الثمانية
       const goldenHabit = advisor?.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
@@ -228,11 +236,24 @@ function generateLocalAgentResponse(
       });
     } else {
       // إحدى محطات الأسئلة الثمانية
+      const ratingMatch = msg.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i);
+      const scoreNum = ratingMatch ? Math.min(10, Math.max(1, parseFloat(ratingMatch[1]))) : 5;
+      let evalReply = `أسمعك بكل اهتمام واحتواء يا ${userName}، ورصدت ما شاركته بوعي تام.\n\nكطبيب ومرشد لك في ${advRole}، كل خطوة نناقشها هنا تمنحنا رؤية أوضح لكيفية تحقيق أقصى درجات الاتزان.`;
+      if (ratingMatch) {
+        if (scoreNum <= 4) {
+          evalReply = `أحييك على شجاعتك وصراحتك في مشاركة هذا التقييم (${scoreNum} من 10) يا ${userName}. مرورك بفترة ضغط أو فتور في ${advRole} هو أمر طبيعي يمر به الجميع، والهدف من وجودنا معاً هو تفكيك هذا الثقل خطوة بخطوة لاستعادة توازنك.`;
+        } else if (scoreNum <= 7) {
+          evalReply = `تقييمك المتزن (${scoreNum} من 10) يعكس وعياً طيباً بقاعدتك الحالية في ${advRole}. لديك أساس جيد يمكنك البناء عليه لتعميق الأثر والوصول إلى مستويات أعلى من الرضا والاستقرار.`;
+        } else {
+          evalReply = `ما شاء الله، نتيجة ملهمة ومبهجة (${scoreNum} من 10) تعكس صفاءً حقيقياً وعملاً متواصلاً في ${advRole}. هذا الاستقرار هو مكسب كبير لحياتك يستحق الحفاظ عليه ودعمه.`;
+        }
+      }
+
       return formatAgentOutput({
         reasoning: `تحليل مرحلي لمدخلات المستفيد (${userName}) في المحطة (${evaluationStep || 1} من 8): تفكيك المعطيات وفحص أثرها على جانب (${advRole}) وصياغة استجابة داعمة تدفعه للأمام.`,
         summary: `رصد إجابة المستفيد على المحطة ${evaluationStep || 1} في جانب ${advRole} ومواصلة التقييم النوعي.`,
         advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة.`,
-        reply: `أسمعك بكل اهتمام واحتواء يا ${userName}، ورصدت ما شاركته بوعي تام.\n\nكطبيب ومرشد لك في ${advRole}، كل خطوة نناقشها هنا تمنحنا رؤية أوضح لكيفية تحقيق أقصى درجات الاتزان.`,
+        reply: evalReply,
         actionSteps: advisor?.defaultGoals?.slice(0, 1) || ['التركيز على العادة الأساسية لهذا الجانب'],
         reflectionQuestion: 'كيف تشعر بأثر هذا التحدي على بقية جوانب يومك؟'
       });
