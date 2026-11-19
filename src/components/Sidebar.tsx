@@ -1,24 +1,14 @@
-import React, { useState } from 'react';
-import {
-  LayoutDashboard,
-  MessageSquare,
-  ClipboardList,
-  GitCompare,
-  Target,
-  RotateCcw,
-  LogOut,
-  X,
-  Compass,
-  Sun,
-  Moon,
-  AlertTriangle,
-} from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { RotateCcw, LogOut, X } from 'lucide-react';
 import { Screen, UserProfile } from '../types/lifeBalance';
 import { WazanLogo } from './WazanLogo';
+import { ConfirmDialog } from './ConfirmDialog';
+import { ThemeToggle } from './ThemeToggle';
+import { NAV_ITEMS } from '../config/navItems';
 
-type SidebarScreen = Exclude<Screen, 'landing' | 'login'>;
+export type SidebarScreen = Exclude<Screen, 'landing' | 'login'>;
 
-interface SidebarProps {
+export interface SidebarProps {
   currentScreen: SidebarScreen;
   onNavigate: (screen: SidebarScreen) => void;
   userProfile: UserProfile | null;
@@ -29,6 +19,7 @@ interface SidebarProps {
   onCloseMobile?: () => void;
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
+  openerRef?: React.RefObject<HTMLElement | null>;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -42,173 +33,206 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   theme = 'light',
   onToggleTheme,
+  openerRef,
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const triggerElementRef = useRef<HTMLElement | null>(null);
 
-  // Clean, concise menu items without stacked noisy badges
-  const navItems = [
-    {
-      id: 'dashboard' as const,
-      label: 'لوحة التحكم وعجلة الحياة',
-      icon: LayoutDashboard,
-    },
-    {
-      id: 'goals_matrix' as const,
-      label: 'أهدافي (مصفوفة أيزنهاور)',
-      icon: Target,
-    },
-    {
-      id: 'onboarding' as const,
-      label: 'قيّم أسبوعك الآن',
-      icon: ClipboardList,
-    },
-    {
-      id: 'advisor_chat' as const,
-      label: 'استشارة المستشارين',
-      icon: MessageSquare,
-    },
-    {
-      id: 'director_summary' as const,
-      label: 'رؤية المنسق العام',
-      icon: Compass,
-    },
-    {
-      id: 'comparison' as const,
-      label: 'المقارنة والتحليلات',
-      icon: GitCompare,
-    },
-  ];
+  // 1. Mobile drawer accessibility: focus trap, Escape to close, scroll lock, focus return
+  useEffect(() => {
+    if (isOpenMobile) {
+      // Save previously focused element to return focus upon closing drawer
+      triggerElementRef.current = openerRef?.current || (document.activeElement as HTMLElement | null);
 
-  const handleSelectNav = (id: typeof navItems[number]['id']) => {
-    onNavigate(id);
+      // Lock body scroll
+      const originalOverflow = document.body.style.overflow;
+      document.body.style.overflow = 'hidden';
+
+      // Move focus to close button
+      requestAnimationFrame(() => {
+        closeButtonRef.current?.focus();
+      });
+
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          onCloseMobile?.();
+          return;
+        }
+
+        if (e.key === 'Tab' && drawerRef.current) {
+          const focusableElements = drawerRef.current.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          );
+          if (focusableElements.length === 0) return;
+
+          const firstElement = focusableElements[0];
+          const lastElement = focusableElements[focusableElements.length - 1];
+
+          if (e.shiftKey) {
+            if (document.activeElement === firstElement) {
+              e.preventDefault();
+              lastElement.focus();
+            }
+          } else {
+            if (document.activeElement === lastElement) {
+              e.preventDefault();
+              firstElement.focus();
+            }
+          }
+        }
+      };
+
+      document.addEventListener('keydown', handleKeyDown);
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.removeEventListener('keydown', handleKeyDown);
+        // Return focus to opening trigger
+        triggerElementRef.current?.focus();
+      };
+    }
+  }, [isOpenMobile, onCloseMobile, openerRef]);
+
+  const handleSelectNav = (screen: Screen) => {
+    onNavigate(screen as SidebarScreen);
     if (onCloseMobile) onCloseMobile();
   };
 
+  // 5. Safe Unicode initial
+  const avatarInitial = Array.from((userProfile?.name || '').trim())[0] ?? 'و';
+
   const sidebarContent = (
-    <div className="h-full flex flex-col justify-between p-4 sm:p-5 select-none bg-white dark:bg-[#0B161C] text-right border-l border-slate-200/90 dark:border-slate-800/80 transition-colors">
-      {/* Top: Logo & App Branding */}
-      <div>
-        <div className="flex items-center justify-between pb-4 border-b border-slate-200/90 dark:border-slate-800/80">
-          <div
+    <div className="h-dvh flex flex-col justify-between p-4 sm:p-5 select-none bg-white dark:bg-[#0B161C] text-right border-e border-slate-200/90 dark:border-slate-800/80 transition-colors">
+      {/* Top: Logo & Navigation */}
+      <div className="flex-1 min-h-0 flex flex-col">
+        {/* Brand Bar */}
+        <div className="flex items-center justify-between pb-4 border-b border-slate-200/90 dark:border-slate-800/80 flex-shrink-0">
+          {/* 4. Logo as accessible button */}
+          <button
+            type="button"
             onClick={() => handleSelectNav('dashboard')}
-            className="cursor-pointer transition-transform hover:scale-[1.02]"
+            aria-label="وازن، لوحة التحكم"
+            className="cursor-pointer transition-transform motion-safe:hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 rounded-xl text-right p-0.5"
           >
             <WazanLogo size="md" />
-          </div>
+          </button>
 
           <div className="flex items-center gap-1.5">
+            {/* 10. Shared ThemeToggle component */}
             {onToggleTheme && (
-              <button
-                type="button"
-                onClick={onToggleTheme}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#112028] text-[#0F6E6E] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
-                title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
-                aria-label="تبديل الوضع الليلي والنهاري"
-              >
-                {theme === 'dark' ? (
-                  <Sun className="w-4 h-4 text-[#FBBF24]" />
-                ) : (
-                  <Moon className="w-4 h-4 text-slate-700" />
-                )}
-              </button>
+              <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
             )}
 
-            {/* Close button on mobile drawer */}
+            {/* 15. Mobile drawer close button (at least 40x40px touch target) */}
             {onCloseMobile && (
               <button
+                ref={closeButtonRef}
+                type="button"
                 onClick={onCloseMobile}
-                className="lg:hidden p-1.5 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 transition-colors cursor-pointer"
+                className="lg:hidden min-w-10 min-h-10 w-10 h-10 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
                 aria-label="إغلاق القائمة"
               >
-                <X className="w-5 h-5" />
+                <X className="w-5 h-5" aria-hidden="true" />
               </button>
             )}
           </div>
         </div>
 
-        {/* Navigation Links */}
-        <div className="mt-6 space-y-1">
-          <span className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 px-3 block mb-2 tracking-wider">
+        {/* 11. Navigation Links wrapped in nav landmark */}
+        <nav aria-label="القائمة الرئيسية" className="mt-6 space-y-1 overflow-y-auto flex-1">
+          {/* 12 & 13. Menu heading with text-slate-600 and text-xs */}
+          <span className="text-xs font-extrabold text-slate-600 dark:text-slate-400 px-3 block mb-2 tracking-wider">
             القائمة الرئيسية
           </span>
 
-          {navItems.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive = currentScreen === item.id;
+            const isActive = currentScreen === item.screen;
 
             return (
               <button
-                key={item.id}
+                key={item.screen}
                 type="button"
-                onClick={() => handleSelectNav(item.id)}
+                onClick={() => handleSelectNav(item.screen)}
+                aria-current={isActive ? 'page' : undefined}
                 className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                   isActive
                     ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs font-black'
                     : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028]'
                 }`}
               >
+                {/* 12 & 16. Icon with aria-hidden, text-slate-600 in light, dark:text-slate-400 */}
                 <Icon
-                  className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:scale-105 ${
+                  aria-hidden="true"
+                  className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 motion-safe:group-hover:scale-105 ${
                     isActive
                       ? 'text-white'
-                      : 'text-slate-400 dark:text-slate-400 group-hover:text-[#0F6E6E] dark:group-hover:text-cyan-300'
+                      : 'text-slate-600 dark:text-slate-400 group-hover:text-[#0F6E6E] dark:group-hover:text-cyan-300'
                   }`}
                 />
                 <span className="truncate">{item.label}</span>
               </button>
             );
           })}
-        </div>
+        </nav>
       </div>
 
       {/* Bottom: User Card & Account Actions */}
-      <div className="pt-4 border-t border-slate-200/90 dark:border-slate-800/80 space-y-3">
-        {/* Compact User Account Card with Integrated Calm Logout Button */}
+      <div className="pt-4 border-t border-slate-200/90 dark:border-slate-800/80 space-y-3 flex-shrink-0">
+        {/* Compact User Account Card */}
         <div className="p-2.5 rounded-2xl bg-slate-50/90 dark:bg-[#112028] border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2.5 shadow-2xs transition-colors">
           <div className="flex items-center gap-2.5 min-w-0">
             {/* User Avatar */}
             <div className="w-8 h-8 rounded-xl bg-white dark:bg-[#0B161C] border border-[#0F6E6E]/20 dark:border-cyan-500/30 text-[#0F6E6E] dark:text-cyan-300 font-black text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
-              {userProfile?.name?.charAt(0) || 'و'}
+              {avatarInitial}
             </div>
 
-            {/* User Name & Status */}
-            <div className="min-w-0 text-right">
+            {/* 6. User Name & Status: always show progress n من 8, email in title */}
+            <div
+              className="min-w-0 text-right"
+              title={userProfile?.email || undefined}
+            >
               <span className="text-xs font-bold text-[#0F172A] dark:text-white block truncate leading-tight">
                 {userProfile?.name || 'مستخدم وازن'}
               </span>
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate mt-0.5">
-                {userProfile?.email || (completedCount > 0 ? (
-                  <span>
-                    <span dir="ltr" className="font-bold tabular-nums" style={{ unicodeBidi: 'isolate' }}>{completedCount}</span> مجالات مكتملة
-                  </span>
-                ) : 'حساب نشط')}
+              <span className="text-xs text-slate-600 dark:text-slate-400 block truncate mt-0.5">
+                <span>
+                  <span dir="ltr" className="[unicode-bidi:isolate] font-bold tabular-nums">
+                    {completedCount}
+                  </span>{' '}
+                  من 8 مكتمل
+                </span>
               </span>
             </div>
           </div>
 
-          {/* Calm, polite Logout Button */}
+          {/* 12, 14, 15. Calm, polite Logout Button (>= 40x40px, high contrast text-slate-600) */}
           <button
             type="button"
             onClick={onSignOut}
             title="تسجيل الخروج من الحساب"
             aria-label="تسجيل الخروج"
-            className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-[#0B161C] border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700/60 transition-all cursor-pointer flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
+            className="min-w-10 min-h-10 w-10 h-10 rounded-xl text-slate-600 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-[#0B161C] border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700/60 transition-all cursor-pointer flex-shrink-0 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
           >
-            <LogOut className="w-4 h-4" />
+            <LogOut className="w-4 h-4" aria-hidden="true" />
           </button>
         </div>
 
-        {/* Guarded, Visually Separated Reset Action */}
+        {/* Guarded Reset Action */}
         <div className="pt-1 border-t border-slate-100 dark:border-slate-800/50">
           <div className="text-center">
+            {/* 12, 13, 14. Reset button with text-slate-600 and focus ring */}
             <button
               type="button"
               onClick={() => setShowResetConfirm(true)}
               title="إعادة تعيين تقييمات المنظومة وبياناتها"
               aria-label="إعادة ضبط التقييم والبيانات"
-              className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+              className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
             >
-              <RotateCcw className="w-3 h-3 text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" />
+              <RotateCcw className="w-3.5 h-3.5 text-slate-600 group-hover:text-amber-600 dark:text-slate-400 dark:group-hover:text-amber-400 transition-colors" aria-hidden="true" />
               <span>إعادة ضبط التقييم والبيانات</span>
             </button>
           </div>
@@ -219,66 +243,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <>
-      {/* Desktop Sidebar: Permanent on right side in RTL */}
-      <aside className="hidden lg:block w-64 md:w-72 h-screen sticky top-0 shadow-xs z-30 flex-shrink-0">
+      {/* 3. Desktop Sidebar: Permanent on right side in RTL with h-dvh */}
+      <aside className="hidden lg:block w-64 md:w-72 h-dvh sticky top-0 shadow-xs z-30 flex-shrink-0">
         {sidebarContent}
       </aside>
 
-      {/* Mobile Drawer Overlay */}
+      {/* 1 & 2. Mobile Drawer: Accessible dialog with logical start-0 positioning */}
       {isOpenMobile && (
-        <div className="lg:hidden fixed inset-0 z-50 flex">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="القائمة الرئيسية"
+          className="lg:hidden fixed inset-0 z-50 flex"
+        >
           {/* Backdrop */}
           <div
             onClick={onCloseMobile}
-            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity"
+            className="fixed inset-0 bg-black/40 backdrop-blur-xs transition-opacity cursor-pointer"
+            aria-hidden="true"
           />
 
-          {/* Sliding Drawer from Right */}
-          <div className="relative w-72 max-w-[85vw] h-full shadow-2xl z-10 animate-fadeIn">
+          {/* 2 & 3. Sliding Drawer positioned with logical start-0 and h-dvh */}
+          <div
+            ref={drawerRef}
+            className="relative fixed inset-y-0 start-0 w-72 max-w-[85vw] h-dvh shadow-2xl z-10 motion-safe:animate-fadeIn"
+          >
             {sidebarContent}
           </div>
         </div>
       )}
 
-      {/* Reset Confirmation Dialog Modal */}
-      {showResetConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl text-right space-y-4">
-            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-[#FBBF24] flex items-center justify-center mx-auto">
-              <AlertTriangle className="w-6 h-6" />
-            </div>
-
-            <div className="text-center space-y-1.5">
-              <h3 className="text-base font-black text-[#0F172A] dark:text-white">
-                تأكيد إعادة تعيين التقييم
-              </h3>
-              <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
-                هل أنت متأكد من رغبتك في مسح كافة التقييمات والأهداف والبدء بحساب نظيف؟ لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2.5 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowResetConfirm(false)}
-                className="flex-1 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B161C] hover:bg-slate-100 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white font-bold text-xs transition-colors cursor-pointer"
-              >
-                إلغاء والاحتفاظ بالبيانات
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowResetConfirm(false);
-                  onReset();
-                }}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
-              >
-                نعم، إعادة الضبط
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* 7. Shared ConfirmDialog with native <dialog> */}
+      <ConfirmDialog
+        open={showResetConfirm}
+        title="تأكيد إعادة تعيين التقييم"
+        description="هل أنت متأكد من رغبتك في مسح كافة التقييمات والأهداف والبدء بحساب نظيف؟ لا يمكن التراجع عن هذا الإجراء بعد تنفيذه."
+        confirmLabel="نعم، إعادة الضبط"
+        cancelLabel="إلغاء والاحتفاظ بالبيانات"
+        variant="danger"
+        onConfirm={() => {
+          setShowResetConfirm(false);
+          onReset();
+        }}
+        onCancel={() => setShowResetConfirm(false)}
+      />
     </>
   );
 };

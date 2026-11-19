@@ -14,6 +14,8 @@ import {
 import { Screen, UserProfile } from '../types/lifeBalance';
 import { WazanLogo } from './WazanLogo';
 import { ConfirmDialog } from './ConfirmDialog';
+import { ThemeToggle } from './ThemeToggle';
+import { NAV_ITEMS } from '../config/navItems';
 
 interface NavbarProps {
   currentScreen: Screen;
@@ -40,51 +42,6 @@ const HeaderShell: React.FC<HeaderShellProps> = ({ children }) => (
   </header>
 );
 
-// 8. Reusable ThemeToggle component with 40x40px touch target and focus ring
-interface ThemeToggleProps {
-  theme: 'light' | 'dark';
-  onToggleTheme?: () => void;
-  className?: string;
-}
-
-const ThemeToggle: React.FC<ThemeToggleProps> = ({
-  theme,
-  onToggleTheme,
-  className = '',
-}) => {
-  if (!onToggleTheme) return null;
-  return (
-    <button
-      type="button"
-      onClick={onToggleTheme}
-      className={`min-w-10 min-h-10 w-10 h-10 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#0B6E72] dark:text-cyan-400 motion-safe:hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 ${className}`}
-      title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
-      aria-label="تبديل الوضع الليلي والنهاري"
-    >
-      {theme === 'dark' ? (
-        <Sun className="w-4 h-4 text-amber-400" aria-hidden="true" />
-      ) : (
-        <Moon className="w-4 h-4 text-slate-700 dark:text-slate-200" aria-hidden="true" />
-      )}
-    </button>
-  );
-};
-
-// 7. Tab items metadata configuration
-interface NavItemConfig {
-  screen: Screen;
-  icon: React.ComponentType<{ className?: string; 'aria-hidden'?: boolean | 'true' | 'false' }>;
-  label: string;
-  shortLabel: string;
-}
-
-const NAV_ITEMS: NavItemConfig[] = [
-  { screen: 'dashboard', icon: LayoutDashboard, label: 'عجلة الحياة', shortLabel: 'العجلة' },
-  { screen: 'goals_matrix', icon: Target, label: 'أهدافي (أيزنهاور)', shortLabel: 'أهدافي' },
-  { screen: 'comparison', icon: GitCompare, label: 'المقارنة', shortLabel: 'المقارنة' },
-  { screen: 'advisor_chat', icon: MessageSquare, label: 'المستشارون', shortLabel: 'المستشارون' },
-  { screen: 'onboarding', icon: ClipboardList, label: 'قيّم أسبوعك الآن', shortLabel: 'التقييم' },
-];
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentScreen,
@@ -165,7 +122,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
       {/* 7 & 9. Navigation Tabs with aria-label, aria-current, and responsive icon-collapse */}
       <nav aria-label="التنقل الرئيسي" className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
-        {NAV_ITEMS.map((item) => {
+        {NAV_ITEMS.filter((item) => item.inTopBar).map((item) => {
           const isActive = currentScreen === item.screen;
           const isAssessmentTab = item.screen === 'onboarding';
           const hasBadge = isAssessmentTab && completedCount !== undefined && completedCount < 8;
