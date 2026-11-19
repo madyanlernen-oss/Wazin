@@ -389,14 +389,20 @@ export const extractInsightsFromAnswers = (
   // Check specific answers
   advisor.questions.forEach((q) => {
     const val = answers[`${advisor.id}_${q.id}`];
+    const cleanTitle = q.title
+      .replace(/^ما مدى |^إلى أي مدى |^كيف تقيم |^ما هو |^ما هي |^كيف تصف /i, '')
+      .replace(/[؟?]+$/g, '')
+      .trim();
+
     if (q.type === 'rating' && typeof val === 'number') {
       if (val >= 8) {
-        strengths.push(`${q.title.replace(/^ما مدى |^إلى أي مدى |^كيف تقيم /i, '')}: تقييم مرتفع (${val}/10)`);
+        strengths.push(`${cleanTitle}: تقييم مرتفع (${val}/10)`);
       } else if (val <= 5) {
-        challenges.push(`${q.title.replace(/^ما مدى |^إلى أي مدى |^كيف تقيم /i, '')}: يحتاج لرفع المستوى (${val}/10)`);
+        challenges.push(`${cleanTitle}: يحتاج لرفع المستوى (${val}/10)`);
       }
     } else if (q.type === 'open_text' && typeof val === 'string' && val.trim().length > 3) {
-      challenges.push(`التحدي المذكور: "${val.slice(0, 70)}${val.length > 70 ? '...' : ''}"`);
+      const cleanVal = val.replace(/[؟?]+$/g, '').trim();
+      challenges.push(`التحدي المذكور: "${cleanVal.slice(0, 70)}${cleanVal.length > 70 ? '...' : ''}"`);
     }
   });
 

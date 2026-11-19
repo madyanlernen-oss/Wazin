@@ -248,12 +248,10 @@ export default function App() {
 
   // Handler: Reset Profile
   const handleResetProfile = () => {
-    if (window.confirm('هل أنت متأكد من رغبتك في إعادة تعيين التقييم والبدء من جديد؟')) {
-      const fresh = getDefaultInitialState();
-      setAppState(fresh);
-      saveStoredState(fresh);
-      setActiveScreen('landing');
-    }
+    const fresh = getDefaultInitialState();
+    setAppState(fresh);
+    saveStoredState(fresh);
+    setActiveScreen('landing');
   };
 
   // Switch to specific advisor in chat
@@ -283,7 +281,7 @@ export default function App() {
 
   if (isAuthOrLanding) {
     return (
-      <div className="min-h-screen bg-[#FAF7F2] dark:bg-[#07111c] text-[#1D2E2B] dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#1b605b]/20 selection:text-[#1b605b] transition-colors duration-300">
+      <div className="min-h-screen bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#0B6E72]/20 selection:text-[#0B6E72] transition-colors duration-300">
         {/* Top App Bar */}
         <Navbar
           currentScreen={activeScreen}
@@ -323,7 +321,7 @@ export default function App() {
 
   // Inside Authenticated App: Sidebar on the side ("على جنب")
   return (
-    <div className="min-h-screen bg-[#FAF7F2] dark:bg-[#07111c] text-[#1D2E2B] dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#1b605b]/20 selection:text-[#1b605b] flex flex-row transition-colors duration-300">
+    <div className="min-h-screen bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#0B6E72]/20 selection:text-[#0B6E72] flex flex-row transition-colors duration-300">
       {/* Sidebar on the right in RTL */}
       <Sidebar
         currentScreen={activeScreen as 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix'}
@@ -387,6 +385,7 @@ export default function App() {
               onNavigateToDirectorSummary={() => setActiveScreen('director_summary')}
               onAddGoal={handleAddGoal}
               onStartEvaluation={() => setActiveScreen('onboarding')}
+              theme={theme}
             />
           )}
 
