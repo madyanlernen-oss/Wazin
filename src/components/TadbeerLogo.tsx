@@ -61,7 +61,7 @@ export const TadbeerLogo: React.FC<TadbeerLogoProps> = ({
   return (
     <div className={`flex items-center gap-3 select-none ${className}`}>
       {/* Emblem container */}
-      <div className="relative flex items-center justify-center p-0.5 rounded-2xl bg-[#0b1726] border border-[#1b605b]/30 shadow-md shadow-cyan-950/20 overflow-hidden">
+      <div className="relative flex items-center justify-center p-0.5 rounded-2xl bg-[#0b1726] border border-[#1b605b]/30 dark:border-cyan-500/40 shadow-md shadow-cyan-950/20 overflow-hidden">
         <TadbeerEmblem size={currentPx} />
       </div>
 
@@ -69,7 +69,7 @@ export const TadbeerLogo: React.FC<TadbeerLogoProps> = ({
         <div className="flex flex-col text-right">
           <div className="flex items-center gap-1.5">
             <span
-              className={`font-black tracking-tight text-[#1b605b] font-['Tajawal'] ${
+              className={`font-black tracking-tight text-[#1b605b] dark:text-cyan-400 font-['Tajawal'] ${
                 size === 'sm'
                   ? 'text-lg'
                   : size === 'md'
@@ -81,11 +81,11 @@ export const TadbeerLogo: React.FC<TadbeerLogoProps> = ({
             >
               وزان
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#1b605b]/10 text-[#1b605b] border border-[#1b605b]/20">
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#1b605b]/10 dark:bg-cyan-950/60 text-[#1b605b] dark:text-cyan-300 border border-[#1b605b]/20 dark:border-cyan-800/40">
               توازن الحياة
             </span>
           </div>
-          <span className="text-[11px] font-bold text-[#b88d3b] tracking-wide">
+          <span className="text-[11px] font-bold text-[#b88d3b] dark:text-amber-300 tracking-wide">
             توازن حياتك بوعي
           </span>
         </div>

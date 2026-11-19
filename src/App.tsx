@@ -15,7 +15,7 @@ import { AdvisorChatScreen } from './screens/AdvisorChatScreen';
 import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
 import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
-import { Menu } from 'lucide-react';
+import { Menu, Sun, Moon } from 'lucide-react';
 import {
   DirectorSummaryReport,
   LifeAreaId,
@@ -55,6 +55,35 @@ export default function App() {
   );
 
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Theme state: 'light' | 'dark', persisted to localStorage & synced to <html>
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    try {
+      const stored = localStorage.getItem('wazan_theme');
+      if (stored === 'dark' || stored === 'light') return stored;
+      if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        return 'dark';
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('wazan_theme', theme);
+      if (theme === 'dark') {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [theme]);
+
+  const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
 
   // Auto-save state
   useEffect(() => {
@@ -241,7 +270,7 @@ export default function App() {
 
   if (isAuthOrLanding) {
     return (
-      <div className="min-h-screen bg-[#FAF7F2] text-[#1D2E2B] font-['Tajawal',sans-serif] selection:bg-[#1b605b]/20 selection:text-[#1b605b]">
+      <div className="min-h-screen bg-[#FAF7F2] dark:bg-[#07111c] text-[#1D2E2B] dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#1b605b]/20 selection:text-[#1b605b] transition-colors duration-300">
         {/* Top App Bar */}
         <Navbar
           currentScreen={activeScreen}
@@ -251,6 +280,8 @@ export default function App() {
           onSignOut={handleSignOut}
           onReset={handleResetProfile}
           completedCount={appState.completedAdvisors.length}
+          theme={theme}
+          onToggleTheme={toggleTheme}
         />
 
         {/* Screen Content */}
@@ -259,6 +290,7 @@ export default function App() {
             <LandingScreen
               onLoadSample={handleLoadSample}
               onNavigateToAuth={handleNavigateToAuth}
+              theme={theme}
             />
           )}
 
@@ -277,7 +309,7 @@ export default function App() {
 
   // Inside Authenticated App: Sidebar on the side ("على جنب")
   return (
-    <div className="min-h-screen bg-[#FAF7F2] text-[#1D2E2B] font-['Tajawal',sans-serif] selection:bg-[#1b605b]/20 selection:text-[#1b605b] flex flex-row">
+    <div className="min-h-screen bg-[#FAF7F2] dark:bg-[#07111c] text-[#1D2E2B] dark:text-slate-100 font-['Tajawal',sans-serif] selection:bg-[#1b605b]/20 selection:text-[#1b605b] flex flex-row transition-colors duration-300">
       {/* Sidebar on the right in RTL */}
       <Sidebar
         currentScreen={activeScreen as 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix'}
@@ -288,27 +320,41 @@ export default function App() {
         completedCount={appState.completedAdvisors.length}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        theme={theme}
+        onToggleTheme={toggleTheme}
       />
 
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 flex flex-col min-h-screen overflow-x-hidden">
         {/* Mobile Header with Menu Toggle */}
-        <header className="lg:hidden sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-[#eae3d5] px-4 py-3 flex items-center justify-between shadow-xs">
+        <header className="lg:hidden sticky top-0 z-20 bg-white/95 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-[#eae3d5] dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-xs transition-colors">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="p-2 rounded-xl bg-[#FAF7F2] text-[#1b605b] border border-[#ded7c8] hover:bg-white transition-colors"
+              className="p-2 rounded-xl bg-[#FAF7F2] dark:bg-slate-800 text-[#1b605b] dark:text-cyan-400 border border-[#ded7c8] dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 transition-colors"
               aria-label="فتح القائمة الجانبية"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-xs sm:text-sm font-black text-[#1d2e2b]">
+            <span className="text-xs sm:text-sm font-black text-[#1d2e2b] dark:text-white">
               {screenTitles[activeScreen] || 'وازن'}
             </span>
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="p-2 rounded-xl border border-[#eae3d5] dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#1b605b] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
+              title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-700" />
+              )}
+            </button>
             <TadbeerLogo size="sm" showText={false} />
           </div>
         </header>
