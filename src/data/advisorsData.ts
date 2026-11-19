@@ -827,9 +827,11 @@ export const ADVISORS_LIST: AdvisorConfig[] = [
 ];
 
 export const SAMPLE_USER_PROFILE = {
-  name: 'مستخدم تجريبي',
+  name: 'سعود المنصور',
+  email: 'demo@wazan.ai',
+  password: '123456',
   ageGroup: '30 - 39 سنة',
-  currentFocus: 'تحقيق التوازن المهني والأسري وتحسين اللياقة البدنية والادخار',
+  currentFocus: 'تحقيق التوازن الشامل والارتقاء بالأداء المهني والصحي',
   registeredAt: new Date().toISOString(),
 };
 

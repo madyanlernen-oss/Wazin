@@ -73,9 +73,8 @@ export const loadStoredState = (): StoredAppState => {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return getDefaultInitialState();
     const parsed = JSON.parse(raw);
-    // If the saved state contains old legacy sample answers or demo user with 8 completed areas, reset cleanly
+    // Reset old legacy Tadbeer profiles if found
     if (
-      (parsed.completedAdvisors && parsed.completedAdvisors.length === 8 && parsed.answers?.spiritual_q5) ||
       parsed.userProfile?.name?.includes('عبدالرحمن') ||
       parsed.userProfile?.email?.toLowerCase() === 'demo@tadbeer.ai'
     ) {
@@ -98,6 +97,59 @@ export const saveStoredState = (state: StoredAppState): void => {
     console.error('Failed to save state to localStorage:', e);
   }
 };
+
+export const SAMPLE_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
+  {
+    id: 'eisen_1',
+    title: 'تثبيت موعد النوم عند 11 مساءً وقطع الشاشات قبلها بـ 45 دقيقة',
+    quadrant: 'q2_important_not_urgent',
+    timeframe: 'daily',
+    areaId: 'health',
+    completed: false,
+    source: 'advisor',
+    advisorName: 'د. ليلى الصحية',
+  },
+  {
+    id: 'eisen_2',
+    title: 'جلسة الأحد الأسبوعية للتخطيط المالي وتتبع النفقات',
+    quadrant: 'q2_important_not_urgent',
+    timeframe: 'weekly',
+    areaId: 'financial',
+    completed: true,
+    source: 'advisor',
+    advisorName: 'أ. كمال المالي',
+  },
+  {
+    id: 'eisen_3',
+    title: 'عشاء عائلي يومي بدون هواتف للتواصل العميق',
+    quadrant: 'q2_important_not_urgent',
+    timeframe: 'daily',
+    areaId: 'family',
+    completed: false,
+    source: 'advisor',
+    advisorName: 'أ. مريم الأسرية',
+  },
+  {
+    id: 'eisen_4',
+    title: 'سداد دفعة بطاقة الائتمان قبل موعد الاستحقاق',
+    quadrant: 'q1_urgent_important',
+    timeframe: 'weekly',
+    areaId: 'financial',
+    completed: false,
+    source: 'advisor',
+    advisorName: 'أ. كمال المالي',
+  },
+  {
+    id: 'eisen_5',
+    title: 'تخصيص 30 دقيقة لقراءة كتاب تطبيقات الذكاء الاصطناعي',
+    quadrant: 'q2_important_not_urgent',
+    timeframe: 'daily',
+    areaId: 'learning',
+    completed: false,
+    source: 'advisor',
+    advisorName: 'د. زياد المعرفي',
+  },
+];
 
 export const loadSampleState = (): StoredAppState => {
   const sampleAnswers: Record<string, any> = {
@@ -179,6 +231,7 @@ export const loadSampleState = (): StoredAppState => {
     scores: SAMPLE_SCORES,
     answers: sampleAnswers,
     goals: SAMPLE_GOALS,
+    eisenhowerGoals: SAMPLE_EISENHOWER_GOALS,
     completedAdvisors: [
       'spiritual',
       'financial',
@@ -372,11 +425,11 @@ export const extractInsightsFromAnswers = (
 const USERS_STORAGE_KEY = 'lifebalance_users_v1';
 
 export const DEMO_USER: UserProfile = {
-  name: 'ضيف وازن',
+  name: 'سعود المنصور',
   email: 'demo@wazan.ai',
   password: '123456',
-  ageGroup: '25 - 34 سنة',
-  currentFocus: 'تحقيق التوازن الشامل وتحديد الأولويات',
+  ageGroup: '30 - 39 سنة',
+  currentFocus: 'تحقيق التوازن الشامل والارتقاء بالأداء المهني والصحي',
   registeredAt: new Date().toISOString(),
 };
 
@@ -384,7 +437,16 @@ export const getStoredUsers = (): UserProfile[] => {
   try {
     const raw = localStorage.getItem(USERS_STORAGE_KEY);
     const parsed: UserProfile[] = raw ? JSON.parse(raw) : [];
-    if (!parsed.some((u) => u.email?.toLowerCase() === DEMO_USER.email?.toLowerCase() || u.name === 'demo')) {
+    const demoIdx = parsed.findIndex(
+      (u) =>
+        u.email?.toLowerCase() === DEMO_USER.email?.toLowerCase() ||
+        u.name === 'demo' ||
+        u.name === 'wazan' ||
+        u.name === 'سعود المنصور'
+    );
+    if (demoIdx >= 0) {
+      parsed[demoIdx] = DEMO_USER;
+    } else {
       parsed.push(DEMO_USER);
     }
     return parsed;

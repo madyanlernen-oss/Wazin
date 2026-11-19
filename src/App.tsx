@@ -118,20 +118,33 @@ export default function App() {
     setActiveScreen('dashboard');
   };
 
-  // Handler: Login Success (demo@tadbeer.ai starts clean and open without pre-filled evaluations)
+  // Handler: Login Success (loads realistic sample state for demo user سعود المنصور, or clean state for new users)
   const handleLoginSuccess = (profile: UserProfile) => {
     saveStoredUser(profile);
     const isDemo =
+      profile.email?.toLowerCase() === 'demo@wazan.ai' ||
       profile.email?.toLowerCase() === 'demo@tadbeer.ai' ||
       profile.name?.toLowerCase() === 'demo' ||
+      profile.name?.toLowerCase() === 'wazan' ||
+      profile.name?.includes('سعود') ||
       profile.name?.includes('ضيف');
 
-    // Fresh clean state without pre-filled evaluations
-    const fresh = getDefaultInitialState();
-    setAppState({
-      ...fresh,
-      userProfile: profile,
-    });
+    if (isDemo) {
+      const sample = loadSampleState();
+      sample.userProfile = profile;
+      setAppState(sample);
+      saveStoredState(sample);
+    } else {
+      const fresh = getDefaultInitialState();
+      setAppState({
+        ...fresh,
+        userProfile: profile,
+      });
+      saveStoredState({
+        ...fresh,
+        userProfile: profile,
+      });
+    }
     setActiveScreen('dashboard');
   };
 

@@ -105,7 +105,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       (u) =>
         (u.email && u.email.toLowerCase() === identifier) ||
         u.name.toLowerCase() === identifier ||
-        (identifier === 'demo' && u.email?.toLowerCase() === 'demo@tadbeer.ai')
+        (identifier === 'demo' && (u.email?.toLowerCase() === 'demo@wazan.ai' || u.name === 'demo' || u.name === 'سعود المنصور')) ||
+        (identifier === 'wazan' && (u.email?.toLowerCase() === 'demo@wazan.ai' || u.name === 'demo' || u.name === 'سعود المنصور'))
     );
 
     if (found) {
@@ -122,7 +123,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       // Create new profile seamlessly
       const newProfile: UserProfile = {
         name: emailOrName.trim(),
-        email: emailOrName.includes('@') ? emailOrName.trim() : `${emailOrName.trim()}@tadbeer.ai`,
+        email: emailOrName.includes('@') ? emailOrName.trim() : `${emailOrName.trim()}@wazan.ai`,
         password: pass,
         ageGroup: '25 - 34 سنة',
         currentFocus: 'تحقيق التوازن الشامل',
@@ -368,18 +369,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 <LogIn className="w-4 h-4 text-cyan-200 dark:text-cyan-300" />
                 <span>تسجيل الدخول</span>
               </button>
-
-              {/* Quick Demo Shortcut */}
-              <div className="pt-2 text-center">
-                <button
-                  type="button"
-                  onClick={onQuickDemoLogin}
-                  className="text-xs font-bold text-[#5a6e69] dark:text-slate-400 hover:text-[#0A757E] dark:hover:text-cyan-400 inline-flex items-center gap-1.5 transition-colors py-1.5 px-3 rounded-xl hover:bg-[#FAF7F2] dark:hover:bg-slate-800/60 cursor-pointer"
-                >
-                  <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-                  <span>تجربة سريعة بحساب تجريبي (ضيف)</span>
-                </button>
-              </div>
             </form>
           ) : (
             /* Focused Form: REGISTER */
