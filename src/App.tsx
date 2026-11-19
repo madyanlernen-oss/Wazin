@@ -6,7 +6,7 @@
 import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
-import { TadbeerLogo } from './components/TadbeerLogo';
+import { WazanLogo } from './components/WazanLogo';
 import { LandingScreen } from './screens/LandingScreen';
 import { AuthScreen } from './screens/AuthScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
@@ -27,6 +27,7 @@ import {
   loadStoredState,
   saveStoredState,
   saveStoredUser,
+  resetStoredState,
   StoredAppState,
 } from './utils/storage';
 
@@ -109,8 +110,11 @@ export default function App() {
 
   // Handler: Login Success (loads realistic sample state for demo user سعود المنصور, or clean state for new users)
   const handleLoginSuccess = (profile: UserProfile) => {
-    // Normalize demo email if ending with .ai to .com
-    if (profile.email?.toLowerCase() === 'demo@wazan.ai') {
+    // Normalize demo email if ending with .ai or legacy domain to demo@wazan.com
+    if (
+      profile.email?.toLowerCase() === 'demo@wazan.ai' ||
+      profile.email?.toLowerCase() === 'demo@tadbeer.ai'
+    ) {
       profile.email = 'demo@wazan.com';
     }
     saveStoredUser(profile);
@@ -244,6 +248,7 @@ export default function App() {
   const handleResetProfile = () => {
     const fresh = getDefaultInitialState();
     setAppState(fresh);
+    resetStoredState();
     saveStoredState(fresh);
     setActiveScreen('landing');
   };
@@ -360,7 +365,7 @@ export default function App() {
                 <Moon className="w-4 h-4 text-slate-700" />
               )}
             </button>
-            <TadbeerLogo size="sm" showText={false} />
+            <WazanLogo size="sm" showText={false} />
           </div>
         </header>
 

@@ -12,7 +12,7 @@ import {
   Moon,
 } from 'lucide-react';
 import { UserProfile } from '../types/lifeBalance';
-import { TadbeerLogo } from './TadbeerLogo';
+import { WazanLogo } from './WazanLogo';
 
 interface NavbarProps {
   currentScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
@@ -46,7 +46,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onNavigate('landing')}
             className="cursor-pointer transition-transform hover:scale-[1.02]"
           >
-            <TadbeerLogo size="md" />
+            <WazanLogo size="md" />
           </div>
 
           {onToggleTheme && (
@@ -79,7 +79,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             onClick={() => onNavigate('landing')}
             className="cursor-pointer transition-transform hover:scale-[1.02]"
           >
-            <TadbeerLogo size="md" />
+            <WazanLogo size="md" />
           </div>
 
           {/* Top Actions: Theme Switcher & Secondary Ghost Login Button */}
@@ -126,7 +126,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           onClick={() => onNavigate('dashboard')}
           className="cursor-pointer transition-transform hover:scale-[1.02]"
         >
-          <TadbeerLogo size="sm" />
+          <WazanLogo size="sm" />
         </div>
 
         {/* Navigation Tabs (Only when authenticated inside dashboard/tools) */}

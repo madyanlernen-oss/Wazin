@@ -332,7 +332,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [showCelebration, setShowCelebration] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
-    return (localStorage.getItem('wazan_ai_mode') as AiModelMode) || (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
+    const primary = localStorage.getItem('wazan_ai_mode') as AiModelMode | null;
+    if (primary) return primary;
+    const legacy = localStorage.getItem('tadbeer_ai_mode') as AiModelMode | null;
+    if (legacy) {
+      try {
+        localStorage.setItem('wazan_ai_mode', legacy);
+        localStorage.removeItem('tadbeer_ai_mode');
+      } catch {
+        // ignore
+      }
+      return legacy;
+    }
+    return 'balanced';
   });
   const [showModeDropdown, setShowModeDropdown] = useState(false);
 

@@ -104,7 +104,19 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [addedGoals, setAddedGoals] = useState<Record<string, boolean>>({});
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
-    return (localStorage.getItem('wazan_ai_mode') as AiModelMode) || (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
+    const primary = localStorage.getItem('wazan_ai_mode') as AiModelMode | null;
+    if (primary) return primary;
+    const legacy = localStorage.getItem('tadbeer_ai_mode') as AiModelMode | null;
+    if (legacy) {
+      try {
+        localStorage.setItem('wazan_ai_mode', legacy);
+        localStorage.removeItem('tadbeer_ai_mode');
+      } catch {
+        // ignore
+      }
+      return legacy;
+    }
+    return 'balanced';
   });
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);

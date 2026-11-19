@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   GitCompare,
   Calendar,
@@ -13,6 +13,8 @@ import {
   Layers,
   Compass,
   ArrowRight,
+  AlertCircle,
+  X,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { OverlappingRadarChart } from '../components/OverlappingRadarChart';
@@ -331,10 +333,29 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
   // Selected Area for deep drilldown in the radar comparison
   const [selectedAreaId, setSelectedAreaId] = useState<LifeAreaId>('spiritual');
 
+  // Dismissible in-app UI feedback for comparison selection limit (replaces browser alert)
+  const [periodLimitNotice, setPeriodLimitNotice] = useState<string | null>(null);
+  const noticeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const triggerLimitNotice = (message: string) => {
+    setPeriodLimitNotice(message);
+    if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    noticeTimerRef.current = setTimeout(() => {
+      setPeriodLimitNotice(null);
+    }, 4500);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (noticeTimerRef.current) clearTimeout(noticeTimerRef.current);
+    };
+  }, []);
+
   // Switch period type handler
   const handleSwitchPeriodType = (type: 'weeks' | 'months' | 'years') => {
     setPeriodType(type);
     setAnalysisResult(null);
+    setPeriodLimitNotice(null);
     if (type === 'weeks') {
       setSelectedIds(['w45', 'w46', 'w47', 'w48']);
     } else if (type === 'months') {
@@ -357,12 +378,14 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
     if (selectedIds.includes(id)) {
       if (selectedIds.length > 1) {
         setSelectedIds((prev) => prev.filter((item) => item !== id));
+        setPeriodLimitNotice(null);
       }
     } else {
       if (selectedIds.length < 5) {
         setSelectedIds((prev) => [...prev, id]);
+        setPeriodLimitNotice(null);
       } else {
-        alert('يمكنك مقارنة حتى 5 فترات كحد أقصى في آن واحد.');
+        triggerLimitNotice('يمكنك مقارنة حتى 5 فترات كحد أقصى في آن واحد.');
       }
     }
   };
@@ -491,6 +514,30 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
             المحدد: {selectedIds.length} من 5
           </span>
         </div>
+
+        {/* In-App Inline Dismissible Banner for Selection Limit (Replaces Browser Alert) */}
+        {periodLimitNotice && (
+          <div
+            role="alert"
+            aria-live="polite"
+            className="flex items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-700/60 text-amber-950 dark:text-amber-100 shadow-xs animate-fadeIn"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <AlertCircle className="w-4 h-4 text-amber-700 dark:text-amber-300 flex-shrink-0" />
+              <p className="text-xs font-bold leading-relaxed">
+                {periodLimitNotice}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPeriodLimitNotice(null)}
+              className="p-1 rounded-lg text-amber-800 dark:text-amber-300 hover:text-amber-950 dark:hover:text-white hover:bg-amber-100 dark:hover:bg-amber-900/60 transition-colors cursor-pointer flex-shrink-0"
+              aria-label="إغلاق التنبيه"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
         <div className="flex flex-wrap gap-2.5 pt-1">
           {currentPool.map((item) => {
@@ -871,6 +918,28 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
           </div>
         )}
       </div>
+
+      {/* Floating In-App Toast Notification for Period Limit */}
+      {periodLimitNotice && (
+        <div
+          role="status"
+          aria-live="assertive"
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-auto animate-fadeIn"
+        >
+          <div className="bg-[#0F172A] dark:bg-[#071318] text-white dark:text-slate-100 px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 text-xs font-black border border-amber-400/80 dark:border-amber-500/70 max-w-md">
+            <AlertCircle className="w-4 h-4 text-amber-400 dark:text-amber-300 flex-shrink-0" />
+            <span>{periodLimitNotice}</span>
+            <button
+              type="button"
+              onClick={() => setPeriodLimitNotice(null)}
+              className="p-1 rounded-lg text-slate-300 hover:text-white hover:bg-white/10 transition-colors cursor-pointer mr-1"
+              aria-label="إغلاق الإشعار"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

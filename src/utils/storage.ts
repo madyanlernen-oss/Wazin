@@ -22,7 +22,9 @@ export interface StoredAppState {
   selectedAdvisorId: LifeAreaId;
 }
 
-const STORAGE_KEY = 'lifebalance_state_v1';
+export const PRIMARY_STORAGE_KEY = 'wazan_state_v1';
+export const LEGACY_STORAGE_KEYS = ['wazan_state_v1', 'lifebalance_state_v1', 'tadbeer_state_v1'];
+const STORAGE_KEY = PRIMARY_STORAGE_KEY;
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
@@ -72,24 +74,51 @@ export const getDefaultInitialState = (): StoredAppState => {
 
 export const loadStoredState = (): StoredAppState => {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    let raw: string | null = null;
+    let sourceKey = STORAGE_KEY;
+
+    for (const key of LEGACY_STORAGE_KEYS) {
+      const val = localStorage.getItem(key);
+      if (val) {
+        raw = val;
+        sourceKey = key;
+        break;
+      }
+    }
+
     if (!raw) return getDefaultInitialState();
     const parsed = JSON.parse(raw);
-    // Reset old legacy Tadbeer profiles if found
+
+    // Reset legacy demo profiles if found
     if (
       parsed.userProfile?.name?.includes('عبدالرحمن') ||
       parsed.userProfile?.email?.toLowerCase() === 'demo@tadbeer.ai'
     ) {
       return getDefaultInitialState();
     }
-    // Migrate old demo email ending with .ai to .com
-    if (parsed.userProfile?.email?.toLowerCase() === 'demo@wazan.ai') {
+    // Migrate old demo email ending with .ai or legacy domain to demo@wazan.com
+    if (
+      parsed.userProfile?.email?.toLowerCase() === 'demo@wazan.ai' ||
+      parsed.userProfile?.email?.toLowerCase() === 'demo@tadbeer.ai'
+    ) {
       parsed.userProfile.email = 'demo@wazan.com';
     }
-    return {
+
+    const merged = {
       ...getDefaultInitialState(),
       ...parsed,
     };
+
+    // Ensure state is written to primary wazan key if loaded from a legacy key
+    if (sourceKey !== STORAGE_KEY) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+      } catch {
+        // ignore
+      }
+    }
+
+    return merged;
   } catch (e) {
     console.error('Failed to load local storage state:', e);
     return getDefaultInitialState();
@@ -101,6 +130,21 @@ export const saveStoredState = (state: StoredAppState): void => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch (e) {
     console.error('Failed to save state to localStorage:', e);
+  }
+};
+
+export const resetStoredState = (): void => {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    LEGACY_STORAGE_KEYS.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // ignore
+      }
+    });
+  } catch (e) {
+    console.error('Failed to reset storage:', e);
   }
 };
 
@@ -436,7 +480,9 @@ export const extractInsightsFromAnswers = (
   };
 };
 
-const USERS_STORAGE_KEY = 'lifebalance_users_v1';
+export const PRIMARY_USERS_KEY = 'wazan_users_v1';
+export const LEGACY_USERS_KEYS = ['wazan_users_v1', 'lifebalance_users_v1', 'tadbeer_users_v1'];
+const USERS_STORAGE_KEY = PRIMARY_USERS_KEY;
 
 export const DEMO_USER: UserProfile = {
   name: 'سعود المنصور',
@@ -449,7 +495,18 @@ export const DEMO_USER: UserProfile = {
 
 export const getStoredUsers = (): UserProfile[] => {
   try {
-    const raw = localStorage.getItem(USERS_STORAGE_KEY);
+    let raw: string | null = null;
+    let sourceKey = USERS_STORAGE_KEY;
+
+    for (const key of LEGACY_USERS_KEYS) {
+      const val = localStorage.getItem(key);
+      if (val) {
+        raw = val;
+        sourceKey = key;
+        break;
+      }
+    }
+
     const parsed: UserProfile[] = raw ? JSON.parse(raw) : [];
     const demoIdx = parsed.findIndex(
       (u) =>
@@ -465,6 +522,16 @@ export const getStoredUsers = (): UserProfile[] => {
     } else {
       parsed.push(DEMO_USER);
     }
+
+    // Standardize saved users under primary wazan key
+    if (sourceKey !== USERS_STORAGE_KEY) {
+      try {
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(parsed));
+      } catch {
+        // ignore
+      }
+    }
+
     return parsed;
   } catch (e) {
     return [DEMO_USER];
@@ -473,6 +540,14 @@ export const getStoredUsers = (): UserProfile[] => {
 
 export const saveStoredUser = (user: UserProfile): void => {
   try {
+    // Normalize demo email if legacy domain is passed
+    if (
+      user.email?.toLowerCase() === 'demo@wazan.ai' ||
+      user.email?.toLowerCase() === 'demo@tadbeer.ai'
+    ) {
+      user.email = 'demo@wazan.com';
+    }
+
     const users = getStoredUsers();
     const existingIndex = users.findIndex(
       (u) =>

@@ -14,7 +14,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { UserProfile } from '../types/lifeBalance';
-import { TadbeerLogo } from './TadbeerLogo';
+import { WazanLogo } from './WazanLogo';
 
 interface SidebarProps {
   currentScreen: 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
@@ -91,7 +91,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={() => handleSelectNav('dashboard')}
             className="cursor-pointer transition-transform hover:scale-[1.02]"
           >
-            <TadbeerLogo size="md" />
+            <WazanLogo size="md" />
           </div>
 
           <div className="flex items-center gap-1.5">

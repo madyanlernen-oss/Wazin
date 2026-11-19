@@ -38,7 +38,12 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
 
     if (!SpeechRecognition) {
-      alert('متصفحك لا يدعم خاصية التعرف الصوتي المباشر. يرجى استخدام متصفح Google Chrome أو Microsoft Edge.');
+      setStatusText('متصفحك لا يدعم التعرف الصوتي (استخدم Chrome أو Edge)');
+      setIsListening(true);
+      setTimeout(() => {
+        setIsListening(false);
+        setStatusText('جاهز للاستماع');
+      }, 3500);
       return;
     }
 
