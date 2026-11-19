@@ -9,16 +9,10 @@ import {
   Calendar,
   CalendarDays,
   Layers,
-  Bot,
   Zap,
   Clock,
   Printer,
-  Share2,
-  ArrowRight,
-  GripVertical,
   Flame,
-  Award,
-  ChevronDown,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { EisenhowerGoalItem, EisenhowerQuadrant, GoalTimeframe, LifeAreaId } from '../types/lifeBalance';

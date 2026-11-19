@@ -2,14 +2,12 @@ import React from 'react';
 import {
   LayoutDashboard,
   MessageSquare,
-  Sparkles,
   ClipboardList,
   GitCompare,
   Target,
   RotateCcw,
   LogOut,
   LogIn,
-  UserPlus,
   Sun,
   Moon,
 } from 'lucide-react';
@@ -23,7 +21,7 @@ interface NavbarProps {
   userProfile: UserProfile | null;
   onSignOut: () => void;
   onReset: () => void;
-  completedCount: number;
+  completedCount?: number;
   theme?: 'light' | 'dark';
   onToggleTheme?: () => void;
 }
@@ -35,7 +33,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   userProfile,
   onSignOut,
   onReset,
-  completedCount,
+  completedCount: _completedCount,
   theme = 'light',
   onToggleTheme,
 }) => {

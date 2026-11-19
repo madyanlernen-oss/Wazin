@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
 import {
-  Lock,
   Mail,
   User,
   Eye,
   EyeOff,
   ArrowLeft,
-  Sparkles,
   ShieldCheck,
   CheckCircle2,
   AlertCircle,
@@ -20,7 +18,6 @@ import { getStoredUsers, saveStoredUser } from '../utils/storage';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
-  onQuickDemoLogin: () => void;
   onCancel: () => void;
   initialMode?: 'login' | 'signup';
   theme?: 'light' | 'dark';
@@ -49,7 +46,6 @@ const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' })
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onLoginSuccess,
-  onQuickDemoLogin,
   onCancel,
   initialMode = 'login',
   theme = 'light',

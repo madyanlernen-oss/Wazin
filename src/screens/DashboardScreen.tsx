@@ -7,7 +7,6 @@ import {
   MessageSquare,
   ClipboardEdit,
   ArrowLeft,
-  ChevronRight,
   Plus,
   Compass,
   CheckCircle,
@@ -17,7 +16,7 @@ import {
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { RadarChart } from '../components/RadarChart';
 import { YearlyAndWeeklyAnalytics } from '../components/YearlyAndWeeklyAnalytics';
-import { AdvisorConfig, LifeAreaId, UserProfile } from '../types/lifeBalance';
+import { LifeAreaId, UserProfile } from '../types/lifeBalance';
 import { extractInsightsFromAnswers } from '../utils/storage';
 
 interface DashboardScreenProps {

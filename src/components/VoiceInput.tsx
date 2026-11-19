@@ -120,7 +120,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
           `w-12 h-12 rounded-2xl flex items-center justify-center transition-all flex-shrink-0 cursor-pointer ${
             isListening
               ? 'bg-rose-600 text-white animate-pulse shadow-md shadow-rose-600/30'
-              : 'bg-[#FAF7F2] border border-[#ded7c8] text-[#536561] hover:text-[#1b605b] hover:border-[#1b605b]'
+              : 'bg-slate-50 dark:bg-[#102033] border border-slate-200 dark:border-slate-700 text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-400 hover:border-[#0B6E72] dark:hover:border-cyan-500'
           } ${disabled ? 'opacity-40 pointer-events-none' : ''}`
         }
       >
@@ -128,7 +128,7 @@ export const VoiceInput: React.FC<VoiceInputProps> = ({
       </button>
 
       {showStatusBadge && isListening && (
-        <span className="text-[11px] font-bold text-rose-600 animate-pulse px-2 py-0.5 rounded-full bg-rose-50 border border-rose-200">
+        <span className="text-[11px] font-bold text-rose-600 dark:text-rose-300 animate-pulse px-2 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50">
           {statusText}
         </span>
       )}

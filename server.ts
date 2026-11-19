@@ -44,7 +44,7 @@ function generateLocalAgentResponse(
   userName: string,
   advisor: any,
   score: number = 0,
-  isEvaluationSession?: boolean,
+  _isEvaluationSession?: boolean,
   evaluationStep?: number
 ) {
   const msg = message.toLowerCase().trim();
@@ -991,7 +991,7 @@ ${clinicSpecialGuideline}
 });
 
 // Helper: Generate structured fallback director report when Gemini is unavailable
-function generateFallbackDirectorReport(userProfile: any, scores: any, advisorSummaries: any, focusArea: string) {
+function generateFallbackDirectorReport(_userProfile: any, scores: any, _advisorSummaries: any, _focusArea?: string) {
   const scoreEntries = Object.entries(scores || {}) as [string, number][];
   const sorted = scoreEntries.sort((a, b) => b[1] - a[1]);
   const best = sorted[0] || ['الروحي', 8];
@@ -1217,7 +1217,7 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
 // Endpoint: Area Deep-Dive & AI Action Synthesis
 app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
   try {
-    const { advisorId, advisorTitle, score, answers, goals } = req.body;
+    const { advisorTitle, score, answers, goals } = req.body;
 
     if (!apiKey) {
       const localDeepdive = {

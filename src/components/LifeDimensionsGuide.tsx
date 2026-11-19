@@ -1,19 +1,8 @@
 import React from 'react';
 import {
-  Compass,
   Sparkles,
   HelpCircle,
-  TrendingUp,
-  Heart,
-  Briefcase,
-  DollarSign,
-  UserCheck,
-  BookOpen,
-  Home,
-  Users,
-  Activity,
   CheckCircle2,
-  ArrowDown,
   Scale,
 } from 'lucide-react';
 import wheelImage from '../assets/images/wheel_of_life_dimensions_1794404528259.jpg';

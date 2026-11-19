@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Navbar } from './components/Navbar';
 import { Sidebar } from './components/Sidebar';
 import { TadbeerLogo } from './components/TadbeerLogo';
@@ -98,17 +98,6 @@ export default function App() {
   const handleNavigateToAuth = (mode: 'login' | 'signup') => {
     setAuthMode(mode);
     setActiveScreen('login');
-  };
-
-  // Handler: Start Onboarding with fresh profile
-  const handleStartOnboarding = (profile: UserProfile) => {
-    saveStoredUser(profile);
-    const fresh = getDefaultInitialState();
-    setAppState({
-      ...fresh,
-      userProfile: profile,
-    });
-    setActiveScreen('onboarding');
   };
 
   // Handler: Load Sample Profile
@@ -309,7 +298,6 @@ export default function App() {
             <AuthScreen
               initialMode={authMode}
               onLoginSuccess={handleLoginSuccess}
-              onQuickDemoLogin={handleLoadSample}
               onCancel={() => setActiveScreen('landing')}
               theme={theme}
             />

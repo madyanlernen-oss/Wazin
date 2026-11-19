@@ -4,14 +4,11 @@ import { ReasoningBox } from '../components/ReasoningBox';
 import {
   Send,
   Sparkles,
-  Bot,
   User,
   ArrowRight,
   Plus,
   Check,
-  Compass,
   Lightbulb,
-  HelpCircle,
   Loader2,
   ChevronDown,
   Zap,
@@ -105,14 +102,14 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [addedGoals, setAddedGoals] = useState<Record<string, boolean>>({});
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
-    return (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
+    return (localStorage.getItem('wazan_ai_mode') as AiModelMode) || (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
   });
   const [showModeDropdown, setShowModeDropdown] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const handleSelectAiMode = (mode: AiModelMode) => {
     setAiMode(mode);
-    localStorage.setItem('tadbeer_ai_mode', mode);
+    localStorage.setItem('wazan_ai_mode', mode);
   };
 
   const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];

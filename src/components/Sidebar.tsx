@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   LayoutDashboard,
   MessageSquare,
-  Sparkles,
   ClipboardList,
   GitCompare,
   Target,

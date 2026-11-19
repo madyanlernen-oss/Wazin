@@ -1,25 +1,21 @@
 import React from 'react';
 import {
   Sparkles,
-  ArrowLeft,
   Users,
   BarChart3,
-  LogIn,
-  UserPlus,
   Play,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LifeDimensionsGuide } from '../components/LifeDimensionsGuide';
-import { TadbeerEmblem } from '../components/TadbeerLogo';
 
 interface LandingScreenProps {
-  onLoadSample: () => void;
+  onLoadSample?: () => void;
   onNavigateToAuth: (mode: 'login' | 'signup') => void;
   theme?: 'light' | 'dark';
 }
 
 export const LandingScreen: React.FC<LandingScreenProps> = ({
-  onLoadSample,
+  onLoadSample: _onLoadSample,
   onNavigateToAuth,
   theme = 'light',
 }) => {

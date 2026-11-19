@@ -12,11 +12,8 @@ import {
   User,
   Lightbulb,
   ChevronDown,
-  Lock,
   MessageSquare,
-  ArrowRight,
   ArrowLeft,
-  Compass,
   RotateCcw,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
@@ -25,7 +22,6 @@ import {
   calculateScoreForAdvisor,
   extractInsightsFromAnswers,
   isAdvisorWeeklyLocked,
-  getDaysUntilNextUnlock,
 } from '../utils/storage';
 import { AI_MODES, AiModelMode } from './AdvisorChatScreen';
 
@@ -57,7 +53,7 @@ export function getClientAdvisorResponse(
   text: string,
   currentStep: number,
   totalQuestions: number,
-  userScore: number,
+  _userScore?: number,
   currentQ?: any,
   isExplicitAnswer?: boolean
 ) {
@@ -262,7 +258,7 @@ export function getClientAdvisorResponse(
 
     return {
       isQuestionOrInquiry: false,
-      reasoning: `تحليل خيار المستفيد في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: تفكيك المعطى وربطه بمنهجية تدبير لبناء عادات مستدامة.`,
+      reasoning: `تحليل خيار المستفيد في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: تفكيك المعطى وربطه بمنهجية وازن لبناء عادات مستدامة.`,
       summary: `رصد إجابة المحطة ${currentStep + 1} من ${totalQuestions} بنجاح.`,
       advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات اليومية المستدامة.`,
       reply: `سجلت إجابتك بوعي وتقدير تام يا صديقنا؛ هذا الوضوح يمنحنا رؤية أدق لتوجيه مسارك نحو أقصى درجات الاتزان.`,
@@ -300,13 +296,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [showCelebration, setShowCelebration] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
-    return (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
+    return (localStorage.getItem('wazan_ai_mode') as AiModelMode) || (localStorage.getItem('tadbeer_ai_mode') as AiModelMode) || 'balanced';
   });
   const [showModeDropdown, setShowModeDropdown] = useState(false);
 
   const handleSelectAiMode = (mode: AiModelMode) => {
     setAiMode(mode);
-    localStorage.setItem('tadbeer_ai_mode', mode);
+    localStorage.setItem('wazan_ai_mode', mode);
   };
 
   const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
@@ -326,7 +322,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // Determine if current advisor is completed / locked for this week
   const isCompleted = completedAdvisors.includes(currentAdvisor.id);
   const isLocked = isCompleted || isAdvisorWeeklyLocked(currentAdvisor.id, completedDates);
-  const daysRemaining = getDaysUntilNextUnlock(completedDates?.[currentAdvisor.id]) || 7;
 
   // All 8 domains completed state
   const isAllCompleted = completedAdvisors.length >= 8;

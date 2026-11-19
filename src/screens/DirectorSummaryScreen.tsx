@@ -1,20 +1,15 @@
 import React, { useState } from 'react';
 import {
   Sparkles,
-  Compass,
   ArrowRight,
   TrendingUp,
   AlertOctagon,
   Calendar,
-  CheckCircle2,
   RefreshCw,
   Copy,
   Printer,
-  ShieldCheck,
   Check,
-  Award,
   Zap,
-  Target,
   Layers,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
@@ -69,6 +64,7 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
         body: JSON.stringify({
           userProfile,
           scores,
+          answers,
           advisorSummaries,
           focusArea: userProfile?.currentFocus,
         }),

@@ -1,18 +1,11 @@
 import React, { useState } from 'react';
 import {
   Calendar,
-  TrendingUp,
   BarChart3,
   CheckCircle2,
   Sparkles,
   ArrowUpRight,
-  ArrowDownRight,
-  Activity,
-  Layers,
-  Award,
-  ChevronRight,
   CalendarDays,
-  Target,
   Zap,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
@@ -331,7 +324,7 @@ interface YearlyAndWeeklyAnalyticsProps {
   theme?: 'light' | 'dark';
 }
 
-export const YearlyAndWeeklyAnalytics: React.FC<YearlyAndWeeklyAnalyticsProps> = ({ theme = 'light' }) => {
+export const YearlyAndWeeklyAnalytics: React.FC<YearlyAndWeeklyAnalyticsProps> = ({ theme: _theme = 'light' }) => {
   const [selectedView, setSelectedView] = useState<'yearly' | 'weekly'>('yearly');
   const [activeMonthIdx, setActiveMonthIdx] = useState<number>(ONE_YEAR_MONTHLY_HISTORY.length - 1);
 

@@ -4,24 +4,18 @@ import {
   Calendar,
   CalendarDays,
   Sparkles,
-  TrendingUp,
-  TrendingDown,
   BarChart3,
   Bot,
   Loader2,
   Check,
-  CheckCircle2,
-  AlertTriangle,
-  Lightbulb,
   ArrowUpRight,
   ArrowDownRight,
   Layers,
-  Zap,
-  ChevronRight,
   Compass,
+  ArrowRight,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
-import { OverlappingRadarChart, ComparisonPeriod } from '../components/OverlappingRadarChart';
+import { OverlappingRadarChart } from '../components/OverlappingRadarChart';
 import { LifeAreaId, UserProfile } from '../types/lifeBalance';
 
 // Historical Years Data
@@ -392,7 +386,8 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
       const isPositive = parseFloat(diff) >= 0;
 
       const dynamicReport = `
-### 📑 تقرير التحليل الذكي المقارن بين (${selectedItems.map((i) => i.name).join(' و ')}):
+### 📑 تقرير التحليل الذكي المقارن عبر ${typeLabel} المختارة ${userProfile?.name ? `(للمستفيد: ${userProfile.name})` : ''}:
+الفترات: (${selectedItems.map((i) => i.name).join(' و ')})
 
 1. **المنحنى العام للتحول:**
    - رصدنا نمواً بمقدار **${isPositive ? `+${diff}` : diff} درجة** على مؤشر التوازن العام بين بداية الفترة (${firstItem.name}) ونهايتها (${lastItem.name}).
@@ -419,6 +414,14 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
       {/* Top Banner */}
       <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6">
         <div>
+          <button
+            type="button"
+            onClick={onNavigateToDashboard}
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline mb-3 cursor-pointer"
+          >
+            <ArrowRight className="w-3.5 h-3.5" />
+            <span>العودة للوحة التحكم</span>
+          </button>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1b605b]/10 text-[#1b605b] text-xs font-bold mb-2">
             <GitCompare className="w-3.5 h-3.5 text-[#bd9240]" />
             أداة المقارنة التراكمية

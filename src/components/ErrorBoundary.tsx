@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
 
 interface Props {
@@ -21,7 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error caught by Tadbeer ErrorBoundary:', error, errorInfo);
+    console.error('Uncaught error caught by ErrorBoundary:', error, errorInfo);
   }
 
   private handleReset = () => {
@@ -37,19 +37,19 @@ export class ErrorBoundary extends Component<Props, State> {
   public render() {
     if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-[#FAF7F2] flex items-center justify-center p-4 font-sans text-right" dir="rtl">
-          <div className="bg-white border border-[#ded7c8] shadow-xl rounded-3xl p-6 sm:p-8 max-w-md w-full text-center space-y-5">
-            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-700">
+        <div className="min-h-screen bg-[#F4F8F7] dark:bg-[#071318] flex items-center justify-center p-4 font-sans text-right transition-colors" dir="rtl">
+          <div className="bg-white dark:bg-[#112028] border border-slate-200/90 dark:border-slate-800 shadow-xl rounded-3xl p-6 sm:p-8 max-w-md w-full text-center space-y-5 transition-colors">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 flex items-center justify-center text-amber-700 dark:text-[#FBBF24]">
               <AlertTriangle className="w-8 h-8" />
             </div>
 
             <div className="space-y-2">
-              <h2 className="text-xl font-black text-[#1d2e2b]">نعتذر، حدث خطأ غير متوقع</h2>
-              <p className="text-xs text-[#536561] leading-relaxed">
+              <h2 className="text-xl font-black text-[#0F172A] dark:text-white">نعتذر، حدث خطأ غير متوقع</h2>
+              <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
                 تم التقاط الخطأ بأمان للحفاظ على استقرار التطبيق وحماية بياناتك. يمكنك إعادة تحميل الصفحة للعودة فوراً.
               </p>
               {this.state.error?.message && (
-                <div className="p-2.5 bg-rose-50 border border-rose-100 rounded-xl text-[11px] text-rose-800 text-left font-mono break-all" dir="ltr">
+                <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-100 dark:border-rose-900/50 rounded-xl text-[11px] text-rose-800 dark:text-rose-300 text-left font-mono break-all" dir="ltr">
                   {this.state.error.message}
                 </div>
               )}
@@ -59,7 +59,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <button
                 type="button"
                 onClick={this.handleReset}
-                className="flex-1 py-3 px-4 rounded-xl bg-[#1b605b] hover:bg-[#154d49] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="flex-1 py-3 px-4 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] text-white text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <RefreshCw className="w-4 h-4" />
                 <span>إعادة تحديث الصفحة</span>
@@ -67,7 +67,7 @@ export class ErrorBoundary extends Component<Props, State> {
               <button
                 type="button"
                 onClick={this.handleGoHome}
-                className="py-3 px-4 rounded-xl bg-[#FAF7F2] hover:bg-[#f0eae0] text-[#1d2e2b] border border-[#ded7c8] text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                className="py-3 px-4 rounded-xl bg-slate-50 hover:bg-slate-100 dark:bg-[#0B161C] dark:hover:bg-[#162734] text-[#334155] dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 <Home className="w-4 h-4" />
                 <span>الرئيسية</span>
