@@ -42,7 +42,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   // If on the dedicated login page, show ONLY the program name and logo + theme toggle!
   if (currentScreen === 'login') {
     return (
-      <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-[#eae3d5] dark:border-slate-800 shadow-xs transition-colors">
+      <header className="sticky top-0 z-40 bg-white/92 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
           <div
             onClick={() => onNavigate('landing')}
@@ -55,7 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <button
               type="button"
               onClick={onToggleTheme}
-              className="p-2.5 rounded-xl border border-[#eae3d5] dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#1b605b] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
+              className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#0B6E72] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
               title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
               aria-label="تبديل الوضع الليلي والنهاري"
             >
@@ -71,10 +71,10 @@ export const Navbar: React.FC<NavbarProps> = ({
     );
   }
 
-  // If on landing page and not signed in: show brand on right, theme toggle and "تسجيل الدخول" in top bar
+  // If on landing page and not signed in: show brand on right, theme toggle and secondary "تسجيل الدخول" in top bar
   if (!userProfile) {
     return (
-      <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-[#eae3d5] dark:border-slate-800 shadow-xs transition-colors">
+      <header className="sticky top-0 z-40 bg-white/92 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs transition-colors">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
           {/* Brand Logo & Name */}
           <div
@@ -84,13 +84,13 @@ export const Navbar: React.FC<NavbarProps> = ({
             <TadbeerLogo size="md" />
           </div>
 
-          {/* Top Actions: Theme Switcher & Login Button */}
-          <div className="flex items-center gap-2.5">
+          {/* Top Actions: Theme Switcher & Secondary Ghost Login Button */}
+          <div className="flex items-center gap-3">
             {onToggleTheme && (
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className="p-2.5 rounded-xl border border-[#eae3d5] dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#1b605b] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
+                className="p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#0B6E72] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
                 title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
                 aria-label="تبديل الوضع الليلي والنهاري"
               >
@@ -102,14 +102,15 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+            {/* Secondary CTA: Clean outline pill that defers prominence to the hero primary button */}
             <button
               onClick={() => {
                 if (onNavigateToAuth) onNavigateToAuth('login');
                 else onNavigate('login');
               }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#0A757E] hover:bg-[#075359] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-xs font-black transition-all shadow-md shadow-[#0A757E]/20 dark:shadow-cyan-900/40 border border-white/30 dark:border-cyan-400/25 hover:scale-105 active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 px-4 sm:px-5 py-2 rounded-full bg-transparent hover:bg-[#0B6E72]/10 dark:hover:bg-cyan-950/40 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/30 dark:border-cyan-500/35 hover:border-[#0B6E72]/60 dark:hover:border-cyan-400/60 text-xs sm:text-sm font-bold transition-all hover:scale-105 active:scale-95 cursor-pointer shadow-2xs"
             >
-              <LogIn className="w-3.5 h-3.5 text-cyan-200 dark:text-cyan-300" />
+              <LogIn className="w-3.5 h-3.5 text-[#0B6E72] dark:text-cyan-400" />
               <span>تسجيل الدخول</span>
             </button>
           </div>
@@ -120,7 +121,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   // Inside app when user is logged in
   return (
-    <header className="sticky top-0 z-40 bg-[#FAF7F2]/95 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-[#eae3d5] dark:border-slate-800 shadow-xs transition-colors">
+    <header className="sticky top-0 z-40 bg-white/92 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-xs transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 flex items-center justify-between">
         {/* Brand Logo */}
         <div

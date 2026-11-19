@@ -26,8 +26,8 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   const isDark = theme === 'dark';
 
   return (
-    <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-[#E6ECEB] dark:bg-[#07111c] transition-colors duration-300">
-      {/* 4-Corner Rich Ambient Mesh Gradient with Ultra-Slow Ambient Drift Animation */}
+    <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-[#F4F8F7] dark:bg-[#07111c] transition-colors duration-300">
+      {/* 4-Corner Rich Ambient Mesh Gradient with Ultra-Slow Ambient Drift Animation (Airy Light & Deep Dark) */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-500 animate-ambient-drift"
         style={{
@@ -40,30 +40,30 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               radial-gradient(circle 850px at 100% 68%, #091728 0%, #0e223d 36%, transparent 72%)
             `
             : `
-              radial-gradient(ellipse 65% 52% at 50% 36%, #E6ECEB 0%, #DFE6E5 38%, rgba(220, 228, 229, 0.55) 72%, transparent 100%),
-              radial-gradient(circle 850px at 0% 0%, #16424a 0%, #205661 30%, transparent 68%),
-              radial-gradient(circle 850px at 100% 0%, #7e6c96 0%, #9482ac 32%, transparent 68%),
-              radial-gradient(circle 850px at 0% 68%, #c98880 0%, #d89b93 32%, transparent 68%),
-              radial-gradient(circle 850px at 100% 68%, #dcd3c4 0%, #e8e0d3 36%, transparent 72%)
+              radial-gradient(ellipse 70% 55% at 50% 36%, #FAFDFD 0%, #F0F6F5 45%, rgba(240, 246, 245, 0.65) 75%, transparent 100%),
+              radial-gradient(circle 850px at 0% 0%, rgba(11, 110, 114, 0.10) 0%, rgba(11, 110, 114, 0.04) 35%, transparent 68%),
+              radial-gradient(circle 850px at 100% 0%, rgba(147, 112, 190, 0.10) 0%, rgba(147, 112, 190, 0.04) 35%, transparent 68%),
+              radial-gradient(circle 850px at 0% 68%, rgba(20, 184, 166, 0.07) 0%, transparent 65%),
+              radial-gradient(circle 850px at 100% 68%, rgba(126, 108, 150, 0.07) 0%, transparent 65%)
             `,
         }}
       />
 
       {/* Hero Ambient Wrapper with Glowing Central Halo and Orbital Wireframe Rings */}
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-16">
-        {/* Main Centerpiece Frame */}
-        <div className="relative max-w-4xl mx-auto pt-6 pb-12 px-6 sm:px-12 text-center">
+        {/* Main Centerpiece Frame with Generous Breathing Room */}
+        <div className="relative max-w-4xl mx-auto pt-8 pb-14 px-6 sm:px-14 lg:px-16 text-center">
           {/* Luminous Oval Halo & Delicate Concentric Orbital Wireframes (SVG) */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            {/* Central Glassmorphic Frame (Semi-translucent 32% allowing background atmosphere to breathe through) */}
+            {/* Central Glassmorphic Frame (88%-92% Soft Ivory/White in Light Mode for WCAG AA Clarity) */}
             <div
               className={`w-full h-full max-w-3xl rounded-[3rem] border transition-all duration-500 ${
                 isDark
-                  ? 'border-cyan-500/25 shadow-[0_16px_50px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-md'
-                  : 'border-white/50 shadow-[0_14px_45px_rgba(10,34,38,0.08),inset_0_1px_2px_rgba(255,255,255,0.7)] backdrop-blur-md'
+                  ? 'border-cyan-500/25 shadow-[0_20px_50px_rgba(0,0,0,0.5),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-md'
+                  : 'border-slate-200/90 shadow-[0_16px_45px_rgba(15,23,42,0.05),inset_0_1px_2px_rgba(255,255,255,0.95)] backdrop-blur-md'
               }`}
               style={{
-                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.45)' : 'rgba(255, 255, 255, 0.32)',
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.65)' : 'rgba(255, 255, 255, 0.90)',
               }}
             />
 
@@ -81,7 +81,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                   cy="250"
                   rx="420"
                   ry="210"
-                  stroke={isDark ? "rgba(6, 182, 212, 0.30)" : "rgba(10, 117, 126, 0.22)"}
+                  stroke={isDark ? "rgba(34, 211, 238, 0.28)" : "rgba(11, 110, 114, 0.22)"}
                   strokeWidth="1.2"
                   strokeDasharray="4 6"
                 />
@@ -95,7 +95,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                     cy="250"
                     rx="390"
                     ry="190"
-                    stroke={isDark ? "rgba(168, 85, 247, 0.32)" : "rgba(126, 108, 150, 0.25)"}
+                    stroke={isDark ? "rgba(168, 85, 247, 0.28)" : "rgba(139, 92, 246, 0.22)"}
                     strokeWidth="1.5"
                   />
                 </g>
@@ -117,38 +117,38 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               {/* 5-6 Subtle Twinkling Micro-Stars along outer orbital paths (far from central text) */}
               {/* Micro-Star 1: Upper-left outer orbit */}
               <g className="animate-star-1" transform="translate(130, 150)">
-                <circle cx="0" cy="0" r="2.2" fill={isDark ? "#00e5ff" : "#0A757E"} />
-                <circle cx="0" cy="0" r="5" fill={isDark ? "rgba(6,182,212,0.2)" : "rgba(10,117,126,0.15)"} />
+                <circle cx="0" cy="0" r="2.2" fill={isDark ? "#22d3ee" : "#0B6E72"} />
+                <circle cx="0" cy="0" r="5" fill={isDark ? "rgba(34,211,238,0.2)" : "rgba(11,110,114,0.12)"} />
               </g>
 
               {/* Micro-Star 2: Upper-right outer orbit */}
               <g className="animate-star-2" transform="translate(770, 135)">
                 <circle cx="0" cy="0" r="2.4" fill={isDark ? "#c084fc" : "#8b5cf6"} />
-                <circle cx="0" cy="0" r="5.5" fill={isDark ? "rgba(192,132,252,0.2)" : "rgba(139,92,246,0.15)"} />
+                <circle cx="0" cy="0" r="5.5" fill={isDark ? "rgba(192,132,252,0.2)" : "rgba(139,92,246,0.12)"} />
               </g>
 
               {/* Micro-Star 3: Far-right mid orbit */}
               <g className="animate-star-3" transform="translate(830, 260)">
-                <circle cx="0" cy="0" r="2" fill={isDark ? "#38bdf8" : "#0A757E"} />
-                <circle cx="0" cy="0" r="4.5" fill={isDark ? "rgba(56,189,248,0.2)" : "rgba(10,117,126,0.15)"} />
+                <circle cx="0" cy="0" r="2" fill={isDark ? "#38bdf8" : "#0B6E72"} />
+                <circle cx="0" cy="0" r="4.5" fill={isDark ? "rgba(56,189,248,0.2)" : "rgba(11,110,114,0.12)"} />
               </g>
 
               {/* Micro-Star 4: Far-left lower orbit */}
               <g className="animate-star-4" transform="translate(80, 310)">
-                <circle cx="0" cy="0" r="2.2" fill={isDark ? "#00e5ff" : "#0A757E"} />
-                <circle cx="0" cy="0" r="5" fill={isDark ? "rgba(6,182,212,0.2)" : "rgba(10,117,126,0.15)"} />
+                <circle cx="0" cy="0" r="2.2" fill={isDark ? "#22d3ee" : "#0B6E72"} />
+                <circle cx="0" cy="0" r="5" fill={isDark ? "rgba(34,211,238,0.2)" : "rgba(11,110,114,0.12)"} />
               </g>
 
               {/* Micro-Star 5: Top-center outer arch */}
               <g className="animate-star-5" transform="translate(280, 75)">
-                <circle cx="0" cy="0" r="1.8" fill={isDark ? "#c084fc" : "#7e6c96"} />
-                <circle cx="0" cy="0" r="4" fill={isDark ? "rgba(192,132,252,0.2)" : "rgba(126,108,150,0.15)"} />
+                <circle cx="0" cy="0" r="1.8" fill={isDark ? "#c084fc" : "#8b5cf6"} />
+                <circle cx="0" cy="0" r="4" fill={isDark ? "rgba(192,132,252,0.2)" : "rgba(139,92,246,0.12)"} />
               </g>
 
               {/* Micro-Star 6: Lower-right outer edge */}
               <g className="animate-star-6" transform="translate(630, 425)">
-                <circle cx="0" cy="0" r="2" fill={isDark ? "#22d3ee" : "#0A757E"} />
-                <circle cx="0" cy="0" r="4.5" fill={isDark ? "rgba(34,211,238,0.2)" : "rgba(10,117,126,0.15)"} />
+                <circle cx="0" cy="0" r="2" fill={isDark ? "#22d3ee" : "#0B6E72"} />
+                <circle cx="0" cy="0" r="4.5" fill={isDark ? "rgba(34,211,238,0.2)" : "rgba(11,110,114,0.12)"} />
               </g>
 
               {/* Breathing & Rotating Multi-Ray Accent Sparkle */}
@@ -158,22 +158,22 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                     cx="0"
                     cy="0"
                     r="20"
-                    fill={isDark ? "rgba(6, 182, 212, 0.16)" : "rgba(10, 117, 126, 0.14)"}
+                    fill={isDark ? "rgba(34, 211, 238, 0.16)" : "rgba(11, 110, 114, 0.12)"}
                   />
                   <circle
                     cx="0"
                     cy="0"
                     r="12"
-                    fill={isDark ? "#ffffff" : "#0A757E"}
+                    fill={isDark ? "#ffffff" : "#0B6E72"}
                     opacity="0.95"
-                    filter={isDark ? "drop-shadow(0 0 8px rgba(6, 182, 212, 0.65))" : "drop-shadow(0 0 8px rgba(10, 117, 126, 0.5))"}
+                    filter={isDark ? "drop-shadow(0 0 8px rgba(34, 211, 238, 0.65))" : "drop-shadow(0 0 8px rgba(11, 110, 114, 0.4))"}
                   />
                   <line
                     x1="-30"
                     y1="0"
                     x2="30"
                     y2="0"
-                    stroke={isDark ? "#ffffff" : "#0A757E"}
+                    stroke={isDark ? "#ffffff" : "#0B6E72"}
                     strokeWidth="2.2"
                     opacity={isDark ? 0.85 : 0.9}
                   />
@@ -182,7 +182,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                     y1="-30"
                     x2="0"
                     y2="30"
-                    stroke={isDark ? "#ffffff" : "#0A757E"}
+                    stroke={isDark ? "#ffffff" : "#0B6E72"}
                     strokeWidth="2.2"
                     opacity={isDark ? 0.85 : 0.9}
                   />
@@ -191,7 +191,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                     y1="-18"
                     x2="18"
                     y2="18"
-                    stroke={isDark ? "rgba(0, 229, 255, 0.65)" : "rgba(10, 117, 126, 0.65)"}
+                    stroke={isDark ? "rgba(34, 211, 238, 0.65)" : "rgba(11, 110, 114, 0.65)"}
                     strokeWidth="1.5"
                   />
                   <line
@@ -199,7 +199,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                     y1="-18"
                     x2="-18"
                     y2="18"
-                    stroke={isDark ? "rgba(0, 229, 255, 0.65)" : "rgba(10, 117, 126, 0.65)"}
+                    stroke={isDark ? "rgba(34, 211, 238, 0.65)" : "rgba(11, 110, 114, 0.65)"}
                     strokeWidth="1.5"
                   />
                 </g>
@@ -207,37 +207,36 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
             </svg>
           </div>
 
-          {/* Foreground Hero Content (Completely static and crisp) */}
-          <div className="relative z-10 space-y-6">
+          {/* Foreground Hero Content (Completely static, crisp, and high-contrast) */}
+          <div className="relative z-10 space-y-7">
             {/* Top Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/75 dark:bg-slate-900/85 border border-[#0A757E]/25 dark:border-cyan-500/25 shadow-xs text-xs sm:text-sm font-extrabold text-[#092226] dark:text-cyan-300 transition-colors backdrop-blur-md">
-              <span className="text-[#0A757E] dark:text-cyan-400">✳️</span>
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/95 dark:bg-slate-900/85 border border-[#0B6E72]/20 dark:border-cyan-500/25 shadow-xs text-xs sm:text-sm font-extrabold text-[#0F172A] dark:text-cyan-300 transition-colors backdrop-blur-md">
+              <span className="text-[#0B6E72] dark:text-cyan-400">✳️</span>
               <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
             </div>
 
-            {/* Centerpiece Bold Headlines */}
-            <div className="space-y-1.5 pt-2">
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#092226] dark:text-white leading-tight transition-colors">
+            {/* Centerpiece Bold Headlines (Deep Slate #0F172A & Deep Teal #0B6E72) */}
+            <div className="space-y-2 pt-1">
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0F172A] dark:text-white leading-tight transition-colors">
                 لا تعش في جانب واحد..
               </h1>
-              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0A757E] dark:text-cyan-400 dark:drop-shadow-[0_0_30px_rgba(6,182,212,0.45)] leading-tight transition-colors">
+              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0B6E72] dark:text-cyan-400 dark:drop-shadow-[0_0_24px_rgba(34,211,238,0.35)] leading-tight transition-colors">
                 وازن حياتك كاملة
               </h2>
             </div>
 
-            {/* Legible Paragraph */}
-            <p className="text-base sm:text-lg text-[#253739] dark:text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal pt-1 transition-colors">
-              منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب
-              وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
+            {/* Legible Body Paragraph (Dark Slate #334155 for >= 4.5:1 AA Contrast) */}
+            <p className="text-base sm:text-lg text-[#334155] dark:text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal pt-2 transition-colors">
+              منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
             </p>
 
-            {/* CTA Button */}
-            <div className="pt-3">
+            {/* Primary Hero Conversion CTA Button */}
+            <div className="pt-4">
               <button
                 onClick={() => onNavigateToAuth('login')}
-                className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-[#0A757E] hover:bg-[#075359] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-sm sm:text-base font-black shadow-xl shadow-teal-950/20 dark:shadow-cyan-900/40 border border-white/30 dark:border-cyan-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-3 px-9 py-4 rounded-full bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-base font-black shadow-lg shadow-[#0B6E72]/25 dark:shadow-cyan-950/50 border border-teal-600/30 dark:border-cyan-400/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
-                <span className="text-cyan-200 dark:text-cyan-300 font-bold">&larr;</span>
+                <span className="text-cyan-200 font-bold text-lg">&larr;</span>
                 <span>تسجيل الدخول إلى وزان</span>
               </button>
             </div>
@@ -247,20 +246,20 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         {/* Explainer Video Slot (حاوية الفيديو التوضيحي التعريفي لمنصة وازن) */}
         <div className="relative max-w-4xl mx-auto space-y-5 text-center">
           <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/70 dark:bg-slate-900/80 border border-[#eae3d5] dark:border-cyan-500/25 text-xs font-bold text-[#0A757E] dark:text-cyan-300 shadow-xs backdrop-blur-md">
-              <span className="text-amber-500">🎬</span>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 dark:bg-slate-900/80 border border-slate-200 dark:border-cyan-500/25 text-xs font-bold text-[#0B6E72] dark:text-cyan-300 shadow-xs backdrop-blur-md">
+              <span className="text-[#8A5A00] dark:text-amber-400">🎬</span>
               <span>فيديو تعريفي لمنظومة وازن</span>
             </div>
-            <h3 className="text-2xl sm:text-3xl font-black text-[#092226] dark:text-white">
+            <h3 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white">
               شاهد كيف تُعيد "وازن" ترتيب بوصلتك الحياتية في دقائق
             </h3>
-            <p className="text-xs sm:text-sm text-[#536561] dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+            <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
               جولة مرئية تستعرض رحلتك من التقييم الأسبوعي مع المستشارين الثمانية إلى لوحة تحكم عجلة الحياة ومصفوفة التركيز اليومي.
             </p>
           </div>
 
           {/* Video Player Frame Container with Design System Rounded Corners and Dark Glass Frame */}
-          <div className="relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border border-[#eae3d5] dark:border-cyan-500/25 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md shadow-2xl transition-all duration-500 group">
+          <div className="relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border border-slate-200/90 dark:border-cyan-500/25 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md shadow-2xl transition-all duration-500 group">
             {/* 16:9 Aspect Ratio Frame */}
             <div className="relative aspect-video w-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#0c242c] via-[#091823] to-[#1c122e]">
               {/* Abstract Platform Screen Preview Background / Subtle Visual Grid */}
@@ -281,7 +280,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               <button
                 type="button"
                 onClick={() => onNavigateToAuth('login')}
-                className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0A757E] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(6,182,212,0.45)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] cursor-pointer"
+                className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0B6E72] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(11,110,114,0.45)] dark:shadow-[0_0_35px_rgba(6,182,212,0.45)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(11,110,114,0.6)] dark:group-hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] cursor-pointer"
                 aria-label="تشغيل الفيديو التعريفي"
               >
                 <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform" />
@@ -310,8 +309,8 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         {/* 8 Advisors Section */}
         <div className="pt-6">
           <div className="text-center mb-8">
-            <h2 className="text-2xl font-black text-[#1d2e2b] dark:text-white transition-colors">المستشارون الثمانية وعوالم التوازن</h2>
-            <p className="text-sm text-[#536561] dark:text-slate-400 mt-1 transition-colors">
+            <h2 className="text-2xl font-black text-[#0F172A] dark:text-white transition-colors">المستشارون الثمانية وعوالم التوازن</h2>
+            <p className="text-sm text-[#334155] dark:text-slate-400 mt-1 transition-colors">
               لكل جانب من جوانب حياتك مستشار خبير بهويته ومنهجه المخصص لمساعدتك
             </p>
           </div>
@@ -320,7 +319,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
             {ADVISORS_LIST.map((advisor) => (
               <div
                 key={advisor.id}
-                className="group relative bg-white dark:bg-[#0c1827] hover:bg-[#fcfaf6] dark:hover:bg-[#102033] border border-[#eae3d5] dark:border-slate-800 hover:border-[#ded7c8] dark:hover:border-cyan-800/50 rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 shadow-xs hover:shadow-md"
+                className="group relative bg-white dark:bg-[#0c1827] hover:bg-[#F8FAFA] dark:hover:bg-[#102033] border border-slate-200/90 dark:border-slate-800 hover:border-slate-300 dark:hover:border-cyan-800/50 rounded-2xl p-5 transition-all duration-300 hover:-translate-y-1 shadow-xs hover:shadow-md"
               >
                 <div className="flex items-start justify-between">
                   <div
@@ -342,20 +341,20 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 </div>
 
                 <div className="mt-4">
-                  <h3 className="font-extrabold text-[#1d2e2b] dark:text-white text-base transition-colors">{advisor.name}</h3>
+                  <h3 className="font-extrabold text-[#0F172A] dark:text-white text-base transition-colors">{advisor.name}</h3>
                   <p className="text-xs font-semibold" style={{ color: advisor.themeColor }}>
                     {advisor.title}
                   </p>
-                  <p className="text-xs text-[#536561] dark:text-slate-400 mt-2 line-clamp-2 leading-relaxed transition-colors">
+                  <p className="text-xs text-[#334155] dark:text-slate-400 mt-2 line-clamp-2 leading-relaxed transition-colors">
                     {advisor.role}
                   </p>
                 </div>
 
-                <div className="mt-4 pt-3 border-t border-[#f0eae0] dark:border-slate-800 flex items-center justify-between text-[11px] text-[#7a8c88] dark:text-slate-500">
+                <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-[#64748B] dark:text-slate-500">
                   <span>مستشار ذكي متخصص</span>
                   <button
                     onClick={() => onNavigateToAuth('login')}
-                    className="text-[#1b605b] dark:text-cyan-400 font-bold group-hover:translate-x-[-2px] transition-transform flex items-center gap-1"
+                    className="text-[#0B6E72] dark:text-cyan-400 font-bold group-hover:translate-x-[-2px] transition-transform flex items-center gap-1 cursor-pointer"
                   >
                     <span>ابدأ الآن</span>
                     <span>&larr;</span>

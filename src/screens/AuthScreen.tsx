@@ -218,7 +218,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] p-4 sm:p-6 lg:p-8 py-10 relative overflow-hidden bg-[#E6ECEB] dark:bg-[#07111c] flex items-center justify-center transition-colors duration-300">
+    <div className="min-h-[calc(100vh-4.5rem)] p-4 sm:p-6 lg:p-8 py-10 relative overflow-hidden bg-[#F4F8F7] dark:bg-[#07111c] flex items-center justify-center transition-colors duration-300">
       {/* Subtle Ambient Mesh Halos matching landing palette */}
       <div
         className="absolute inset-0 pointer-events-none opacity-40 transition-opacity"
@@ -229,8 +229,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               radial-gradient(circle 600px at 80% 80%, rgba(168, 85, 247, 0.12) 0%, transparent 70%)
             `
             : `
-              radial-gradient(circle 600px at 15% 15%, rgba(188, 226, 224, 0.45) 0%, transparent 70%),
-              radial-gradient(circle 600px at 85% 85%, rgba(224, 216, 238, 0.45) 0%, transparent 70%)
+              radial-gradient(circle 600px at 15% 15%, rgba(11, 110, 114, 0.08) 0%, transparent 70%),
+              radial-gradient(circle 600px at 85% 85%, rgba(147, 112, 190, 0.08) 0%, transparent 70%)
             `,
         }}
       />
@@ -238,29 +238,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       <div className="max-w-md w-full mx-auto relative z-10 space-y-6">
         {/* Minimal, Focused Header without Duplicate Logo Stack */}
         <div className="text-center space-y-1.5">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/80 dark:bg-slate-900/80 border border-[#eae3d5] dark:border-slate-800 text-xs font-bold text-[#0A757E] dark:text-cyan-400 shadow-xs backdrop-blur-md">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-white/95 dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs font-bold text-[#0B6E72] dark:text-cyan-400 shadow-xs backdrop-blur-md">
             <span>🔐</span>
             <span>{mode === 'login' ? 'بوابة الدخول الآمنة' : 'إنشاء حساب جديد'}</span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-black text-[#092226] dark:text-white transition-colors">
+          <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white transition-colors">
             {mode === 'login' ? 'مرحباً بك في وازن' : 'ابدأ رحلة توازنك مع وازن'}
           </h1>
-          <p className="text-xs sm:text-sm text-[#5a6e69] dark:text-slate-400 leading-relaxed transition-colors">
+          <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-400 leading-relaxed transition-colors">
             {mode === 'login'
               ? 'سجّل دخولك لمتابعة تقييم مجالات حياتك واستشارة خبرائك الذكيين'
               : 'أنشئ حسابك خلال دقيقة واحدة لتشخيص أبعادك الثمانية'}
           </p>
         </div>
 
-        {/* Main Card */}
-        <div className="bg-white dark:bg-[#0c1827] border border-[#eae3d5] dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl shadow-teal-950/5 dark:shadow-black/40 backdrop-blur-md transition-colors">
+        {/* Main Card (88%-92% White in Light Mode for high-contrast clarity) */}
+        <div className="bg-white/92 dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 dark:shadow-black/40 backdrop-blur-md transition-colors">
           {/* 1-Click Google Button (Clean Arabic Label with Aligned Icon) */}
           <div className="mb-6">
             <button
               type="button"
               onClick={() => setShowGoogleModal(true)}
-              className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-[#FAF7F2] dark:bg-[#102033] dark:hover:bg-[#162a42] text-[#092226] dark:text-white border border-[#ded7c8] dark:border-slate-700 hover:border-[#0A757E] dark:hover:border-cyan-500/50 text-xs sm:text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-xs hover:shadow-sm group cursor-pointer"
+              className="w-full py-3 px-4 rounded-2xl bg-white hover:bg-slate-50 dark:bg-[#102033] dark:hover:bg-[#162a42] text-[#0F172A] dark:text-white border border-slate-200 dark:border-slate-700 hover:border-[#0B6E72] dark:hover:border-cyan-500/50 text-xs sm:text-sm font-bold flex items-center justify-center gap-3 transition-all shadow-xs hover:shadow-sm group cursor-pointer"
             >
               <GoogleIcon className="w-5 h-5 group-hover:scale-105 transition-transform" />
               <span>المتابعة باستخدام Google</span>
@@ -268,8 +268,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
             {/* Subtle Clean Divider */}
             <div className="relative flex items-center justify-center my-5">
-              <div className="border-t border-[#eae3d5] dark:border-slate-800 w-full" />
-              <span className="bg-white dark:bg-[#0c1827] px-3 text-[11px] font-semibold text-[#8a9995] dark:text-slate-500 absolute transition-colors">
+              <div className="border-t border-slate-200 dark:border-slate-800 w-full" />
+              <span className="bg-white dark:bg-[#0c1827] px-3 text-[11px] font-semibold text-[#64748B] dark:text-slate-500 absolute transition-colors">
                 أو بالبريد الإلكتروني
               </span>
             </div>
@@ -284,7 +284,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           )}
 
           {successMsg && (
-            <div className="mb-5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 text-[#0A757E] dark:text-emerald-300 text-xs font-bold flex items-center gap-2 animate-pulse">
+            <div className="mb-5 p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 text-[#0B6E72] dark:text-emerald-300 text-xs font-bold flex items-center gap-2 animate-pulse">
               <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
               <span>{successMsg}</span>
             </div>
@@ -294,7 +294,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           {mode === 'login' ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#092226] dark:text-white mb-1.5 transition-colors">
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1.5 transition-colors">
                   البريد الإلكتروني أو اسم المستخدم
                 </label>
                 <div className="relative">
@@ -303,17 +303,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     value={emailOrName}
                     onChange={(e) => setEmailOrName(e.target.value)}
                     placeholder="أدخل بريدك الإلكتروني أو اسم المستخدم"
-                    className="w-full bg-[#fbf9f5] dark:bg-[#102033] border border-[#ded7c8] dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#092226] dark:text-white placeholder-[#8d9f9a] dark:placeholder-slate-500 focus:outline-none focus:border-[#0A757E] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0A757E] transition-all pl-10"
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all pl-10"
                     dir="rtl"
                     autoFocus
                   />
-                  <Mail className="w-4 h-4 text-[#8d9f9a] dark:text-slate-500 absolute left-3.5 top-3.5" />
+                  <Mail className="w-4 h-4 text-[#64748B] dark:text-slate-400 absolute left-3.5 top-3.5" />
                 </div>
               </div>
 
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="block text-xs font-bold text-[#092226] dark:text-white transition-colors">
+                  <label className="block text-xs font-bold text-[#0F172A] dark:text-white transition-colors">
                     كلمة المرور
                   </label>
                   <button
@@ -323,7 +323,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                       setForgotSubmitted(false);
                       setForgotEmail('');
                     }}
-                    className="text-[11px] font-bold text-[#0A757E] dark:text-cyan-400 hover:underline transition-colors"
+                    className="text-[11px] font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline transition-colors cursor-pointer"
                   >
                     نسيت كلمة المرور؟
                   </button>
@@ -334,13 +334,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••"
-                    className="w-full bg-[#fbf9f5] dark:bg-[#102033] border border-[#ded7c8] dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#092226] dark:text-white placeholder-[#8d9f9a] dark:placeholder-slate-500 focus:outline-none focus:border-[#0A757E] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0A757E] transition-all pl-10"
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all pl-10"
                     dir="rtl"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3.5 top-3.5 text-[#8d9f9a] dark:text-slate-500 hover:text-[#0A757E] dark:hover:text-cyan-400"
+                    className="absolute left-3.5 top-3.5 text-[#64748B] dark:text-slate-400 hover:text-[#0B6E72] dark:hover:text-cyan-400 cursor-pointer"
                     aria-label="إظهار أو إخفاء كلمة المرور"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -348,13 +348,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </div>
               </div>
 
-              <div className="flex items-center justify-between text-xs text-[#5a6e69] dark:text-slate-400 pt-1">
+              <div className="flex items-center justify-between text-xs text-[#334155] dark:text-slate-300 pt-1">
                 <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="w-4 h-4 rounded border-[#ded7c8] dark:border-slate-700 text-[#0A757E] focus:ring-[#0A757E]"
+                    className="w-4 h-4 rounded border-slate-300 dark:border-slate-700 text-[#0B6E72] focus:ring-[#0B6E72]"
                   />
                   <span>تذكرني في هذا الجهاز</span>
                 </label>
@@ -364,7 +364,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 px-4 rounded-full bg-[#0A757E] hover:bg-[#075359] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md shadow-[#0A757E]/20 dark:shadow-cyan-900/40 border border-white/20 dark:border-cyan-400/25 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-98 disabled:opacity-50 cursor-pointer"
+                className="w-full py-3.5 px-4 rounded-full bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-black text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-900/40 border border-teal-600/30 dark:border-cyan-400/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-98 disabled:opacity-50 cursor-pointer"
               >
                 <LogIn className="w-4 h-4 text-cyan-200 dark:text-cyan-300" />
                 <span>تسجيل الدخول</span>
@@ -374,7 +374,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             /* Focused Form: REGISTER */
             <form onSubmit={handleSignupSubmit} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#092226] dark:text-white mb-1.5 transition-colors">
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1.5 transition-colors">
                   الاسم الكريم
                 </label>
                 <div className="relative">
@@ -383,16 +383,16 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     value={signupName}
                     onChange={(e) => setSignupName(e.target.value)}
                     placeholder="مثال: يوسف، سارة، مدين..."
-                    className="w-full bg-[#fbf9f5] dark:bg-[#102033] border border-[#ded7c8] dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#092226] dark:text-white placeholder-[#8d9f9a] dark:placeholder-slate-500 focus:outline-none focus:border-[#0A757E] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0A757E] transition-all pl-10"
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all pl-10"
                     dir="rtl"
                     autoFocus
                   />
-                  <User className="w-4 h-4 text-[#8d9f9a] dark:text-slate-500 absolute left-3.5 top-3.5" />
+                  <User className="w-4 h-4 text-[#64748B] dark:text-slate-400 absolute left-3.5 top-3.5" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#092226] dark:text-white mb-1.5 transition-colors">
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1.5 transition-colors">
                   البريد الإلكتروني <span className="text-rose-500 font-bold">*</span>
                 </label>
                 <div className="relative">
@@ -402,15 +402,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     value={signupEmail}
                     onChange={(e) => setSignupEmail(e.target.value)}
                     placeholder="name@example.com"
-                    className="w-full bg-[#fbf9f5] dark:bg-[#102033] border border-[#ded7c8] dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#092226] dark:text-white placeholder-[#8d9f9a] dark:placeholder-slate-500 focus:outline-none focus:border-[#0A757E] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0A757E] transition-all pl-10"
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all pl-10"
                     dir="rtl"
                   />
-                  <Mail className="w-4 h-4 text-[#8d9f9a] dark:text-slate-500 absolute left-3.5 top-3.5" />
+                  <Mail className="w-4 h-4 text-[#64748B] dark:text-slate-400 absolute left-3.5 top-3.5" />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#092226] dark:text-white mb-1.5 transition-colors">
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1.5 transition-colors">
                   كلمة المرور
                 </label>
                 <div className="relative">
@@ -419,13 +419,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     value={signupPassword}
                     onChange={(e) => setSignupPassword(e.target.value)}
                     placeholder="اختر كلمة مرور آمنة"
-                    className="w-full bg-[#fbf9f5] dark:bg-[#102033] border border-[#ded7c8] dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#092226] dark:text-white placeholder-[#8d9f9a] dark:placeholder-slate-500 focus:outline-none focus:border-[#0A757E] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0A757E] transition-all pl-10"
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all pl-10"
                     dir="rtl"
                   />
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute left-3.5 top-3.5 text-[#8d9f9a] dark:text-slate-500 hover:text-[#0A757E] dark:hover:text-cyan-400"
+                    className="absolute left-3.5 top-3.5 text-[#64748B] dark:text-slate-400 hover:text-[#0B6E72] dark:hover:text-cyan-400 cursor-pointer"
                     aria-label="إظهار أو إخفاء كلمة المرور"
                   >
                     {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -437,7 +437,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3.5 px-4 rounded-full bg-[#0A757E] hover:bg-[#075359] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white font-black text-xs sm:text-sm shadow-md shadow-[#0A757E]/20 dark:shadow-cyan-900/40 border border-white/20 dark:border-cyan-400/25 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-98 disabled:opacity-50 cursor-pointer"
+                className="w-full py-3.5 px-4 rounded-full bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-black text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-900/40 border border-teal-600/30 dark:border-cyan-400/30 transition-all flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-98 disabled:opacity-50 cursor-pointer"
               >
                 <UserPlus className="w-4 h-4 text-cyan-200 dark:text-cyan-300" />
                 <span>إنشاء الحساب وبدء التقييم</span>
@@ -446,9 +446,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           )}
 
           {/* Polite, Clean Bottom Toggle Link (Clarifying Sign-In vs. Sign-Up) */}
-          <div className="mt-6 pt-4 border-t border-[#eae3d5] dark:border-slate-800 text-center">
+          <div className="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 text-center">
             {mode === 'login' ? (
-              <p className="text-xs text-[#5a6e69] dark:text-slate-400">
+              <p className="text-xs text-[#334155] dark:text-slate-400">
                 ليس لديك حساب؟{' '}
                 <button
                   type="button"
@@ -456,13 +456,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     setMode('signup');
                     setError(null);
                   }}
-                  className="font-bold text-[#0A757E] dark:text-cyan-400 hover:underline cursor-pointer"
+                  className="font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline cursor-pointer"
                 >
                   إنشاء حساب جديد
                 </button>
               </p>
             ) : (
-              <p className="text-xs text-[#5a6e69] dark:text-slate-400">
+              <p className="text-xs text-[#334155] dark:text-slate-400">
                 لديك حساب بالفعل؟{' '}
                 <button
                   type="button"
@@ -470,7 +470,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     setMode('login');
                     setError(null);
                   }}
-                  className="font-bold text-[#0A757E] dark:text-cyan-400 hover:underline cursor-pointer"
+                  className="font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline cursor-pointer"
                 >
                   تسجيل الدخول
                 </button>
@@ -484,7 +484,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           <button
             type="button"
             onClick={onCancel}
-            className="text-xs text-[#7a8c88] dark:text-slate-400 hover:text-[#0A757E] dark:hover:text-cyan-400 font-bold inline-flex items-center gap-1.5 transition-colors"
+            className="text-xs text-[#334155] dark:text-slate-400 hover:text-[#0B6E72] dark:hover:text-cyan-400 font-bold inline-flex items-center gap-1.5 transition-colors cursor-pointer"
           >
             <span>العودة للصفحة الرئيسية</span>
             <ArrowLeft className="w-3.5 h-3.5" />
@@ -500,37 +500,37 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       {/* Forgot Password Modal */}
       {showForgotModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white dark:bg-[#0c1827] border border-[#eae3d5] dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl relative text-right space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#eae3d5] dark:border-slate-800">
+          <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl relative text-right space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-[#0A757E] dark:text-cyan-400" />
-                <span className="font-extrabold text-sm text-[#092226] dark:text-white">
+                <KeyRound className="w-5 h-5 text-[#0B6E72] dark:text-cyan-400" />
+                <span className="font-extrabold text-sm text-[#0F172A] dark:text-white">
                   استعادة كلمة المرور
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowForgotModal(false)}
-                className="text-xs font-bold text-[#7a8c88] hover:text-[#092226] dark:hover:text-white p-1"
+                className="text-xs font-bold text-[#64748B] hover:text-[#0F172A] dark:hover:text-white p-1 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
             {forgotSubmitted ? (
-              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 text-[#0A757E] dark:text-emerald-300 text-xs font-bold space-y-2">
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/50 text-[#0B6E72] dark:text-emerald-300 text-xs font-bold space-y-2">
                 <p>تم إرسال تعليمات إعادة التعيين إلى بريدك الإلكتروني.</p>
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(false)}
-                  className="w-full mt-2 py-2 rounded-xl bg-[#0A757E] text-white text-xs font-bold"
+                  className="w-full mt-2 py-2 rounded-xl bg-[#0B6E72] text-white text-xs font-bold cursor-pointer"
                 >
                   حسناً، فهمت
                 </button>
               </div>
             ) : (
               <form onSubmit={handleForgotSubmit} className="space-y-3">
-                <p className="text-xs text-[#536561] dark:text-slate-400 leading-relaxed">
+                <p className="text-xs text-[#334155] dark:text-slate-400 leading-relaxed">
                   أدخل بريدك الإلكتروني وسنرسل لك رابطاً لإعادة تعيين كلمة المرور فوراً:
                 </p>
                 <input
@@ -539,21 +539,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
                   placeholder="name@example.com"
-                  className="w-full bg-[#fbf9f5] dark:bg-[#102033] border border-[#ded7c8] dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-[#092226] dark:text-white placeholder-[#8d9f9a] dark:placeholder-slate-500 focus:outline-none focus:border-[#0A757E] dark:focus:border-cyan-400"
+                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400"
                   dir="rtl"
                   autoFocus
                 />
                 <div className="flex items-center gap-2 pt-2">
                   <button
                     type="submit"
-                    className="flex-1 py-2.5 rounded-xl bg-[#0A757E] hover:bg-[#075359] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white font-bold text-xs transition-colors"
+                    className="flex-1 py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-bold text-xs transition-colors cursor-pointer"
                   >
                     إرسال الرابط
                   </button>
                   <button
                     type="button"
                     onClick={() => setShowForgotModal(false)}
-                    className="py-2.5 px-4 rounded-xl border border-[#ded7c8] dark:border-slate-700 text-[#7a8c88] text-xs font-bold hover:bg-[#FAF7F2] dark:hover:bg-slate-800"
+                    className="py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 text-[#334155] dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
                   >
                     إلغاء
                   </button>
@@ -567,24 +567,24 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       {/* Google Sign-In Selector Modal */}
       {showGoogleModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white dark:bg-[#0c1827] border border-[#eae3d5] dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl relative text-right space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-[#eae3d5] dark:border-slate-800">
+          <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl relative text-right space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2">
                 <GoogleIcon className="w-5 h-5" />
-                <span className="font-extrabold text-sm text-[#092226] dark:text-white">
+                <span className="font-extrabold text-sm text-[#0F172A] dark:text-white">
                   المتابعة باستخدام Google
                 </span>
               </div>
               <button
                 type="button"
                 onClick={() => setShowGoogleModal(false)}
-                className="text-xs font-bold text-[#7a8c88] hover:text-[#092226] dark:hover:text-white p-1"
+                className="text-xs font-bold text-[#64748B] hover:text-[#0F172A] dark:hover:text-white p-1 cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
-            <p className="text-xs text-[#536561] dark:text-slate-400 leading-relaxed">
+            <p className="text-xs text-[#334155] dark:text-slate-400 leading-relaxed">
               اختر حساب Google الخاص بك للمتابعة الفورية إلى منصة وازن:
             </p>
 
@@ -593,32 +593,32 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <button
                 type="button"
                 onClick={() => handleGoogleSignIn('madyanlernen@gmail.com', 'مدين')}
-                className="w-full p-3 rounded-2xl border border-[#ded7c8] dark:border-slate-700 hover:border-[#0A757E] dark:hover:border-cyan-400 bg-[#FAF7F2] dark:bg-[#102033] hover:bg-white dark:hover:bg-[#162a42] flex items-center justify-between transition-all group cursor-pointer"
+                className="w-full p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-[#0B6E72] dark:hover:border-cyan-400 bg-[#F8FAFA] dark:bg-[#102033] hover:bg-white dark:hover:bg-[#162a42] flex items-center justify-between transition-all group cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 font-black text-sm flex items-center justify-center border border-emerald-200 dark:border-emerald-800/40">
                     م
                   </div>
                   <div className="text-right">
-                    <span className="block text-xs font-black text-[#092226] dark:text-white">مدين</span>
-                    <span className="block text-[11px] text-[#7a8c88] dark:text-slate-400" dir="ltr">madyanlernen@gmail.com</span>
+                    <span className="block text-xs font-black text-[#0F172A] dark:text-white">مدين</span>
+                    <span className="block text-[11px] text-[#64748B] dark:text-slate-400" dir="ltr">madyanlernen@gmail.com</span>
                   </div>
                 </div>
-                <Check className="w-4 h-4 text-[#0A757E] dark:text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <Check className="w-4 h-4 text-[#0B6E72] dark:text-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
 
               <button
                 type="button"
                 onClick={() => handleGoogleSignIn('user@gmail.com', 'مستخدم جديد')}
-                className="w-full p-3 rounded-2xl border border-[#ded7c8] dark:border-slate-700 hover:border-[#0A757E] dark:hover:border-cyan-400 bg-white dark:bg-[#0c1827] hover:bg-[#FAF7F2] dark:hover:bg-[#102033] flex items-center justify-between transition-all cursor-pointer"
+                className="w-full p-3 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-[#0B6E72] dark:hover:border-cyan-400 bg-white dark:bg-[#0c1827] hover:bg-[#F8FAFA] dark:hover:bg-[#102033] flex items-center justify-between transition-all cursor-pointer"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-9 h-9 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-800 dark:text-blue-300 font-bold text-xs flex items-center justify-center border border-blue-200 dark:border-blue-800/40">
                     G
                   </div>
                   <div className="text-right">
-                    <span className="block text-xs font-bold text-[#092226] dark:text-white">استخدام حساب Google آخر</span>
-                    <span className="block text-[10px] text-[#7a8c88] dark:text-slate-400">ربط فوري وآمن</span>
+                    <span className="block text-xs font-bold text-[#0F172A] dark:text-white">استخدام حساب Google آخر</span>
+                    <span className="block text-[10px] text-[#64748B] dark:text-slate-400">ربط فوري وآمن</span>
                   </div>
                 </div>
               </button>
@@ -628,7 +628,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setShowGoogleModal(false)}
-                className="text-xs text-[#7a8c88] dark:text-slate-400 hover:text-[#092226] dark:hover:text-white font-bold"
+                className="text-xs text-[#334155] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white font-bold cursor-pointer"
               >
                 إلغاء
               </button>
