@@ -8,6 +8,16 @@ export type LifeAreaId =
   | 'social'
   | 'health';
 
+export type Screen =
+  | 'landing'
+  | 'login'
+  | 'onboarding'
+  | 'dashboard'
+  | 'advisor_chat'
+  | 'director_summary'
+  | 'comparison'
+  | 'goals_matrix';
+
 export type AssessmentMode = 'initial_assessment' | 'weekly_checkin';
 
 export type QuestionType = 'multiple_choice' | 'rating' | 'open_text' | 'multi_select';

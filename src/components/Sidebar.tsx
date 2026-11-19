@@ -13,12 +13,14 @@ import {
   Moon,
   AlertTriangle,
 } from 'lucide-react';
-import { UserProfile } from '../types/lifeBalance';
+import { Screen, UserProfile } from '../types/lifeBalance';
 import { WazanLogo } from './WazanLogo';
 
+type SidebarScreen = Exclude<Screen, 'landing' | 'login'>;
+
 interface SidebarProps {
-  currentScreen: 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
-  onNavigate: (screen: 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix') => void;
+  currentScreen: SidebarScreen;
+  onNavigate: (screen: SidebarScreen) => void;
   userProfile: UserProfile | null;
   onSignOut: () => void;
   onReset: () => void;

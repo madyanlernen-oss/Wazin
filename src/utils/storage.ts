@@ -4,6 +4,7 @@ import {
   DirectorSummaryReport,
   EisenhowerGoalItem,
   LifeAreaId,
+  Screen,
   UserProfile,
 } from '../types/lifeBalance';
 
@@ -18,7 +19,7 @@ export interface StoredAppState {
   hasCompletedBaseline?: boolean;
   assessmentMode?: 'initial_assessment' | 'weekly_checkin';
   directorReport: DirectorSummaryReport | null;
-  lastActiveScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
+  lastActiveScreen: Screen;
   selectedAdvisorId: LifeAreaId;
 }
 

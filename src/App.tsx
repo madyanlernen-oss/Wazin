@@ -19,6 +19,7 @@ import { Menu, Sun, Moon } from 'lucide-react';
 import {
   DirectorSummaryReport,
   LifeAreaId,
+  Screen,
   UserProfile,
 } from './types/lifeBalance';
 import {
@@ -44,9 +45,7 @@ export default function App() {
   });
 
   // Screen navigation state
-  const [activeScreen, setActiveScreen] = useState<
-    'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix'
-  >('landing');
+  const [activeScreen, setActiveScreen] = useState<Screen>('landing');
 
   // Track whether user clicked 'login' or 'signup' from top buttons
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
