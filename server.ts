@@ -46,7 +46,9 @@ function generateLocalAgentResponse(
   score: number = 0,
   isEvaluationSession?: boolean,
   evaluationStep?: number,
-  evaluationQuestionTitle?: string
+  evaluationQuestionTitle?: string,
+  assessmentMode: 'initial_assessment' | 'weekly_checkin' = 'weekly_checkin',
+  stationTurnCount: number = 0
 ) {
   const msg = message.toLowerCase().trim();
 
@@ -69,8 +71,8 @@ function generateLocalAgentResponse(
   // 2. مشاعر التعب الشديد والحزن والضيق والفضفضة النفسية (Exhaustion & Grief)
   const isGriefOrExhaustion = !isCrisisOrDeath && /(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)/i.test(msg);
 
-  // 3. مشاعر الغضب والسب ولعن الحياة
-  const isCurseOrAnger = !isCrisisOrDeath && !isGriefOrExhaustion && /(اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)/i.test(msg);
+  // 3. مشاعر الغضب والسب ولعن الحياة (مع مراعاة حدود الكلمات لعدم تطابق "أسبوع" أو "أسباب")
+  const isCurseOrAnger = !isCrisisOrDeath && !isGriefOrExhaustion && /(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(msg);
 
   // 4. السؤال الصريح عن حال المستشار (Strict How Are You)
   const isAskingHowAdvisorIs = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && !isFinancialDistress && !isHealthDistress && !isCareerDistress && !isSpiritualDistress && !isPersonalDistress && !isSocialDistress && /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(msg);
@@ -646,7 +648,54 @@ function generateLocalAgentResponse(
     });
   }
 
-  // 6. Default persona for other domains
+  // 6. مسار جلسات التقييم (جلسة التقييم الأسبوعي أو التأسيسي المنظمة)
+  if (isEvaluationSession) {
+    const ratingMatch = message.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?/i) || message.match(/(\d+(?:\.\d+)?)/);
+    const parsedScore = ratingMatch ? Math.min(10, Math.max(1, parseFloat(ratingMatch[1]))) : (score || 7.5);
+    const isShortVague = message.length < 20 && !ratingMatch;
+
+    if (assessmentMode === 'initial_assessment') {
+      // إذا كانت الإجابة مقتضبة ولم يسبق طرح سؤال استيضاحي (stationTurnCount === 0)
+      if (isShortVague && stationTurnCount < 1) {
+        return formatAgentOutput({
+          agent_name: advName,
+          score: parsedScore,
+          reasoning: `تحليل تقييم تأسيسي (سؤال استيضاحي للمحطة ${evaluationStep || 1}): المستفيد قدم إجابة عامة أو مقتضبة ("${message}"). لضمان دقة التشخيص التأسيسي، يقتضي البروتوكول طرح سؤال استيضاحي متابع (Follow-up Probe) لسبر أغوار التحدي واستيضاح الدرجة دون الاكتفاء بتقدير عشوائي.`,
+          summary: `متابعة استيضاحية لتشخيص جانب (${advRole}) بدقة قبل اعتماد النتيجة.`,
+          advice: `التشخيص التأسيسي الدقيق هو نصف العلاج؛ توضيح التحدي يساعدنا على صياغة خطة تلائم واقعك.`,
+          reply: `أقدّر مشاركتك يا ${userName} العزيز. 🌿\n\nلضمان بناء تشخيص تأسيسي دقيق ومحدد لنقطة انطلاقك في ${advRole}:\nما هو التحدي أو المشتت الأبرز الذي تشعر أنه يقف حائلاً أمام وصولك لأعلى درجات الاتزان هنا؟ وكيف تقيّم مستواك التقديري من 1 إلى 10؟`,
+          actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
+          reflectionQuestion: 'ما هو التحدي الأبرز في هذا الجانب وما تقييمك له من 1 إلى 10؟'
+        });
+      }
+
+      // إذا كانت الإجابة مفصلة أو أجاب على السؤال الاستيضاحي
+      return formatAgentOutput({
+        agent_name: advName,
+        score: parsedScore,
+        reasoning: `تشخيص تأسيسي شامل ومكتمل لمحطة (${evaluationStep || 1} من 8: ${advRole}): تم استيعاب السياق والتشخيص بناءً على كلام المستفيد ("${message}"). اعتماد الدرجة التأسيسية (${parsedScore}/10) وصياغة توجيه تحويلي واستراتيجي.`,
+        summary: `اعتماد التشخيص التأسيسي لجانب (${advRole}) بدرجة ${parsedScore}/10 وتحديد خطوات التوازن.`,
+        advice: `حماية قاعدة اتزانك في ${advRole} والتركيز على خطوة تطويرية واحدة في المربع الثاني.`,
+        reply: `أحييك على صراحتك وعمق وعيك يا ${userName}. تم رصد تشخيصك التأسيسي في محطة (${evaluationStep || 1} من 8: ${advRole}) بدرجة (${parsedScore} من 10) بنجاح. 🎯\n\nهذا التقييم يمنحنا قاعدة صلبة وواضحة لننطلق منها؛ سنبني معاً عادات صغيرة متراكمة ترتقي بهذا الجانب دون أي ضغط أو تشتت.`,
+        actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تثبيت عادة يومية دقيقة لحماية هذا الجانب'],
+        reflectionQuestion: 'ما هي الخطوة البسيطة التي لو بدأتها اليوم ستحدث أكبر أثر في هذا الجانب؟'
+      });
+    }
+
+    // نمط المراجعة الأسبوعية السريعة (weekly_checkin mode - خفيف وسريع وبأقل احتكاك)
+    return formatAgentOutput({
+      agent_name: advName,
+      score: parsedScore,
+      reasoning: `مراجعة أسبوعية سريعة وخفيفة لمحطة (${evaluationStep || 1} من 8: ${advRole}): رصد مباشر لواقع الأسبوع المنصرم (${parsedScore}/10) دون تعقيد أو أسئلة فرعية مرهقة لتسهيل إكمال المراجعة الأسبوعية في دقيقتين.`,
+      summary: `تسجيل نبض الأسبوع الماضي في جانب (${advRole}) بدرجة ${parsedScore}/10.`,
+      advice: `المراجعة الأسبوعية المستمرة هي بوصلتك لحماية التوازن من الانزلاق.`,
+      reply: `تقييم متزن وواعٍ لأسبوعك المنصرم يا ${userName}! 🌿\nتم رصد نتيجة محطة (${evaluationStep || 1} من 8: ${advRole}) بدرجة (${parsedScore} من 10). استمر بهذا الوعي الجميل ولننتقل معاً للمحطة التالية.`,
+      actionSteps: advisor?.defaultGoals?.slice(0, 1) || ['المحافظة على وتيرتك الطيبة خلال الأسبوع القادم'],
+      reflectionQuestion: 'كيف تجعل أسبوعك القادم أكثر سكينة وإنجازاً في هذا الجانب؟'
+    });
+  }
+
+  // 7. Default persona for other domains
   const fallbackAdvisors: Record<string, { role: string; name: string }> = {
     career: { role: 'المستشار المهني', name: 'م. طارق المهني' },
     personal: { role: 'أخصائية تطوير الذات', name: 'د. ليلى الذاتية' },
@@ -691,6 +740,8 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       isEvaluationSession,
       evaluationStep,
       evaluationQuestionTitle,
+      assessmentMode = 'weekly_checkin',
+      stationTurnCount = 0,
     } = req.body;
 
     if (!message) {
@@ -836,21 +887,50 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 
     let evaluationSessionGuideline = '';
     if (isEvaluationSession) {
-      evaluationSessionGuideline = `
-[بروتوكول مسار التقييم الأسبوعي (المحطات الثمانية) - Strict Context Guardrail 🎯]
-المستفيد حالياً يخوض جلسة التقييم الأسبوعي المنظمة في المحطة رقم (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? ` وسؤال المحطة الحالي هو: "${evaluationQuestionTitle}"` : ''}.
-قواعد حاسمة ملزمة تعلو فوق أي قاعدة أخرى:
+      if (assessmentMode === 'initial_assessment') {
+        evaluationSessionGuideline = `
+[بروتوكول مسار التقييم التأسيسي الشامل (Initial Baseline Assessment Mode) 🧭]
+المستفيد حالياً يخوض جلسة التقييم التأسيسي الأولي لمحطة (${evaluationStep || 1} من 8: ${advisorName})${evaluationQuestionTitle ? ` وسؤال المحطة الحالي هو: "${evaluationQuestionTitle}"` : ''}.
+عدد المحاورات الحالية في هذه المحطة (stationTurnCount): ${stationTurnCount}.
+
+قواعد حاسمة ملزمة للتقييم التأسيسي الشامل:
 1. الالتزام الصارم بالتخصص المستقل (Strict Independent Domain Persona):
    - بصفتك "${advisorName}" (${advisorRole})، تحدث وحلل فقط من صميم تخصصك المستقل، ويُمنع منعاً باتاً التداخل مع تخصصات المستشارين السبعة الآخرين في منصة وازن.
-2. الدفء والتعاطف السريع (Warmth & Empathy):
-   - تجاوب مع تحية المستفيد، أو مشاعره، أو سياقه بإيجاز ودفء طبيعي حقيقي (جملة إلى جملتين بحد أقصى: 1–2 natural sentences max) دون قوالب آلية أو تكرار روبوتي ودون محاضرات طويلة.
+2. عدم التقيد برسالة واحدة صارمة وطرح الأسئلة الاستيضاحية (No Rigid 1-Message Limit - Clarifying Follow-ups):
+   - هدفك هو الوصول إلى تشخيص تأسيسي دقيق وعميق لنقطة انطلاق المستفيد في هذا الجانب.
+   - إذا كانت إجابة المستفيد عامة، مقتضبة، أو تفتقر إلى التفاصيل (مثل: "تمام", "عادي", "ماشي الحال", "فيه شوية ضغط") ولم يقدم تقييماً رقمياً صريحاً وكان عدد المحاورات أقل من 2 (stationTurnCount < 2):
+     * لا تعتمد درجة عشوائية فوراً.
+     * تجاوب أولاً بترحيب ودفء إنساني في سطر واحد.
+     * اطرح سؤالاً استيضاحياً ذكياً وموجهاً (1 Natural Clarifying Follow-up) لسبر أغوار التحدي واستيضاح التفاصيل الأساسية، واطلب منه صراحة تحديد درجته التقديرية (من 1 إلى 10).
+     * ضع السؤال الاستيضاحي في حقل "reflectionQuestion".
+     * اترك التقييم مفتوحاً للمتابعة دون إنهاء المحطة.
+   - إذا قدم المستفيد إجابة مشروحة ومفصلة، أو حدد درجته بوضوح، أو أجاب على السؤال الاستيضاحي (أو stationTurnCount >= 2):
+     * اعتمد الدرجة التأسيسية الدقيقة من 1 إلى 10 وضعها في حقل "score".
+     * لخص التشخيص بذكاء واحتواء في "reply".
+     * قدم خطوتين إجرائيتين سريعتين في "actionSteps".
 3. السياج الصارم لمنع الخروج عن المسار (Strict Context Guardrail):
-   - إذا بادر المستفيد بالتحية أو السؤال عن حالك (مثل: "مرحبا كيفك"، "أهلاً يا دكتور"، "السلام عليكم") أو تحدث في موضوع عام أو جانبي:
-     - أجب بأدب ودفء في سطر واحد موجز واطمئن عليه.
-     - ثم أعد توجيهه فوراً ومباشرة في نفس الرد إلى سؤال المحطة الحالية (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? `: "${evaluationQuestionTitle}"` : ''} واطلب منه تحديد تقييمه من 1 إلى 10.
-     - اجعل حقل "reflectionQuestion" هو نفسه سؤال المحطة الحالية: "${evaluationQuestionTitle || 'كيف تقيّم هذا الجانب من 1 إلى 10؟'}".
-     - يُمنع منعاً باتاً أن تسأله "كيف يمكنني مساندتك اليوم؟" أو تسمح للجلسة بالتحول إلى محادثة عامة مفتوحة أو دردشة استرسالية خارج التقييم؛ فالهدف الأوحد هنا هو إكمال مسار التقييم الأسبوعي المنظم عبر محطاته الثمانية.
+   - إذا بادر المستفيد بالتحية أو السؤال عن حالك (مثل: "مرحبا كيفك"): أجب بأدب في سطر واحد ثم أعد توجيهه فوراً لسؤال المحطة التأسيسي.
 `;
+      } else {
+        evaluationSessionGuideline = `
+[بروتوكول مسار المراجعة الأسبوعية السريعة (Weekly Recurring Check-in Mode) ⚡]
+المستفيد أكمل التقييم التأسيسي سابقاً، وهو الآن يخوض المراجعة الأسبوعية الدورية لمحطة (${evaluationStep || 1} من 8: ${advisorName})${evaluationQuestionTitle ? ` وسؤال المحطة الحالي هو: "${evaluationQuestionTitle}"` : ''}.
+
+قواعد حاسمة ملزمة للمراجعة الأسبوعية:
+1. الالتزام الصارم بالتخصص المستقل (Strict Independent Domain Persona):
+   - بصفتك "${advisorName}" (${advisorRole})، تحدث وحلل فقط من صميم تخصصك المستقل، ويُمنع منعاً باتاً التداخل مع تخصصات المستشارين السبعة الآخرين في منصة وازن.
+2. تجربة سريعة وخفيفة بأقل احتكاك (Light & Fast Flow - Minimal Friction):
+   - هذا النمط مخصص للمراجعة الدورية السريعة لواقع أسبوعه المنصرم (Past Week Focus).
+   - ركز على إجابة وتقييم المستفيد لأسبوعه المنصرم فوراً.
+   - لا تفتح أسئلة استيضاحية فرعية متتالية، ولا تثقل المستفيد بنقاشات طويلة؛ فالهدف هو إكمال كل محطة بإجابة واحدة مباشرة وسريعة (تقييم 1-10 أو سطر مختصر).
+3. الاحتواء والرصد الفوري للدرجة (Instant Scoring & Empathetic Acknowledgment):
+   - تجاوب مع إجابة وتقييم المستفيد في جملة إلى جملتين دافئتين ومشجعتين تثمن وعيه واستمراريته.
+   - ضع الدرجة المرصودة مباشرة في حقل "score" (من 1 إلى 10).
+   - قدم نصيحة سريعة خفيفة تلائم أسبوعه القادم، وجهز الانتقال السلس للمحطة التالية.
+4. السياج الصارم لمنع الخروج عن المسار (Strict Context Guardrail):
+   - إذا بادر المستفيد بالتحية أو السؤال عن حالك (مثل: "مرحبا كيفك"): أجب بأدب في سطر واحد ثم أعد توجيهه فوراً لسؤال المحطة الأسبوعي.
+`;
+      }
     }
 
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
@@ -1018,7 +1098,18 @@ ${evaluationSessionGuideline}
     return res.json(parsed);
   } catch (error: any) {
     console.error('Advisor Chat Gemini error:', error?.message || error);
-    const { advisor, userProfile, message, userName, userScore, isEvaluationSession, evaluationStep, evaluationQuestionTitle } = req.body;
+    const {
+      advisor,
+      userProfile,
+      message,
+      userName,
+      userScore,
+      isEvaluationSession,
+      evaluationStep,
+      evaluationQuestionTitle,
+      assessmentMode = 'weekly_checkin',
+      stationTurnCount = 0,
+    } = req.body;
     const agentKey = req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'));
     const localFallback = generateLocalAgentResponse(
       agentKey,
@@ -1028,7 +1119,9 @@ ${evaluationSessionGuideline}
       userScore || 5,
       isEvaluationSession,
       evaluationStep,
-      evaluationQuestionTitle
+      evaluationQuestionTitle,
+      assessmentMode,
+      stationTurnCount
     );
     return res.json(localFallback);
   }

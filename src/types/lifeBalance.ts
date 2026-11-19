@@ -8,6 +8,8 @@ export type LifeAreaId =
   | 'social'
   | 'health';
 
+export type AssessmentMode = 'initial_assessment' | 'weekly_checkin';
+
 export type QuestionType = 'multiple_choice' | 'rating' | 'open_text' | 'multi_select';
 
 export interface QuestionOption {

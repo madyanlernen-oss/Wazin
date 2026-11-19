@@ -15,6 +15,8 @@ export interface StoredAppState {
   eisenhowerGoals?: EisenhowerGoalItem[];
   completedAdvisors: LifeAreaId[];
   completedDates?: Record<string, number>; // timestamp of completion for weekly lock
+  hasCompletedBaseline?: boolean;
+  assessmentMode?: 'initial_assessment' | 'weekly_checkin';
   directorReport: DirectorSummaryReport | null;
   lastActiveScreen: 'landing' | 'login' | 'onboarding' | 'dashboard' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix';
   selectedAdvisorId: LifeAreaId;
@@ -242,6 +244,8 @@ export const loadSampleState = (): StoredAppState => {
       'social',
       'health',
     ],
+    hasCompletedBaseline: true,
+    assessmentMode: 'weekly_checkin',
     directorReport: {
       overallDiagnosis:
         'تظهر منظومة حياتك تماسكاً روحياً ومهنياً لافتاً، حيث يمنحك الاستقرار القلبي والوضوح المهني قاعدة صلبة للانطلاق. مع ذلك، تعاني المنظومة من استنزاف في الجانب الصحي (4.8/10) والمالي (5.2/10)، وهو ما يخلق ضغطاً خفياً يؤثر مباشرة على جودة حضورك الأسري والاجتماعي. معالجة هذا التسريب الطاقوي ستطلق العنان لطاقتك الكاملة.',

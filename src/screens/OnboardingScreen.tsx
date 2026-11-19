@@ -14,11 +14,19 @@ import {
   ChevronDown,
   MessageSquare,
   ArrowLeft,
+  ArrowRight,
   RotateCcw,
   Brain,
+  Compass,
+  Zap,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { AdvisorConfig, LifeAreaId } from '../types/lifeBalance';
+import {
+  STATION_ASSESSMENT_CONFIG,
+  AssessmentMode,
+  StationAssessmentConfig,
+} from '../data/assessmentQuestions';
 import {
   calculateScoreForAdvisor,
   extractInsightsFromAnswers,
@@ -53,11 +61,10 @@ interface OnboardingScreenProps {
 export function getClientAdvisorResponse(
   advisor: AdvisorConfig,
   text: string,
-  currentStep: number,
-  totalQuestions: number,
+  stationNumber: number,
   _userScore?: number,
-  currentQ?: any,
-  isExplicitAnswer?: boolean
+  assessmentMode: AssessmentMode = 'weekly_checkin',
+  stationTurnCount: number = 0
 ) {
   const msg = text.toLowerCase().trim();
   const advName = advisor.name;
@@ -166,8 +173,8 @@ export function getClientAdvisorResponse(
     };
   }
 
-  // 3. مشاعر الغضب والسب ولعن الحياة ("اسب", "العن", "اللعن", "الحياة")
-  if (/(اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)/i.test(msg)) {
+  // 3. مشاعر الغضب والسب ولعن الحياة (مع مراعاة حدود الكلمات لعدم تطابق "أسبوع" أو "أسباب")
+  if (/(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(msg)) {
     return {
       isQuestionOrInquiry: true,
       reasoning: `تفكيك مشاعر الغضب والألم الوجودي الكامن خلف الرغبة في التعبير الصادم ("${text}")، واحتواء الإنسان دون إطلاق أحكام مسبقة، وتبيان أن الرغبة في الصراخ أو السخط هي صرخة استغاثة تعبر عن ألم حقيقي، وتوجيه الطاقة نحو التفريغ الصحي الآمن دون تدمير الذات أو إثقال الروح.`,
@@ -179,13 +186,18 @@ export function getClientAdvisorResponse(
 
   // 4. السؤال المباشر والصريح عن حال المستشار ("كيف حالك" / "كيفك" / "شلونك")
   const isAskingHowAdvisorIs = /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(msg);
+  const stationConfig = STATION_ASSESSMENT_CONFIG[advisor.id];
+  const questionTitle = assessmentMode === 'initial_assessment'
+    ? stationConfig?.initialDiagnostic?.title
+    : stationConfig?.weeklyCheckin?.title;
+
   if (isAskingHowAdvisorIs) {
     return {
       isQuestionOrInquiry: true,
-      reasoning: `تحليل حواري إنساني مع سياج التقييم (Guardrail): المستفيد يسأل عن حال المستشار ("${text}"). التجاوب الإنساني الذكي يقتضي مبادلته التحية والاطمئنان في سطر واحد دافئ، ثم إعادة توجيهه مباشرة دون استرسال إلى سؤال المحطة (${currentStep + 1} من ${totalQuestions}) لإكمال التقييم الأسبوعي.`,
+      reasoning: `تحليل حواري إنساني مع سياج التقييم (Guardrail): المستفيد يسأل عن حال المستشار ("${text}"). التجاوب الإنساني الذكي يقتضي مبادلته التحية والاطمئنان في سطر واحد دافئ، ثم إعادة توجيهه مباشرة دون استرسال إلى سؤال المحطة (${stationNumber} من 8) لإكمال التقييم الأسبوعي.`,
       summary: `تفاعل إنساني دافئ واطمئنان متبادل مع المستفيد في ${advTitle}.`,
-      advice: `كامل حضوري معك في المحطة (${currentStep + 1} من ${totalQuestions})؛ شاركني تقييمك لنواصل بناء اتزانك.`,
-      reply: `أهلاً بك يا صديقنا العزيز! أنا بخير وبأحسن حال وسعيد بوجودك وسؤالك اللطيف. 🌿 لنركز معاً على جلستنا التقييمية في المحطة (${currentStep + 1} من ${totalQuestions})${currentQ?.title ? `: "${currentQ.title}"` : ''}. كيف تقيّم هذا الجانب (من 1 إلى 10)؟`,
+      advice: `كامل حضوري معك في المحطة (${stationNumber} من 8)؛ شاركني تقييمك لنواصل بناء اتزانك.`,
+      reply: `أهلاً بك يا صديقنا العزيز! أنا بخير وبأحسن حال وسعيد بوجودك وسؤالك اللطيف. 🌿 لنركز معاً على جلستنا التقييمية في المحطة (${stationNumber} من 8)${questionTitle ? `: "${questionTitle}"` : ''}. كيف تقيّم هذا الجانب (من 1 إلى 10)؟`,
     };
   }
 
@@ -193,17 +205,17 @@ export function getClientAdvisorResponse(
   if (isBareGreetingOnly) {
     return {
       isQuestionOrInquiry: true,
-      reasoning: `تحية عفوية من المستفيد ("${text}") أثناء جلسة التقييم: الرد بترحيب دافئ وموجز في سطر واحد، ثم تركيز الانتباه مباشرة على سؤال المحطة (${currentStep + 1} من ${totalQuestions}) لحصد تقييمه.`,
+      reasoning: `تحية عفوية من المستفيد ("${text}") أثناء جلسة التقييم: الرد بترحيب دافئ وموجز في سطر واحد، ثم تركيز الانتباه مباشرة على سؤال المحطة (${stationNumber} من 8) لحصد تقييمه.`,
       summary: `الترحيب بالمستفيد واستكشاف واقعه في ${advTitle}.`,
-      advice: `أهلاً بك دائماً؛ كامل الحضور والإصغاء معك لنبدأ بالمحطة (${currentStep + 1} من ${totalQuestions}).`,
-      reply: `أهلاً ومرحباً بك يا صديقنا العزيز! يسعدني حضورك وتواجدك معنا. 🌿 لنبدأ معاً المحطة (${currentStep + 1} من ${totalQuestions})${currentQ?.title ? `: "${currentQ.title}"` : ''}. كيف ترى واقعك في هذا البعد؟`,
+      advice: `أهلاً بك دائماً؛ كامل الحضور والإصغاء معك لنبدأ بالمحطة (${stationNumber} من 8).`,
+      reply: `أهلاً ومرحباً بك يا صديقنا العزيز! يسعدني حضورك وتواجدك معنا. 🌿 لنبدأ معاً المحطة (${stationNumber} من 8)${questionTitle ? `: "${questionTitle}"` : ''}. كيف ترى واقعك في هذا البعد؟`,
     };
   }
 
   // 5. الأسئلة والاستفسارات المباشرة (مع منع تطابق حرف الجر "من")
   const isDirectQuestion = msg.includes('؟') || msg.includes('?') || /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من هو|من هي|من هم|من أنت|من انت|مين|من الذي|من التي|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(msg);
   if (isDirectQuestion) {
-    const stationSuffix = `\n\nولنستكمل تقييمنا الأسبوعي بدقة، دعنا نركز على المحطة (${currentStep + 1} من ${totalQuestions})${currentQ?.title ? `: "${currentQ.title}"` : ''}؛ ما تقييمك لها؟`;
+    const stationSuffix = `\n\nولنستكمل تقييمنا الأسبوعي بدقة، دعنا نركز على المحطة (${stationNumber} من 8)${questionTitle ? `: "${questionTitle}"` : ''}؛ ما تقييمك لها؟`;
     let specificReply = `سؤال وجيه ومهم جداً يا صديقنا. رداً على استفسارك المباشر بخصوص ${advTitle}:\n\nالاتزان الحقيقي لا يعني ألا نمر بأوقات صعبة، بل يعني أن نملك البصيرة والمرونة للتعامل معها بهدوء. ما طرحته يعكس وعيك ورغبتك في الفهم، والخطوة الأهم هي أن تأخذ الأمور بتدرج ورفق دون جلد للذات.` + stationSuffix;
     if (advisor.id === 'spiritual') {
       specificReply = `سؤالك في صميم الروحانية والسكينة يا صديقنا. الإجابة المباشرة: الروحانية ليست قائمة واجبات جافة، بل هي سلام داخلي وحضور قلب وحسن ظن بالله. حين تتشابك عليك الأمور، الجأ إلى السكينة البسيطة: صلاة خاشعة، ودعاء صادق، وتفريغ لشتات الذهن.` + stationSuffix;
@@ -226,8 +238,19 @@ export function getClientAdvisorResponse(
 
   // 6. فحص هل المدخل إجابة تقييمية صريحة (درجة رقمية أو خيار محدد أو شريحة تفكير)
   const ratingMatch = msg.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i) || msg.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
-  const isOptionMatch = Boolean(currentQ?.options?.some((o: any) => o.label?.toLowerCase().trim() === msg || o.id?.toLowerCase().trim() === msg));
-  const isAnswer = isExplicitAnswer || Boolean(ratingMatch) || isOptionMatch || text.startsWith('تقييمي:');
+  const isAnswer = Boolean(ratingMatch) || text.startsWith('تقييمي:');
+
+  // إذا كنا في نمط التقييم التأسيسي الشامل وكانت الإجابة مقتضبة ولم يسبق طرح سؤال استيضاحي (stationTurnCount === 0)
+  if (assessmentMode === 'initial_assessment' && !ratingMatch && msg.length < 25 && stationTurnCount < 1) {
+    const config = STATION_ASSESSMENT_CONFIG[advisor.id];
+    return {
+      isQuestionOrInquiry: true,
+      reasoning: `تحليل تقييم تأسيسي (سؤال استيضاحي للمحطة ${stationNumber}): المستفيد قدم إجابة أولية مقتضبة ("${text}"). التقييم التأسيسي يتطلب استيضاح التفاصيل والعائق الأساسي قبل اعتماد الدرجة لضمان دقة نقطة الانطلاق.`,
+      summary: `متابعة استيضاحية لتشخيص جانب ${advTitle} بدقة.`,
+      advice: `التشخيص التأسيسي الدقيق هو نصف العلاج.`,
+      reply: config?.initialDiagnostic?.followUpProbe || `أقدّر مشاركتك يا صديقنا العزيز. 🌿\n\nلضمان بناء تشخيص تأسيسي دقيق لنقطة انطلاقك في ${advTitle}:\nما هو التحدي أو المشتت الأبرز الذي تشعر أنه يقف أمام وصولك لأعلى درجات الاتزان هنا؟ وكيف تقيّم مستواك التقديري من 1 إلى 10؟`,
+    };
+  }
 
   if (isAnswer) {
     if (ratingMatch) {
@@ -235,24 +258,24 @@ export function getClientAdvisorResponse(
       if (scoreNum <= 4) {
         return {
           isQuestionOrInquiry: false,
-          reasoning: `تحليل تقييم مرحلي منخفض (${scoreNum}/10) في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: رصد معطيات الضغط أو الفتور، وتقديم احتواء نفسي دافئ يؤكد أن الصراحة في التقييم هي نقطة الانطلاق الأساسية لإعادة التوازن دون جلد الذات.`,
-          summary: `تسجيل تقييم (${scoreNum}/10) في المحطة ${currentStep + 1} واحتواء التحدي بمرونة واهتمام.`,
+          reasoning: `تحليل تقييم مرحلي منخفض (${scoreNum}/10) في المحطة (${stationNumber} من 8) بـ ${advTitle}: رصد معطيات الضغط أو الفتور، وتقديم احتواء نفسي دافئ يؤكد أن الصراحة في التقييم هي نقطة الانطلاق الأساسية لإعادة التوازن دون جلد الذات.`,
+          summary: `تسجيل تقييم (${scoreNum}/10) في المحطة ${stationNumber} واحتواء التحدي بمرونة واهتمام.`,
           advice: `الاعتراف بالضغط الحالي هو أولى خطوات التعافي؛ خطوة يومية صغيرة تكفي لاستعادة التوازن.`,
           reply: `أحيّيك على صدقك وشفافيتك في مشاركة هذا التقييم (${scoreNum} من 10) يا صديقنا العزيز. مرورك بفترة تراجع أو ضغط في ${advTitle} هو أمر يمر به الكثيرون وسط تسارع الحياة وصعوباتها. هدفنا هنا ليس المحاكمة، بل تفكيك هذا الثقل معاً وبناء سكينتك واتزانك خطوة بخطوة.`,
         };
       } else if (scoreNum <= 7) {
         return {
           isQuestionOrInquiry: false,
-          reasoning: `تحليل تقييم مرحلي متزن (${scoreNum}/10) في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: رصد وجود قاعدة استقرار جيدة مع وجود مساحة تطوير ملموسة لتعميق الأثر وتحقيق الاستدامة.`,
-          summary: `تسجيل تقييم متزن (${scoreNum}/10) في المحطة ${currentStep + 1} وتحديد فرص التطوير.`,
+          reasoning: `تحليل تقييم مرحلي متزن (${scoreNum}/10) في المحطة (${stationNumber} من 8) بـ ${advTitle}: رصد وجود قاعدة استقرار جيدة مع وجود مساحة تطوير ملموسة لتعميق الأثر وتحقيق الاستدامة.`,
+          summary: `تسجيل تقييم متزن (${scoreNum}/10) في المحطة ${stationNumber} وتحديد فرص التطوير.`,
           advice: `البناء على نقاط القوة الحالية وحماية وقتك وطاقتك من المشتتات العابرة.`,
           reply: `تقييمك المتزن (${scoreNum} من 10) يعكس وعياً طيباً بقاعدتك الحالية في ${advTitle}. لديك أساس جيد يمكنك البناء عليه لتعميق الأثر والوصول إلى مستويات أعلى من الرضا والاستقرار.`,
         };
       } else {
         return {
           isQuestionOrInquiry: false,
-          reasoning: `تحليل تقييم مرحلي متقدم (${scoreNum}/10) في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: رصد نضج وانسجام متميز في هذا البعد، والتركيز على تعزيز الاستدامة وتجنب الانتكاس.`,
-          summary: `تسجيل تقييم متقدم (${scoreNum}/10) في المحطة ${currentStep + 1} يبرز القوة والانسجام.`,
+          reasoning: `تحليل تقييم مرحلي متقدم (${scoreNum}/10) في المحطة (${stationNumber} من 8) بـ ${advTitle}: رصد نضج وانسجام متميز في هذا البعد، والتركيز على تعزيز الاستدامة وتجنب الانتكاس.`,
+          summary: `تسجيل تقييم متقدم (${scoreNum}/10) في المحطة ${stationNumber} يبرز القوة والانسجام.`,
           advice: `الاستمرار على العادات الراسخة والبيئة المحفزة التي أوصلتك لهذا المستوى الممتاز.`,
           reply: `ما شاء الله، نتيجة ملهمة ومبهجة (${scoreNum} من 10) تعكس صفاءً حقيقياً وعملاً متواصلاً في ${advTitle}. هذا الاستقرار هو مكسب كبير لحياتك يستحق الحفاظ عليه ودعمه.`,
         };
@@ -261,8 +284,8 @@ export function getClientAdvisorResponse(
 
     return {
       isQuestionOrInquiry: false,
-      reasoning: `تحليل خيار المستفيد في المحطة (${currentStep + 1} من ${totalQuestions}) بـ ${advTitle}: تفكيك المعطى وربطه بمنهجية وازن لبناء عادات مستدامة.`,
-      summary: `رصد إجابة المحطة ${currentStep + 1} من ${totalQuestions} بنجاح.`,
+      reasoning: `تحليل خيار المستفيد في المحطة (${stationNumber} من 8) بـ ${advTitle}: تفكيك المعطى وربطه بمنهجية وازن لبناء عادات مستدامة.`,
+      summary: `رصد إجابة المحطة ${stationNumber} من 8 بنجاح.`,
       advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات اليومية المستدامة.`,
       reply: `سجلت إجابتك بوعي وتقدير تام يا صديقنا؛ هذا الوضوح يمنحنا رؤية أدق لتوجيه مسارك نحو أقصى درجات الاتزان.`,
     };
@@ -271,10 +294,10 @@ export function getClientAdvisorResponse(
   // 7. الافتراضي للإجابات
   return {
     isQuestionOrInquiry: false,
-    reasoning: `تحليل إجابة المستفيد على المحطة (${currentStep + 1} من ${totalQuestions}): رصد المعطيات وربطها بأبعاد ${advTitle} وتحديد أثرها على عجلة الحياة.`,
-    summary: `رصد إجابة المحطة ${currentStep + 1} من ${totalQuestions} بنجاح.`,
+    reasoning: `تحليل إجابة المستفيد على المحطة (${stationNumber} من 8): رصد المعطيات وربطها بأبعاد ${advTitle} وتحديد أثرها على عجلة الحياة.`,
+    summary: `رصد إجابة المحطة ${stationNumber} من 8 بنجاح.`,
     advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات اليومية المستدامة.`,
-    reply: `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت ما شاركته بوعي تام.`,
+    reply: `أسمعك بكل تقدير واحتواء يا صديقنا، ورصدت ما شاركته بوعي تام في محطة (${stationNumber} من 8: ${advTitle}).`,
   };
 }
 
@@ -294,6 +317,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
     return idx >= 0 ? idx : 0;
   });
+
+  const [assessmentMode, setAssessmentMode] = useState<AssessmentMode>(() => {
+    const saved = localStorage.getItem('wazan_assessment_mode') as AssessmentMode | null;
+    if (saved === 'initial_assessment' || saved === 'weekly_checkin') return saved;
+    return completedAdvisors.length >= 8 ? 'weekly_checkin' : 'initial_assessment';
+  });
+
+  // Track turn count per advisor station (used in initial_assessment for follow-up probe)
+  const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>({});
 
   const [inputText, setInputText] = useState('');
   const [expandedReasoningMap, setExpandedReasoningMap] = useState<Record<string, boolean>>({});
@@ -320,15 +352,34 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // Chat conversation state per advisor
   const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
-  // Step in the 3-phase weekly evaluation ritual:
-  // 0: Welcome, Listening & Initial Rating (1-10)
-  // 1: Exploring Core Obstacle / Challenge
-  // 2: Weekly Diagnosis, Golden Prescription & Domain Locked
-  const [advisorStep, setAdvisorStep] = useState<Record<string, number>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
-  const currentStep = advisorStep[currentAdvisor.id] || 0;
+  const stationNumber = currentAdvisorIndex + 1; // 1 to 8
+
+  const currentStationConfig: StationAssessmentConfig =
+    STATION_ASSESSMENT_CONFIG[currentAdvisor.id] || {
+      areaId: currentAdvisor.id,
+      stationNumber,
+      advisorName: currentAdvisor.name,
+      advisorRole: currentAdvisor.role,
+      avatarSvg: currentAdvisor.avatarSvg,
+      themeColor: currentAdvisor.themeColor,
+      badge: currentAdvisor.badge,
+      initialDiagnostic: {
+        title: 'كيف تصف حالك وشعورك العام في هذا الجانب ومستوى رضاك عنه؟',
+        description: 'ما هو التحدي الأبرز وما تقييمك لمستواك من 1 إلى 10؟',
+        placeholder: 'صف حالك ورضاك في هذا الجانب بصراحة...',
+        followUpProbe: 'أقدّر شفافيتك يا صديقنا. لنصل لتشخيص تأسيسي دقيق: ما هو التحدي الأكبر وكيف تقيّم مستواك من 1 إلى 10؟',
+        suggestedResponses: ['مستقر وممتاز', 'متوسط وسط بعض الضغوط', 'يحتاج إعادة تنظيم وعناية'],
+      },
+      weeklyCheckin: {
+        title: 'كيف كان حالك في هذا الجانب خلال الأسبوع الماضي؟',
+        description: 'اختر تقييمك للأسبوع المنصرم من 1 إلى 10',
+        placeholder: 'أسبوع هادئ ومنجز / ضغوط وتشتت...',
+        suggestedResponses: ['أداء ممتاز (8/10)', 'متوسط مقبول (6/10)', 'تحديات وضغوط (4/10)'],
+      },
+    };
 
   // Determine if current advisor is completed / locked for this week
   const isCompleted = completedAdvisors.includes(currentAdvisor.id);
@@ -337,29 +388,51 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // All 8 domains completed state
   const isAllCompleted = completedAdvisors.length >= 8;
 
-  const totalQuestions = currentAdvisor.questions?.length || 8;
-  const currentQuestion = currentAdvisor.questions?.[Math.min(currentStep, totalQuestions - 1)];
+  // Helper to build opening question for current station and mode
+  const getOpeningMessage = (
+    advisor: AdvisorConfig,
+    stConfig: StationAssessmentConfig,
+    mode: AssessmentMode,
+    stationNum: number
+  ): EvaluationChatMessage => {
+    const isInitial = mode === 'initial_assessment';
+    const text = isInitial
+      ? `أهلاً بك يا صديقنا في محطة التقييم التأسيسي الشامل 🧭\n\nأنا ${advisor.name}، ${advisor.role}.\nسنحدد معاً نقطة انطلاقك الدقيقة في "${advisor.title}" لنبني عليها خطتك وتوازنك.\n\n📌 **سؤال التشخيص التأسيسي (المحطة ${stationNum} من 8):**\n${stConfig.initialDiagnostic.title}\n\n💡 ${stConfig.initialDiagnostic.description}`
+      : `مرحباً بك مجدداً في جلسة المراجعة الأسبوعية السريعة ⚡\n\nأنا ${advisor.name}، ${advisor.role}.\nسؤال موجز واحد عن أسبوعك المنصرم لنرصد وتيرة اتزانك بدقة وخفة.\n\n📌 **سؤال الأسبوع (المحطة ${stationNum} من 8):**\n${stConfig.weeklyCheckin.title}\n\n💡 ${stConfig.weeklyCheckin.description}`;
 
-  // Initialize welcoming message for weekly clinic evaluation with Question 1 of 8
+    return {
+      id: `welcome_${advisor.id}_${mode}_${Date.now()}`,
+      sender: 'advisor',
+      text,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+  };
+
+  // Switch Assessment Mode handler
+  const handleSwitchAssessmentMode = (newMode: AssessmentMode) => {
+    if (newMode === assessmentMode) return;
+    setAssessmentMode(newMode);
+    localStorage.setItem('wazan_assessment_mode', newMode);
+
+    // Reset current station conversation with the new mode's opening question
+    const advisorKey = currentAdvisor.id;
+    setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
+    const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, newMode, stationNumber);
+    setChatMessages((prev) => ({
+      ...prev,
+      [advisorKey]: [openingMsg],
+    }));
+  };
+
+  // Initialize welcoming message for station with active mode
   useEffect(() => {
     const advisorKey = currentAdvisor.id;
     if (!chatMessages[advisorKey] || chatMessages[advisorKey].length === 0) {
-      const q1 = currentAdvisor.questions?.[0] || {
-        title: 'كيف تصف حالك وشعورك العام في هذا الجانب هذا الأسبوع؟',
-        description: 'ما تقييمك لمستوى رضاك الحالي من 1 إلى 10؟',
-      };
-      const initialMsgs: EvaluationChatMessage[] = [
-        {
-          id: 'welcome',
-          sender: 'advisor',
-          text: `مرحباً بك يا ضيف وازن في عيادة التقييم الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nسنخوض معاً تقييماً شاملاً يتكون من 8 محطات رئيسية لتشخيص هذا الجانب بعناية وبناء خطوات عملية متزنة.\n\n📌 **السؤال (1 من 8):**\n${q1.title}${q1.description ? `\n💡 ${q1.description}` : ''}`,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        },
-      ];
-      setChatMessages((prev) => ({ ...prev, [advisorKey]: initialMsgs }));
-      setAdvisorStep((prev) => ({ ...prev, [advisorKey]: 0 }));
+      const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, assessmentMode, stationNumber);
+      setChatMessages((prev) => ({ ...prev, [advisorKey]: [openingMsg] }));
+      setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
     }
-  }, [currentAdvisorIndex, currentAdvisor]);
+  }, [currentAdvisorIndex, currentAdvisor, assessmentMode]);
 
   // Auto scroll down
   useEffect(() => {
@@ -382,46 +455,32 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // Reset and restart evaluation for current advisor
   const handleResetCurrentAdvisor = () => {
     const advisorKey = currentAdvisor.id;
-    setAdvisorStep((prev) => ({ ...prev, [advisorKey]: 0 }));
-    const q1 = currentAdvisor.questions?.[0] || {
-      title: 'كيف تصف حالك وشعورك العام في هذا الجانب هذا الأسبوع؟',
-      description: 'ما تقييمك لمستوى رضاك الحالي من 1 إلى 10؟',
-    };
-    const initialMsgs: EvaluationChatMessage[] = [
-      {
-        id: `welcome_${Date.now()}`,
-        sender: 'advisor',
-        text: `مرحباً بك مجدداً في عيادة "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nأنا معك لبدء التقييم من جديد بكل أريحية عبر محطاته الـ 8 الكاملة.\n\n📌 **السؤال (1 من 8):**\n${q1.title}${q1.description ? `\n💡 ${q1.description}` : ''}`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      },
-    ];
-    setChatMessages((prev) => ({ ...prev, [advisorKey]: initialMsgs }));
+    setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
+    const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, assessmentMode, stationNumber);
+    setChatMessages((prev) => ({ ...prev, [advisorKey]: [openingMsg] }));
   };
 
   // Move to next incomplete advisor
   const handleGoToNextAdvisor = () => {
     setShowCelebration(false);
-    // Find next incomplete advisor index
     const nextIdx = ADVISORS_LIST.findIndex(
       (adv, i) => i > currentAdvisorIndex && !completedAdvisors.includes(adv.id)
     );
     if (nextIdx >= 0) {
       setCurrentAdvisorIndex(nextIdx);
     } else {
-      // Find first incomplete anywhere
       const firstIncomplete = ADVISORS_LIST.findIndex(
         (adv) => !completedAdvisors.includes(adv.id)
       );
       if (firstIncomplete >= 0) {
         setCurrentAdvisorIndex(firstIncomplete);
       } else {
-        // All completed!
         onCompleteAll();
       }
     }
   };
 
-  // Handle user response with structured 8-question clinical assessment or direct conversation
+  // Handle user answer with dual-mode questioning logic
   const handleSendAnswer = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isAdvisorReplying) return;
@@ -436,65 +495,35 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
     setInputText('');
     const currentList = chatMessages[advisorKey] || [];
+    const currentTurns = stationTurnCount[advisorKey] || 0;
 
-    // تنظيف الرسالة من التحيات التمهيدية لاستخراج الجوهر الحقيقي
-    const salutationRegex = /^(?:أهلاً|اهلا|هلا|مرحبا|مرحباً|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|حيّاك|أهلين)\s*(?:دكتور|يا دكتور|دكتورة|يا دكتورة|استاذ|أستاذ|يا استاذ|يا أستاذ|باشمهندس|يا باشمهندس|بروفيسور|يا بروفيسور|صديقي|يا غالي|كمال|سفيان|ريان|طارق|ليلى|زياد|مريم|سامي|معتز|هاني)?\s*/i;
-    const coreText = text.toLowerCase().trim().replace(salutationRegex, '').trim();
-    const isBareGreetingOnly = !coreText && /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(text.toLowerCase());
-
-    // 0. بروتوكول استثناء طوارئ إنساني فوري (Safety & Empathy Override) - الأولوية المطلقة
-    const isCrisisOrDeath = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(text.toLowerCase());
-
-    // 1. الذكاء الاستشاري التخصصي لمشاكل المستشارين (المفلس، العاطل، الوزن، الصلاة، التشتت...)
-    const isDomainDistress = /(مفلس|طفران|معدم|ما عندي فلوس|صفر حسابي|ديون|مديون|قروض|سلف|الراتب ما يكفي|خسرت فلوسي|وزني زايد|سمنة|سمين|ما انام|أرق|كسول|خامل|ما عندي طاقة|جسمي مكسر|عاطل|عاطلة|بدون وظيفة|مرفوض|احتراق وظيفي|مديري ظالم|بيئة عمل سامة|كرهت وظيفتي|ما اصلي|قلبي قاسي|فتور|تراجع روحي|ذنب|ضائع روحيا|ثقتي بنفسي ضعيفة|احس اني فاشل|جلد الذات|اسوف|تسويف|ما اقدر اركز|انسى بسرعة|تشتت ذهني|مشاكل مع اهلي|خلافات عائلية|اهلي ما يفهموني|طلاق|وحيد|ما عندي اصدقاء|رهاب اجتماعي|اخاف من الناس|حياتي كلها متلخبطة)/i.test(text.toLowerCase());
-
-    // 2. مشاعر التعب الشديد والحزن والضيق
-    const isGriefOrExhaustion = /(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)/i.test(text.toLowerCase());
-
-    // 3. مشاعر الغضب والسب
-    const isCurseOrAnger = /(اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)/i.test(text.toLowerCase());
-
-    // 4. السؤال الصريح عن حال المستشار
-    const isAskingHowAdvisorIs = /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(text.toLowerCase());
-
-    // 5. الأسئلة والاستفسارات الحرة المباشرة
-    const isDirectQuestion = text.includes('؟') || text.includes('?') || /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من هو|من هي|من هم|من أنت|من انت|مين|من الذي|من التي|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(text.toLowerCase());
-
-    // أي من هذه الحالات يعتبر تفاعلاً حراً ولا يقدم إجابة تقييمية
-    const isQuestionOrInquiry =
-      isCrisisOrDeath ||
-      isDomainDistress ||
-      isGriefOrExhaustion ||
-      isCurseOrAnger ||
-      isAskingHowAdvisorIs ||
-      isBareGreetingOnly ||
-      isDirectQuestion;
-
-    const currentQ = currentAdvisor.questions?.[currentStep] || currentAdvisor.questions?.[0];
-
-    // 6. فحص هل المدخل إجابة صريحة على السؤال التقييمي الحالي (فقط إذا لم يكن محادثة حرة أو سؤالاً أو طوارئ)
+    // Detect numeric score (1 to 10)
     const ratingMatch = text.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i) || text.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
-    const isOptionAnswer = Boolean(currentQ?.options?.some((o) => o.label?.trim() === text.trim() || o.id === text.trim()));
-    const isEvaluationPrefix = text.startsWith('تقييمي:');
-    const isDirectEvaluationAnswer = !isQuestionOrInquiry && (Boolean(ratingMatch) || isOptionAnswer || isEvaluationPrefix);
-
-    // If it's an answer to the current evaluation question (NOT a question or free thought)
-    let nextStep = currentStep;
-    if (isDirectEvaluationAnswer && !isQuestionOrInquiry && currentStep < totalQuestions) {
-      if (currentQ.type === 'rating' && ratingMatch) {
-        const num = Math.min(10, Math.max(1, parseFloat(ratingMatch[1] || '5')));
-        onSaveAnswer(currentAdvisor.id, currentQ.id, num);
-      } else if (currentQ.type === 'multiple_choice') {
-        const matchedOpt = currentQ.options?.find((o) => o.label === text || o.id === text);
-        onSaveAnswer(currentAdvisor.id, currentQ.id, matchedOpt ? matchedOpt.id : text);
-      } else if (currentQ.type === 'multi_select') {
-        onSaveAnswer(currentAdvisor.id, currentQ.id, [text]);
-      } else {
-        onSaveAnswer(currentAdvisor.id, currentQ.id, text);
+    let detectedScore: number | null = null;
+    if (ratingMatch) {
+      const rawNum = parseFloat(ratingMatch[1] || ratingMatch[0].replace(/[^\d.]/g, ''));
+      if (!isNaN(rawNum) && rawNum >= 1 && rawNum <= 10) {
+        detectedScore = rawNum;
       }
-      nextStep = currentStep + 1;
-      setAdvisorStep((prev) => ({ ...prev, [advisorKey]: nextStep }));
     }
+
+    // Dual-Mode logic:
+    // In weekly_checkin: 1 question only -> immediately concludes and scores the station!
+    // In initial_assessment:
+    //   - If answer is brief (< 35 chars) without score and currentTurns === 0 -> ask clarifying follow-up probe!
+    //   - If answer has a rating, or is detailed, or after 1 follow-up turn (currentTurns >= 1) -> concludes and scores!
+    const isInitialProbeTurn = assessmentMode === 'initial_assessment' && !detectedScore && text.length < 35 && currentTurns < 1;
+    const willCompleteStation = !isInitialProbeTurn;
+
+    // Save answer data
+    if (detectedScore !== null) {
+      onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, detectedScore);
+    } else {
+      onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_response_${currentTurns}`, text);
+    }
+
+    // Increment station turn count
+    setStationTurnCount((prev) => ({ ...prev, [advisorKey]: currentTurns + 1 }));
 
     // Display user message immediately
     setChatMessages((prev) => ({
@@ -510,7 +539,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         content: m.text,
       }));
 
-      // Call AI Agent API
       let replyContent = '';
       let reasoningContent = '';
       let summaryContent = '';
@@ -525,11 +553,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             message: text,
             history,
             answers,
-            userScore: calculateScoreForAdvisor(currentAdvisor, answers),
+            userScore: detectedScore || calculateScoreForAdvisor(currentAdvisor, answers) || 7,
             aiMode,
             isEvaluationSession: true,
-            evaluationStep: nextStep < totalQuestions ? nextStep + 1 : totalQuestions,
-            evaluationQuestionTitle: currentQ?.title,
+            evaluationStep: stationNumber,
+            evaluationQuestionTitle: assessmentMode === 'initial_assessment'
+              ? currentStationConfig.initialDiagnostic.title
+              : currentStationConfig.weeklyCheckin.title,
+            assessmentMode,
+            stationTurnCount: currentTurns,
           }),
         });
 
@@ -540,7 +572,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           adviceContent = data.advice || '';
           replyContent = data.reply || adviceContent || summaryContent || '';
 
-          // Defensive check if replyContent is a raw JSON string
           if (typeof replyContent === 'string' && (replyContent.startsWith('{') || replyContent.includes('"reasoning"'))) {
             try {
               const innerMatch = replyContent.match(/\{[\s\S]*\}/);
@@ -560,16 +591,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         console.warn('API call failed or offline, activating client intelligence engine:', fetchErr);
       }
 
-      // If reply is empty, activate local client intelligence
       if (!replyContent) {
         const local = getClientAdvisorResponse(
           currentAdvisor,
           text,
-          currentStep,
-          totalQuestions,
-          calculateScoreForAdvisor(currentAdvisor, answers),
-          currentQ,
-          isDirectEvaluationAnswer
+          stationNumber,
+          detectedScore || calculateScoreForAdvisor(currentAdvisor, answers),
+          assessmentMode,
+          currentTurns
         );
         reasoningContent = local.reasoning;
         summaryContent = local.summary;
@@ -577,18 +606,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         replyContent = local.reply;
       }
 
-      // If user was answering an evaluation question, advance smoothly to next question
-      if (!isQuestionOrInquiry && isDirectEvaluationAnswer) {
-        if (nextStep < totalQuestions) {
-          const nextQ = currentAdvisor.questions[nextStep];
-          replyContent += `\n\n📌 **السؤال (${nextStep + 1} من ${totalQuestions}):**\n${nextQ.title}${nextQ.description ? `\n💡 ${nextQ.description}` : ''}`;
-        } else {
-          // Completed all 8 questions!
-          const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-          const scoreToSave = finalScore > 0 ? finalScore : 7.5;
-          const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
-          replyContent += `\n\n🎉 مبارك يا صديقنا! أكملت بنجاح كافة محطات التقييم الـ 8 في عيادة ${currentAdvisor.title}.\n\nرصدنا درجتك المعتمدة: (${scoreToSave.toFixed(1)} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار والاستشارة مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`;
-        }
+      // If initial diagnostic follow-up is needed and reply didn't include the probe:
+      if (isInitialProbeTurn && !replyContent.includes('?') && !replyContent.includes('؟')) {
+        replyContent += `\n\n📌 **استيضاح تشخيصي (المحطة ${stationNumber} من 8):**\n${currentStationConfig.initialDiagnostic.followUpProbe}`;
+      }
+
+      // If will complete station: append confirmation & score
+      if (willCompleteStation) {
+        const finalScore = detectedScore || calculateScoreForAdvisor(currentAdvisor, answers) || 7.5;
+        const goldenHabit = currentAdvisor.defaultGoals[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+        replyContent += `\n\n✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\nالدرجة المسجلة: (${finalScore.toFixed(1)} من 10).\n\n💡 **التوصية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
       }
 
       const nextAdvisorMsg: EvaluationChatMessage = {
@@ -606,11 +633,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
 
-      // When ALL 8 questions are complete, record completion badge
-      if (!isQuestionOrInquiry && nextStep >= totalQuestions) {
-        const finalScore = calculateScoreForAdvisor(currentAdvisor, answers);
-        const scoreToSave = finalScore > 0 ? finalScore : 7.5;
-        onFinishAdvisor(currentAdvisor.id, scoreToSave);
+      // When station completes, record score and trigger celebration
+      if (willCompleteStation) {
+        const finalScore = detectedScore || calculateScoreForAdvisor(currentAdvisor, answers) || 7.5;
+        onFinishAdvisor(currentAdvisor.id, finalScore);
         confetti({
           particleCount: 70,
           spread: 70,
@@ -620,29 +646,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }
     } catch (err) {
       console.error('Advisor chat error in onboarding:', err);
-      const local = getClientAdvisorResponse(
-        currentAdvisor,
-        text,
-        currentStep,
-        totalQuestions,
-        calculateScoreForAdvisor(currentAdvisor, answers),
-        currentQ
-      );
-
-      const nextAdvisorMsg: EvaluationChatMessage = {
-        id: `agent_${Date.now()}`,
-        sender: 'advisor',
-        text: local.reply,
-        reasoning: local.reasoning,
-        summary: local.summary,
-        advice: local.advice,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
-
-      setChatMessages((prev) => ({
-        ...prev,
-        [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
-      }));
     } finally {
       setIsAdvisorReplying(false);
     }
@@ -651,25 +654,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const currentAdvisorScore = calculateScoreForAdvisor(currentAdvisor, answers);
   const insights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
   const activeConversation = chatMessages[currentAdvisor.id] || [];
-
-  // Quick reflection suggestions derived safely from advisor data without ever crashing
-  const quickReflectionPills = useMemo(() => {
-    const questionOptions = currentAdvisor.questions?.flatMap((q) => q.options?.map((o) => o.label) || []) || [];
-    const suggestions = currentAdvisor.suggestedQuestions || [];
-    const goals = currentAdvisor.defaultGoals || [];
-    const pills = [
-      ...questionOptions.slice(0, 3),
-      ...suggestions.slice(0, 2),
-      ...goals.slice(0, 1),
-    ];
-    return pills.length > 0
-      ? pills
-      : [
-          'ضيق الوقت وتسارع الروتين اليومي',
-          'التشتت بكثرة المهام والأجهزة',
-          'التسويف وصعوبة الالتزام بالعادة',
-        ];
-  }, [currentAdvisor]);
 
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-5 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
@@ -682,9 +666,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-black">اكتملت خريطتك الأسبوعية المتكاملة (8 من 8)!</h3>
+                <h3 className="text-base font-black">اكتملت خريطتك المتكاملة (8 من 8)!</h3>
                 <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-400 text-emerald-950">
-                  مكتمل ومقفل للأسبوع 🔒
+                  مكتمل وموثق بنجاح 🔒
                 </span>
               </div>
               <p className="text-xs text-emerald-100/90 mt-0.5">
@@ -703,17 +687,42 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </div>
       )}
 
-      {/* Top Advisor Selector Tabs */}
-      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-4 shadow-xs transition-colors">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[#475569] dark:text-[#94A3B8]">جلسات التقييم الأسبوعي:</span>
-            <span className="text-xs font-black text-[#0F6E6E] dark:text-[#22D3EE]">
-              {currentAdvisor.title}
-            </span>
+      {/* Top Station Selector & Dual-Mode Controls */}
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-4 shadow-xs transition-colors space-y-3">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {/* Dual-Mode Selector Toggle */}
+          <div className="flex items-center gap-1.5 p-1 rounded-2xl bg-[#E2E8F0]/70 dark:bg-[#112028] border border-[#CBD5E1] dark:border-[#1E343F]">
+            <button
+              type="button"
+              onClick={() => handleSwitchAssessmentMode('weekly_checkin')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                assessmentMode === 'weekly_checkin'
+                  ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs'
+                  : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white'
+              }`}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>المراجعة الأسبوعية السريعة</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-white/20">سؤال 1</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSwitchAssessmentMode('initial_assessment')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                assessmentMode === 'initial_assessment'
+                  ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs'
+                  : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-white'
+              }`}
+            >
+              <Compass className="w-3.5 h-3.5" />
+              <span>التقييم التأسيسي الشامل</span>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-white/20">تشخيص عميق</span>
+            </button>
           </div>
+
+          {/* Completion Progress Indicator */}
           <div className="flex items-center gap-2 text-[11px] font-semibold text-[#475569] dark:text-[#94A3B8]">
-            <span>المكتمل: {completedAdvisors.length} من 8</span>
+            <span>المكتمل: {completedAdvisors.length} من 8 محطات</span>
             <div className="w-20 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
                 className="h-full bg-[#0F6E6E] dark:bg-[#22D3EE] transition-all duration-300"
@@ -723,7 +732,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </div>
         </div>
 
-        {/* Advisor Tabs */}
+        {/* 8 Advisor Station Tabs */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none">
           {ADVISORS_LIST.map((advisor, index) => {
             const isAdvCompleted = completedAdvisors.includes(advisor.id);
@@ -736,7 +745,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   setCurrentAdvisorIndex(index);
                   setShowCelebration(false);
                 }}
-                className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
+                className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
                   isCurrent
                     ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-[#0F6E6E] dark:border-[#0891B2] shadow-xs'
                     : isAdvCompleted
@@ -753,7 +762,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         </div>
       </div>
 
-      {/* Main Chat Interface (Clean AI Clinic Window) */}
+      {/* Main Assessment Window */}
       <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl overflow-hidden shadow-xs flex flex-col h-[680px] transition-colors">
         {/* Advisor Header Bar */}
         <div className="px-6 py-4 border-b border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between bg-white dark:bg-[#0E1D24] flex-shrink-0 transition-colors">
@@ -800,7 +809,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               <button
                 type="button"
                 onClick={() => setShowModeDropdown(!showModeDropdown)}
-                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs hover:shadow-sm"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs hover:shadow-sm cursor-pointer"
                 style={{
                   backgroundColor: currentModeConfig.bgColor,
                   borderColor: `${currentModeConfig.color}40`,
@@ -835,7 +844,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                               handleSelectAiMode(mode.id);
                               setShowModeDropdown(false);
                             }}
-                            className={`w-full text-right p-2 rounded-xl transition-all flex items-start gap-2 border ${
+                            className={`w-full text-right p-2 rounded-xl transition-all flex items-start gap-2 border cursor-pointer ${
                               isSelected
                                 ? 'border-[#0F6E6E] dark:border-[#22D3EE] shadow-xs'
                                 : 'border-transparent hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
@@ -876,7 +885,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 type="button"
                 onClick={handleFinishCurrentAdvisor}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-                title="اعتماد النتيجة الفورية وإقفال الجلسة"
+                title="اعتماد النتيجة الفورية"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span className="flex items-center gap-1">
@@ -892,21 +901,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         <div className="px-6 py-2 bg-[#F7F6F2] dark:bg-[#0B161C] border-b border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between gap-4 text-xs flex-shrink-0 transition-colors">
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-black text-[#0F6E6E] dark:text-[#22D3EE] text-[11px] sm:text-xs flex-shrink-0">
-              {currentStep < totalQuestions ? `المحطة (${currentStep + 1} من ${totalQuestions})` : 'اكتملت الأسئلة الـ 8 بنجاح ✨'}
+              المحطة ({stationNumber} من 8): {currentAdvisor.title}
             </span>
             <span className="text-[11px] text-[#475569] dark:text-[#94A3B8] hidden sm:inline truncate">
-              {currentStep < totalQuestions ? currentQuestion?.title : 'تم رصد واعتماد النتيجة الموثقة'}
+              {assessmentMode === 'initial_assessment'
+                ? 'التقييم التأسيسي الشامل • تشخيص دقيق لنقطة الانطلاق'
+                : 'المراجعة الأسبوعية السريعة • سؤال موجز للأسبوع المنصرم'}
             </span>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <div className="w-24 sm:w-36 bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
               <div
                 className="bg-[#0F6E6E] dark:bg-[#22D3EE] h-full rounded-full transition-all duration-300"
-                style={{ width: `${Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%` }}
+                style={{ width: `${Math.min(100, Math.round(((completedAdvisors.length) / 8) * 100))}%` }}
               />
             </div>
             <span className="text-[10px] font-bold text-[#475569] dark:text-[#94A3B8]" dir="ltr">
-              {Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%
+              {Math.min(100, Math.round(((completedAdvisors.length) / 8) * 100))}%
             </span>
           </div>
         </div>
@@ -985,7 +996,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
               <div className="p-3 rounded-2xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#475569] dark:text-[#94A3B8] flex items-center gap-2">
                 <Sparkles className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE] animate-spin" />
-                <span>{currentAdvisor.name} يستمع إليك ويصيغ توجيهه الطبي بعناية...</span>
+                <span>{currentAdvisor.name} يستمع إليك ويصيغ تشخيصه بعناية...</span>
               </div>
             </div>
           )}
@@ -993,19 +1004,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           <div ref={messagesEndRef} />
         </div>
 
-        {/* Completion Status Bar when evaluated (Open Mode enabled) */}
+        {/* Completion Status Bar when evaluated */}
         {isCompleted && (
           <div className="px-4 py-2.5 bg-emerald-50/90 dark:bg-emerald-950/40 border-t border-emerald-200/90 dark:border-emerald-900/50 flex flex-wrap items-center justify-between gap-2 flex-shrink-0 transition-colors">
             <div className="flex items-center gap-2">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" />
               <span className="text-xs font-black text-emerald-950 dark:text-emerald-300 flex items-center gap-1.5">
-                <span>تم رصد تقييم هذا الجانب</span>
+                <span>تم رصد تقييم المحطة ({stationNumber} من 8)</span>
                 <span dir="ltr" className="font-mono font-bold">
                   ({currentAdvisorScore > 0 ? currentAdvisorScore : 7} / 10)
                 </span>
               </span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200">
-                الوضع المفتوح مفعل 🔓
+                معتمد وموثق 🔒
               </span>
             </div>
             <div className="flex items-center gap-2">
@@ -1013,7 +1024,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 type="button"
                 onClick={handleResetCurrentAdvisor}
                 className="px-2.5 py-1 rounded-xl bg-white dark:bg-[#0E1D24] border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-[#162734] text-emerald-900 dark:text-emerald-300 text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
-                title="إعادة بدء التقييم الإكلينيكي لهذا المستشار"
+                title="إعادة بدء التقييم لهذا الجانب"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 <span>إعادة التقييم</span>
@@ -1033,106 +1044,70 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 onClick={handleGoToNextAdvisor}
                 className="px-3 py-1 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
               >
-                <span>الجانب التالي</span>
+                <span>المحطة التالية</span>
                 <ArrowLeft className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
         )}
 
-        {/* ACTIVE CLINIC INPUT BAR (Always Open for Testing and Continuous Conversation) */}
-        <>
-          {/* Quick Choices bar dynamically adapting to current question type */}
-          <div className="px-4 py-2.5 bg-[#F7F6F2] dark:bg-[#0B161C] border-t border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
+        {/* Input Bar & Dynamic Quick Choices */}
+        <div className="border-t border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
+          {/* Quick Choices bar dynamically adapting to Assessment Mode */}
+          <div className="px-4 py-2.5 bg-[#F7F6F2] dark:bg-[#0B161C] border-b border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
               <span className="text-[10px] font-black text-[#475569] dark:text-[#94A3B8] flex items-center gap-1 flex-shrink-0">
                 <Sparkles className="w-3 h-3 text-[#0F6E6E] dark:text-[#22D3EE]" />
-                {currentStep < totalQuestions && currentQuestion
-                  ? (currentQuestion.type === 'rating'
-                    ? 'اختر تقييمك (من 1 إلى 10):'
-                    : currentQuestion.type === 'multiple_choice'
-                    ? 'خيارات الإجابة المقترحة:'
-                    : currentQuestion.type === 'multi_select'
-                    ? 'خيارات مقترحة:'
-                    : 'أفكار سريعة للإجابة:')
-                  : 'استشارة وتطوير مستمر:'}
+                {assessmentMode === 'weekly_checkin' ? 'اختر تقييم الأسبوع (1 إلى 10):' : 'خيارات تشخيصية مقترحة:'}
               </span>
 
-              {/* If rating question: 1 to 10 pills */}
-              {currentStep < totalQuestions && currentQuestion?.type === 'rating' && (
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                    <button
-                      key={num}
-                      type="button"
-                      onClick={() => handleSendAnswer(`تقييمي: ${num} من 10`)}
-                      className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-xs font-bold transition-all shadow-xs cursor-pointer"
-                    >
-                      {num}
-                    </button>
-                  ))}
-                </div>
-              )}
+              {/* 1 to 10 Rating Pills */}
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => handleSendAnswer(`تقييمي: ${num} من 10`)}
+                    className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-xs font-bold transition-all shadow-xs cursor-pointer"
+                  >
+                    {num}
+                  </button>
+                ))}
+              </div>
 
-              {/* If multiple choice question: show question options */}
-              {currentStep < totalQuestions && currentQuestion?.type === 'multiple_choice' && currentQuestion.options && (
+              {/* Suggested Responses derived from current station config */}
+              {assessmentMode === 'weekly_checkin' ? (
                 <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {currentQuestion.options.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => handleSendAnswer(opt.label)}
-                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* If multi_select question: show question options */}
-              {currentStep < totalQuestions && currentQuestion?.type === 'multi_select' && currentQuestion.options && (
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {currentQuestion.options.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => handleSendAnswer(opt.label)}
-                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {/* If open_text or open consultation: show quick suggestions */}
-              {(currentStep >= totalQuestions || currentQuestion?.type === 'open_text') && (
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {quickReflectionPills.map((ch, idx) => (
+                  {currentStationConfig.weeklyCheckin.suggestedResponses.map((chip, idx) => (
                     <button
                       key={idx}
                       type="button"
-                      onClick={() => handleSendAnswer(ch)}
+                      onClick={() => handleSendAnswer(chip)}
                       className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                     >
-                      {ch}
+                      {chip}
                     </button>
                   ))}
-                  <button
-                    type="button"
-                    onClick={() => handleSendAnswer('الحمد لله، الأمور تسير بهدوء ودون عوائق كبيرة')}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
-                  >
-                    الأمور مستقرة وهادئة 🌿
-                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-1.5 flex-shrink-0">
+                  {currentStationConfig.initialDiagnostic.suggestedResponses.map((chip, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSendAnswer(chip)}
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
+                    >
+                      {chip}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
           </div>
 
           {/* Input Bar: Text + Mic + Send */}
-          <div className="p-3 sm:p-4 bg-white dark:bg-[#0E1D24] border-t border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
+          <div className="p-3 sm:p-4 bg-white dark:bg-[#0E1D24] transition-colors">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1140,7 +1115,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               }}
               className="flex items-center gap-2"
             >
-              {/* Mic Button for Voice Dictation (Speech to Text) */}
+              {/* Mic Button for Voice Dictation */}
               <VoiceInput
                 onTranscript={(transcript) =>
                   setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript))
@@ -1157,41 +1132,42 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 placeholder={
                   isCompleted
                     ? 'اكتب استشارتك أو سؤالك للمستشار بحرية...'
-                    : currentQuestion?.placeholder ||
-                      (currentQuestion?.type === 'rating'
-                        ? 'اكتب تقييمك (مثال: 8 من 10) أو اسأل المستشار أي سؤال...'
-                        : 'اكتب إجابتك أو تحدث بصوتك، أو اسأل المستشار بحرية...')
+                    : assessmentMode === 'initial_assessment'
+                    ? currentStationConfig.initialDiagnostic.placeholder
+                    : currentStationConfig.weeklyCheckin.placeholder
                 }
                 className="flex-1 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
                 dir="rtl"
               />
 
-                {/* Send Button */}
-                <button
-                  type="submit"
-                  disabled={!inputText.trim() || isAdvisorReplying}
-                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
-                  style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
-                >
-                  <Send className="w-5 h-5 -rotate-90" />
-                </button>
-              </form>
+              {/* Send Button */}
+              <button
+                type="submit"
+                disabled={!inputText.trim() || isAdvisorReplying}
+                className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
+                style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
+              >
+                <Send className="w-5 h-5 -rotate-90" />
+              </button>
+            </form>
 
-              <div className="mt-2 flex items-center justify-between text-[11px] text-[#475569] dark:text-[#94A3B8] px-1">
-                <span className="flex items-center gap-1">
-                  <Lightbulb className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
-                  جلسة أسبوعية مركزة من خطوتين: التقييم ثم التحدي لإصدار العادة وإقفال الجانب للأسبوع.
-                </span>
-                <button
-                  type="button"
-                  onClick={handleFinishCurrentAdvisor}
-                  className="text-[#0F6E6E] dark:text-[#22D3EE] hover:underline font-bold cursor-pointer"
-                >
-                  اعتماد وإنهاء الجلسة فوراً ✓
-                </button>
-              </div>
+            <div className="mt-2 flex items-center justify-between text-[11px] text-[#475569] dark:text-[#94A3B8] px-1">
+              <span className="flex items-center gap-1">
+                <Lightbulb className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
+                {assessmentMode === 'initial_assessment'
+                  ? 'نمط التقييم التأسيسي: حوار تشخيصي متعمق بدون تقييد بعدد رسائل محدد حتى اتضاح الرؤية.'
+                  : 'نمط المراجعة الأسبوعية: سؤال واحد موجز وخفيف للأسبوع المنصرم لإنهاء المحطة بسرعة وسلاسة.'}
+              </span>
+              <button
+                type="button"
+                onClick={handleFinishCurrentAdvisor}
+                className="text-[#0F6E6E] dark:text-[#22D3EE] hover:underline font-bold cursor-pointer"
+              >
+                اعتماد وإنهاء المحطة فوراً ✓
+              </button>
             </div>
-          </>
+          </div>
+        </div>
       </div>
 
       {/* Celebration Modal when an Advisor's evaluation completes */}
@@ -1208,13 +1184,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             <div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                اكتمل تقييم هذا الجانب بنجاح
+                اكتمل تقييم المحطة ({stationNumber} من 8) بنجاح
               </div>
               <h3 className="text-2xl font-black text-[#0F172A] dark:text-[#F1F5F9]">
-                أحسنت! أنهيت جولة {currentAdvisor.name}
+                أحسنت! أنهيت محطة {currentAdvisor.name}
               </h3>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
-                تم اعتماد نتيجتك التقديرية في {currentAdvisor.title} وحفظ توصيتك الذهبية للأسبوع
+                تم اعتماد نتيجتك التقديرية في {currentAdvisor.title} وتوثيق توصيتك الذهبية
               </p>
             </div>
 
@@ -1295,7 +1271,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 <span>
                   {completedAdvisors.length >= 8
                     ? '🎉 عرض خريطتي المتكاملة (الداشبورد)'
-                    : 'المستشار التالي ←'}
+                    : 'المحطة التالية ←'}
                 </span>
               </button>
             </div>
