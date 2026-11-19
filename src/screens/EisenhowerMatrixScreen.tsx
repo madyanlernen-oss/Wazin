@@ -488,26 +488,32 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
         key={g.id}
         draggable
         onDragStart={(e) => handleDragStart(e, g.id)}
-        className={`p-3.5 rounded-2xl border transition-all flex items-start justify-between gap-3 cursor-grab active:cursor-grabbing group min-w-0 ${colorClasses}`}
+        className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col gap-2.5 cursor-grab active:cursor-grabbing group min-w-0 select-none shadow-2xs ${colorClasses}`}
       >
-        {/* Left Side: Checkbox & Goal Content */}
-        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+        {/* Top Row: Checkbox & Goal Content (Full horizontal width, never squished) */}
+        <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full">
+          {/* Completion Checkbox with Comfortable Target & Clear Focus Ring */}
           <button
             type="button"
-            onClick={() => handleToggleGoal(g.id)}
-            className={`mt-0.5 flex-shrink-0 cursor-pointer transition-transform hover:scale-110 ${checkColors}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleToggleGoal(g.id);
+            }}
+            className={`mt-0.5 w-6 h-6 sm:w-7 sm:h-7 rounded-lg flex items-center justify-center flex-shrink-0 cursor-pointer transition-all duration-200 hover:scale-105 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#112028] ${checkColors}`}
             title={g.completed ? 'تعليم كغير مكتمل' : 'تعليم كمكتمل'}
+            aria-label={g.completed ? `إلغاء إكمال الهدف: ${g.title}` : `إكمال الهدف: ${g.title}`}
           >
             {g.completed ? (
-              <CheckCircle2 className="w-4 h-4 fill-current text-white dark:text-[#112028]" />
+              <CheckCircle2 className="w-5 h-5 fill-current text-white dark:text-[#112028]" />
             ) : (
-              <Circle className="w-4 h-4" />
+              <Circle className="w-5 h-5" />
             )}
           </button>
 
-          <div className="min-w-0 flex-1 space-y-1.5">
+          {/* Goal Title - Full Width, Clean Word Break */}
+          <div className="min-w-0 flex-1">
             <p
-              className={`text-xs font-bold leading-relaxed break-words ${
+              className={`text-xs sm:text-[13px] font-bold leading-relaxed break-words text-right ${
                 g.completed
                   ? 'line-through text-slate-400 dark:text-slate-500'
                   : 'text-[#0F172A] dark:text-white'
@@ -515,48 +521,57 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             >
               {g.title}
             </p>
-
-            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
-              {/* Full Domain Name - Never truncated */}
-              {adv && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#475569] dark:text-slate-300 bg-white/90 dark:bg-[#112028] px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-slate-700 shadow-2xs">
-                  <span>{adv.avatarSvg}</span>
-                  <span>{adv.title}</span>
-                </span>
-              )}
-
-              {/* Advisor Guidance Tag */}
-              {g.advisorName && (
-                <span className="inline-flex items-center text-[10px] font-bold text-[#0B6E72] dark:text-cyan-300 bg-[#0B6E72]/10 dark:bg-cyan-950/60 border border-[#0B6E72]/20 dark:border-cyan-800/40 px-2 py-0.5 rounded-md">
-                  توجيه: {g.advisorName}
-                </span>
-              )}
-            </div>
           </div>
         </div>
 
-        {/* Right Side: Quadrant Selector & Delete Button */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          <select
-            aria-label="نقل المربع"
-            value={g.quadrant}
-            onChange={(e) => handleMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
-            className="text-[11px] font-semibold bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[#334155] dark:text-slate-300 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer shadow-2xs transition-colors"
-          >
-            <option value="q1_urgent_important">المربع 1 (نفذ)</option>
-            <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
-            <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
-            <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
-          </select>
+        {/* Bottom Row: Metadata Tags + Controls (Never Collide on Narrow or Medium Screens) */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-200/60 dark:border-slate-800/60 min-w-0 w-full">
+          {/* Tags: Domain Badge + Advisor Badge */}
+          <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+            {/* Domain Tag */}
+            {adv && (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#334155] dark:text-slate-200 bg-white/95 dark:bg-[#0B161C] px-2 py-0.5 rounded-md border border-slate-200/90 dark:border-slate-700 shadow-2xs max-w-full">
+                <span className="text-xs">{adv.avatarSvg}</span>
+                <span className="truncate">{adv.title}</span>
+              </span>
+            )}
 
-          <button
-            type="button"
-            onClick={() => setGoalToDelete(g)}
-            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-            title="حذف الهدف"
-          >
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
+            {/* Advisor Guidance Tag */}
+            {g.advisorName && (
+              <span className="inline-flex items-center text-[10px] font-bold text-[#0B6E72] dark:text-cyan-300 bg-[#0B6E72]/10 dark:bg-cyan-950/70 border border-[#0B6E72]/20 dark:border-cyan-800/50 px-2 py-0.5 rounded-md max-w-full">
+                <span className="truncate">توجيه: {g.advisorName}</span>
+              </span>
+            )}
+          </div>
+
+          {/* Quick Actions: Quadrant Move Dropdown & Delete Button */}
+          <div className="flex items-center gap-1.5 flex-shrink-0 ms-auto">
+            <select
+              aria-label="نقل المربع لمصفوفة أيزنهاور"
+              value={g.quadrant}
+              onClick={(e) => e.stopPropagation()}
+              onChange={(e) => handleMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
+              className="text-[11px] sm:text-xs font-semibold bg-white dark:bg-[#0B161C] border border-slate-300 dark:border-slate-700 hover:border-[#0B6E72] dark:hover:border-cyan-400 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#112028] cursor-pointer shadow-2xs transition-colors min-h-[30px]"
+            >
+              <option value="q1_urgent_important">المربع 1 (نفّذ)</option>
+              <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
+              <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
+              <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
+            </select>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setGoalToDelete(g);
+              }}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 border border-transparent hover:border-rose-200 dark:hover:border-rose-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500 dark:focus-visible:ring-rose-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#112028] transition-all cursor-pointer flex-shrink-0"
+              title="حذف الهدف"
+              aria-label={`حذف الهدف: ${g.title}`}
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -588,11 +603,13 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
 
         {/* Timeframe Toggle Buttons & Actions */}
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="inline-flex p-1 bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs">
+          <div className="inline-flex p-1 bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs" role="tablist" aria-label="النطاق الزمني للأهداف">
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTimeframe === 'daily'}
               onClick={() => setActiveTimeframe('daily')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'daily'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -603,8 +620,10 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTimeframe === 'weekly'}
               onClick={() => setActiveTimeframe('weekly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'weekly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -615,8 +634,10 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTimeframe === 'monthly'}
               onClick={() => setActiveTimeframe('monthly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'monthly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -627,8 +648,10 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTimeframe === 'yearly'}
               onClick={() => setActiveTimeframe('yearly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'yearly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -642,8 +665,9 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           <button
             type="button"
             onClick={handlePrint}
-            title="طباعة وتصدير المصفوفة"
-            className="p-2.5 rounded-xl bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-400 shadow-xs cursor-pointer transition-colors"
+            title="طباعة وتصدير مصفوفة أيزنهاور"
+            aria-label="طباعة وتصدير المصفوفة"
+            className="p-2.5 rounded-xl bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-400 hover:border-[#0B6E72]/40 dark:hover:border-cyan-500/40 shadow-xs cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#112028]"
           >
             <Printer className="w-4 h-4" />
           </button>
@@ -652,7 +676,8 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             type="button"
             onClick={() => setShowResetGoalsConfirm(true)}
             title="إعادة تعيين الأهداف الافتراضية"
-            className="p-2.5 rounded-xl bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 text-[#64748B] dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 shadow-xs cursor-pointer transition-colors"
+            aria-label="إعادة تعيين الأهداف الافتراضية"
+            className="p-2.5 rounded-xl bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 text-[#64748B] dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:border-amber-300 dark:hover:border-amber-700/60 shadow-xs cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 dark:focus-visible:ring-amber-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#112028]"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
@@ -660,7 +685,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           <button
             type="button"
             onClick={handleOpenAddModalManual}
-            className="px-4 py-2.5 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2.5 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#112028]"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة هدف</span>
@@ -934,8 +959,9 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               </p>
             </div>
             <span
-              className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 font-black text-sm flex items-center justify-center tabular-nums"
+              className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 font-black text-sm flex items-center justify-center tabular-nums flex-shrink-0"
               dir="ltr"
+              aria-label={`عدد الأهداف في المربع 1: ${q1Goals.length}`}
             >
               {q1Goals.length}
             </span>
@@ -976,8 +1002,9 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               </p>
             </div>
             <span
-              className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-black text-sm flex items-center justify-center tabular-nums"
+              className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-black text-sm flex items-center justify-center tabular-nums flex-shrink-0"
               dir="ltr"
+              aria-label={`عدد الأهداف في المربع 2: ${q2Goals.length}`}
             >
               {q2Goals.length}
             </span>
@@ -1017,8 +1044,9 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               </p>
             </div>
             <span
-              className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-[#FBBF24] border border-amber-200 dark:border-amber-800/60 font-black text-sm flex items-center justify-center tabular-nums"
+              className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-[#FBBF24] border border-amber-200 dark:border-amber-800/60 font-black text-sm flex items-center justify-center tabular-nums flex-shrink-0"
               dir="ltr"
+              aria-label={`عدد الأهداف في المربع 3: ${q3Goals.length}`}
             >
               {q3Goals.length}
             </span>
@@ -1058,8 +1086,9 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               </p>
             </div>
             <span
-              className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-black text-sm flex items-center justify-center tabular-nums"
+              className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-black text-sm flex items-center justify-center tabular-nums flex-shrink-0"
               dir="ltr"
+              aria-label={`عدد الأهداف في المربع 4: ${q4Goals.length}`}
             >
               {q4Goals.length}
             </span>
