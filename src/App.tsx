@@ -300,6 +300,7 @@ export default function App() {
               onLoginSuccess={handleLoginSuccess}
               onQuickDemoLogin={handleLoadSample}
               onCancel={() => setActiveScreen('landing')}
+              theme={theme}
             />
           )}
         </main>
