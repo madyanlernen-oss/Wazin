@@ -44,8 +44,9 @@ function generateLocalAgentResponse(
   userName: string,
   advisor: any,
   score: number = 0,
-  _isEvaluationSession?: boolean,
-  evaluationStep?: number
+  isEvaluationSession?: boolean,
+  evaluationStep?: number,
+  evaluationQuestionTitle?: string
 ) {
   const msg = message.toLowerCase().trim();
 
@@ -275,25 +276,43 @@ function generateLocalAgentResponse(
 
   // أولوية التفاعل الإنساني 3: السؤال الصريح عن حال المستشار ("كيف حالك" / "كيفك" / "شلونك")
   if (isAskingHowAdvisorIs) {
+    const evalReturnText = isEvaluationSession
+      ? `أهلاً بك يا ${userName}! أنا بخير وبأحسن حال وسعيد بوجودك وسؤالك اللطيف. 🌿 لنركز معاً على جلستنا التقييمية في ${advRole}؛ ما تقييمك بخصوص المحطة (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? `: "${evaluationQuestionTitle}"` : ''}؟`
+      : `أهلاً وسهلاً بك يا ${userName} الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${advName} (${advRole})، أنا معك هنا بكامل حضوري وطاقتي لأصغي إليك وأفكر معك خطوة بخطوة في رحلتك نحو التوازن.\n\nكيف تشعر اليوم؟ وما الذي يشغل بالك لنبدأ به معاً؟`;
+
     return formatAgentOutput({
-      reasoning: `تحليل حواري إنساني: المستفيد (${userName}) يسأل باهتمام وود عن حال المستشار ("${message}"). التفكير الحكيم يقتضي التجاوب الطبيعي الصادق ومبادلته التحية والاطمئنان الدافئ كمرشد ورفيق درب.`,
+      reasoning: isEvaluationSession
+        ? `تحليل حواري إنساني مع سياج التقييم (Guardrail): المستفيد (${userName}) يسأل عن حال المستشار ("${message}"). التجاوب الإنساني الذكي يقتضي مبادلته التحية والاطمئنان في سطر واحد دافئ، ثم إعادة توجيهه مباشرة دون استرسال إلى سؤال المحطة (${evaluationStep || 1} من 8) لإكمال التقييم الأسبوعي.`
+        : `تحليل حواري إنساني: المستفيد (${userName}) يسأل باهتمام وود عن حال المستشار ("${message}"). التفكير الحكيم يقتضي التجاوب الطبيعي الصادق ومبادلته التحية والاطمئنان الدافئ كمرشد ورفيق درب.`,
       summary: `تفاعل إنساني دافئ واطمئنان متبادل مع المستفيد (${userName}) في مجال (${advRole}).`,
-      advice: `أنا بخير وصحة ممتازة وسعيد وممتن جداً بسؤالك الطيب يا ${userName}! كامل حضوري وتركيزي معك لنرتقي معاً في كل أبعاد ${advRole}.`,
-      reply: `أهلاً وسهلاً بك يا ${userName} الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${advName} (${advRole})، أنا معك هنا بكامل حضوري وطاقتي لأصغي إليك وأفكر معك خطوة بخطوة في رحلتك نحو التوازن.\n\nكيف تشعر اليوم؟ وما الذي يشغل بالك لنبدأ به معاً؟`,
+      advice: isEvaluationSession
+        ? `كامل حضوري معك في المحطة (${evaluationStep || 1} من 8)؛ شاركني تقييمك لنواصل بناء اتزانك.`
+        : `أنا بخير وصحة ممتازة وسعيد وممتن جداً بسؤالك الطيب يا ${userName}! كامل حضوري وتركيزي معك لنرتقي معاً في كل أبعاد ${advRole}.`,
+      reply: evalReturnText,
       actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['أخذ دقيقة تنفس عميق واستشعار الهدوء'],
-      reflectionQuestion: 'ما هو الأمر الأكثر أهمية الذي يشغل تفكيرك الآن لنبدأ به معاً؟'
+      reflectionQuestion: isEvaluationSession
+        ? (evaluationQuestionTitle || 'كيف تقيّم هذا الجانب من 1 إلى 10؟')
+        : 'ما هو الأمر الأكثر أهمية الذي يشغل تفكيرك الآن لنبدأ به معاً؟'
     });
   }
 
   // أولوية التفاعل الإنساني 4: التحيات العامة العفوية (مثل "هلا", "مرحبا", "سلام", "أهلاً دكتور") دون سؤال عن حال المستشار
   if (isSimpleGreeting) {
+    const greetingReply = isEvaluationSession
+      ? `أهلاً وسهلاً بك يا ${userName} العزيز! يسعدني حضورك وتواجدك معنا. 🌿 لنبدأ معاً المحطة (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? `: "${evaluationQuestionTitle}"` : ''}. كيف ترى واقعك هنا؟`
+      : `أهلاً وسهلاً بك يا ${userName} العزيز! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${advName} (${advRole}). أنا هنا معك ومستعد للإصغاء والتفكير معك في كل ما يشغل بالك في جانب ${advRole}.\n\nكيف تسير أمورك اليوم؟ وما الذي تود أن نتناوله معاً؟`;
+
     return formatAgentOutput({
-      reasoning: `تحية إنسانية عفوية من المستفيد (${userName}): الترحيب الدافئ كمرشد ورفيق درب وفتح باب الحوار بأريحية تامة دون أي قوالب جامدة.`,
+      reasoning: isEvaluationSession
+        ? `تحية عفوية من المستفيد (${userName}) أثناء جلسة التقييم: الرد بترحيب دافئ وموجز في سطر واحد، ثم تركيز الانتباه مباشرة على سؤال المحطة (${evaluationStep || 1} من 8) لحصد تقييمه.`
+        : `تحية إنسانية عفوية من المستفيد (${userName}): الترحيب الدافئ كمرشد ورفيق درب وفتح باب الحوار بأريحية تامة دون أي قوالب جامدة.`,
       summary: `الترحيب بالمستفيد (${userName}) واستكشاف ما يشغل باله في (${advRole}).`,
       advice: `أهلاً بك دائماً يا ${userName}؛ كامل الحضور والإصغاء معك لنبدأ بأي جانب تود التركيز عليه.`,
-      reply: `أهلاً وسهلاً بك يا ${userName} العزيز! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${advName} (${advRole}). أنا هنا معك ومستعد للإصغاء والتفكير معك في كل ما يشغل بالك في جانب ${advRole}.\n\nكيف تسير أمورك اليوم؟ وما الذي تود أن نتناوله معاً؟`,
+      reply: greetingReply,
       actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['أخذ دقيقة استرخاء للتفكير في أولوياتك اليومية'],
-      reflectionQuestion: 'ما هو الهدف أو التحدي الأبرز الذي ترغب بالحديث عنه اليوم؟'
+      reflectionQuestion: isEvaluationSession
+        ? (evaluationQuestionTitle || 'كيف تقيّم هذا الجانب من 1 إلى 10؟')
+        : 'ما هو الهدف أو التحدي الأبرز الذي ترغب بالحديث عنه اليوم؟'
     });
   }
 
@@ -671,6 +690,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       aiMode,
       isEvaluationSession,
       evaluationStep,
+      evaluationQuestionTitle,
     } = req.body;
 
     if (!message) {
@@ -740,7 +760,8 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
         advisor,
         effectiveScore,
         false,
-        evaluationStep
+        evaluationStep,
+        evaluationQuestionTitle
       );
       return res.json(localResponse);
     }
@@ -754,7 +775,8 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
         advisor,
         effectiveScore,
         isEvaluationSession,
-        evaluationStep
+        evaluationStep,
+        evaluationQuestionTitle
       );
       return res.json(localResponse);
     }
@@ -812,11 +834,30 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 3. اجعل ردك النهائي في حقل "reply" مبنياً بالكامل على خلاصة هذا التمرين والتفكير الداخلي ليكون دقيقاً، ملامساً للواقع، مؤثراً، وخالياً من السطحية.
 `;
 
+    let evaluationSessionGuideline = '';
+    if (isEvaluationSession) {
+      evaluationSessionGuideline = `
+[بروتوكول مسار التقييم الأسبوعي (المحطات الثمانية) - Strict Context Guardrail 🎯]
+المستفيد حالياً يخوض جلسة التقييم الأسبوعي المنظمة في المحطة رقم (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? ` وسؤال المحطة الحالي هو: "${evaluationQuestionTitle}"` : ''}.
+قواعد حاسمة ملزمة تعلو فوق أي قاعدة أخرى:
+1. الالتزام الصارم بالتخصص المستقل (Strict Independent Domain Persona):
+   - بصفتك "${advisorName}" (${advisorRole})، تحدث وحلل فقط من صميم تخصصك المستقل، ويُمنع منعاً باتاً التداخل مع تخصصات المستشارين السبعة الآخرين في منصة وازن.
+2. الدفء والتعاطف السريع (Warmth & Empathy):
+   - تجاوب مع تحية المستفيد، أو مشاعره، أو سياقه بإيجاز ودفء طبيعي حقيقي (جملة إلى جملتين بحد أقصى: 1–2 natural sentences max) دون قوالب آلية أو تكرار روبوتي ودون محاضرات طويلة.
+3. السياج الصارم لمنع الخروج عن المسار (Strict Context Guardrail):
+   - إذا بادر المستفيد بالتحية أو السؤال عن حالك (مثل: "مرحبا كيفك"، "أهلاً يا دكتور"، "السلام عليكم") أو تحدث في موضوع عام أو جانبي:
+     - أجب بأدب ودفء في سطر واحد موجز واطمئن عليه.
+     - ثم أعد توجيهه فوراً ومباشرة في نفس الرد إلى سؤال المحطة الحالية (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? `: "${evaluationQuestionTitle}"` : ''} واطلب منه تحديد تقييمه من 1 إلى 10.
+     - اجعل حقل "reflectionQuestion" هو نفسه سؤال المحطة الحالية: "${evaluationQuestionTitle || 'كيف تقيّم هذا الجانب من 1 إلى 10؟'}".
+     - يُمنع منعاً باتاً أن تسأله "كيف يمكنني مساندتك اليوم؟" أو تسمح للجلسة بالتحول إلى محادثة عامة مفتوحة أو دردشة استرسالية خارج التقييم؛ فالهدف الأوحد هنا هو إكمال مسار التقييم الأسبوعي المنظم عبر محطاته الثمانية.
+`;
+    }
+
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
     const systemInstruction = `
 ${agentRoleDescription}
 
-أنت الآن تخوض محادثة تفاعلية حية ومباشرة بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة تدبير.
+أنت الآن تخوض محادثة تفاعلية حية ومباشرة بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة وازن.
 أنت شخصية مستقلة، عميقة الفكر، حكيمة ودافئة، وتفكر مع المستفيد كمرشد وشريك حقيقي.
 
 ${modeGuideline}
@@ -829,9 +870,11 @@ ${clinicSpecialGuideline}
 4. ابنِ ردك النهائي في "reply" على خلاصة هذه المحاكاة ليكون عميقاً ومؤثراً وشخصياً.
 5. تحدث باللغة العربية الفصحى الراقية، الواضحة، والملهمة.
 6. قدّم نصيحة جوهرية عملية مصحوبة بخطوتين إجرائيتين سريعتين (Micro-habits) يمكن البدء بهما فوراً.
-7. اختم بسؤال تأملي ذكي يفتح للمستفيد أفقاً جديداً في إدراك ذاته وإدارة حياته.
+7. ${isEvaluationSession ? `أعد توجيهه فوراً لسؤال المحطة (${evaluationStep || 1} من 8) التقييمي.` : 'اختم بسؤال تأملي ذكي يفتح للمستفيد أفقاً جديداً في إدراك ذاته وإدارة حياته.'}
 
-سياق المستفيد من منصة تدبير:
+${evaluationSessionGuideline}
+
+سياق المستفيد من منصة وازن:
 - الاسم: ${effectiveUserProfile?.name || 'صديقنا'}
 - الدرجة الحالية في هذا الجانب: ${effectiveScore}/10
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
@@ -975,7 +1018,7 @@ ${clinicSpecialGuideline}
     return res.json(parsed);
   } catch (error: any) {
     console.error('Advisor Chat Gemini error:', error?.message || error);
-    const { advisor, userProfile, message, userName, userScore, isEvaluationSession, evaluationStep } = req.body;
+    const { advisor, userProfile, message, userName, userScore, isEvaluationSession, evaluationStep, evaluationQuestionTitle } = req.body;
     const agentKey = req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'));
     const localFallback = generateLocalAgentResponse(
       agentKey,
@@ -984,7 +1027,8 @@ ${clinicSpecialGuideline}
       advisor,
       userScore || 5,
       isEvaluationSession,
-      evaluationStep
+      evaluationStep,
+      evaluationQuestionTitle
     );
     return res.json(localFallback);
   }
