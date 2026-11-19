@@ -21,101 +21,116 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   onNavigateToAuth,
 }) => {
   return (
-    <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-gradient-to-b from-[#091524]/5 via-[#1b1938]/5 to-[#FAF7F2]">
-      {/* Sophisticated Dark-Ambient Gradient Halos & Cybernetic Wave Accents */}
-      <div className="absolute -top-24 -right-20 w-[42rem] h-[42rem] bg-gradient-to-br from-cyan-500/15 via-blue-600/10 to-transparent rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/4 -left-20 w-[40rem] h-[40rem] bg-gradient-to-tr from-purple-600/15 via-fuchsia-500/10 to-transparent rounded-full blur-[130px] pointer-events-none" />
-      <div className="absolute bottom-10 right-1/4 w-[45rem] h-[35rem] bg-gradient-to-t from-[#bd9240]/10 to-transparent rounded-full blur-[140px] pointer-events-none" />
+    <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-[#FAF7F2]">
+      {/* 4-Corner Exact Ambient Mesh Gradient matching user specification */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background: `
+            radial-gradient(ellipse 65% 50% at 50% 36%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.92) 35%, rgba(255, 255, 255, 0.4) 65%, transparent 85%),
+            radial-gradient(circle 850px at 0% 0%, #10363d 0%, #16464e 32%, transparent 68%),
+            radial-gradient(circle 850px at 100% 0%, #8e7ea9 0%, #a293bc 32%, transparent 68%),
+            radial-gradient(circle 850px at 0% 68%, #d59f97 0%, #dfaea6 32%, transparent 68%),
+            radial-gradient(circle 850px at 100% 68%, #f6eee4 0%, #ebe0d2 36%, transparent 72%)
+          `,
+        }}
+      />
 
-      {/* Subtle Glowing Life-Dimension Orbits & Curved Pathways (SVG) */}
-      <div className="absolute inset-0 pointer-events-none overflow-hidden opacity-35">
-        <svg
-          className="w-full h-full"
-          viewBox="0 0 1440 900"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Subtle Cybernetic Wave Paths */}
-          <path
-            d="M-100 250 C 300 120, 600 380, 1000 180 C 1200 80, 1400 220, 1600 160"
-            stroke="url(#gradientCyanPurple)"
-            strokeWidth="1.5"
-            strokeDasharray="6 8"
-          />
-          <path
-            d="M-80 380 C 250 280, 750 480, 1100 320 C 1300 220, 1500 350, 1600 300"
-            stroke="url(#gradientPurpleCyan)"
-            strokeWidth="1.2"
-          />
-          {/* Subtle Life Dimension Concentric Orbits */}
-          <circle cx="720" cy="240" r="320" stroke="url(#orbitGlow)" strokeWidth="1" strokeDasharray="4 6" />
-          <circle cx="720" cy="240" r="480" stroke="url(#orbitGlow)" strokeWidth="0.8" strokeDasharray="8 12" />
+      {/* Hero Ambient Wrapper with Glowing Central Halo and Orbital Wireframe Rings */}
+      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-16">
+        {/* Main Centerpiece Frame */}
+        <div className="relative max-w-4xl mx-auto pt-6 pb-12 px-6 sm:px-12 text-center">
+          {/* Luminous Oval Halo & Delicate Concentric Orbital Wireframes (SVG) */}
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            {/* Luminous White Oval Frame */}
+            <div className="w-full h-full max-w-3xl rounded-[3rem] border border-white/60 shadow-[0_0_100px_rgba(255,255,255,0.95),inset_0_0_80px_rgba(255,255,255,0.7)] bg-white/20 backdrop-blur-xs" />
 
-          <defs>
-            <linearGradient id="gradientCyanPurple" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#00e5ff" stopOpacity="0.6" />
-              <stop offset="50%" stopColor="#8b5cf6" stopOpacity="0.4" />
-              <stop offset="100%" stopColor="#ec4899" stopOpacity="0.2" />
-            </linearGradient>
-            <linearGradient id="gradientPurpleCyan" x1="100%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#a855f7" stopOpacity="0.5" />
-              <stop offset="70%" stopColor="#06b6d4" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#1b605b" stopOpacity="0.1" />
-            </linearGradient>
-            <radialGradient id="orbitGlow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="#1b605b" stopOpacity="0.3" />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.05" />
-            </radialGradient>
-          </defs>
-        </svg>
-      </div>
-
-      <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-16">
-        {/* Hero Centerpiece Section */}
-        <div className="text-center max-w-3xl mx-auto space-y-7 pt-4">
-          {/* Centered Badge Tag */}
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur-md border border-[#eae3d5] text-xs sm:text-sm font-extrabold text-[#1b605b] shadow-sm hover:shadow-md transition-all">
-            <span className="text-sm">✨</span>
-            <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
-          </div>
-
-          {/* Logo Showcase with Ambient Glow */}
-          <div className="flex justify-center -my-1">
-            <div className="relative group cursor-pointer">
-              <div className="absolute -inset-2 bg-gradient-to-r from-cyan-400 via-purple-500 to-pink-500 rounded-3xl blur-xl opacity-40 group-hover:opacity-75 transition duration-500"></div>
-              <img
-                src="/assets/wazan_logo.jpg"
-                alt="شعار منصة وزان"
-                className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl object-cover shadow-2xl border-2 border-white/40 ring-4 ring-cyan-500/20 group-hover:scale-105 transition-all duration-300"
-              />
-            </div>
-          </div>
-
-          {/* Centerpiece Bold Headlines */}
-          <div className="space-y-2">
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-[#142623] leading-tight">
-              لا تعش في جانب واحد..
-            </h1>
-            <h2 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight bg-gradient-to-r from-[#127a72] via-[#1b605b] to-[#0ea5e9] bg-clip-text text-transparent drop-shadow-xs leading-tight">
-              وازن حياتك كاملة
-            </h2>
-          </div>
-
-          {/* Legible Paragraph */}
-          <p className="text-base sm:text-lg text-[#4a5e59] leading-relaxed max-w-2xl mx-auto font-medium">
-            منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب
-            وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
-          </p>
-
-          {/* Call-to-Action (CTA) Button */}
-          <div className="flex flex-wrap items-center justify-center gap-3 pt-3">
-            <button
-              onClick={() => onNavigateToAuth('login')}
-              className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-[#1b605b] hover:bg-[#144b47] text-white text-base sm:text-lg font-black shadow-lg shadow-[#1b605b]/25 hover:shadow-cyan-900/30 hover:scale-105 active:scale-95 transition-all cursor-pointer border border-white/20"
+            {/* Overlapping Orbital Rings */}
+            <svg
+              className="absolute w-[120%] h-[130%] max-w-5xl"
+              viewBox="0 0 900 500"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
             >
-              <span>تسجيل الدخول إلى وزان</span>
-              <ArrowLeft className="w-5 h-5 text-cyan-300 animate-pulse" />
-            </button>
+              {/* Outer Orbit 1 */}
+              <ellipse
+                cx="450"
+                cy="250"
+                rx="420"
+                ry="210"
+                stroke="rgba(255, 255, 255, 0.55)"
+                strokeWidth="1.2"
+                strokeDasharray="4 6"
+              />
+              {/* Mid Orbit 2 (slightly tilted) */}
+              <g transform="rotate(-6 450 250)">
+                <ellipse
+                  cx="450"
+                  cy="250"
+                  rx="390"
+                  ry="190"
+                  stroke="rgba(255, 255, 255, 0.65)"
+                  strokeWidth="1.5"
+                />
+              </g>
+              {/* Inner Orbit 3 (tilted other way) */}
+              <g transform="rotate(8 450 250)">
+                <ellipse
+                  cx="450"
+                  cy="250"
+                  rx="350"
+                  ry="170"
+                  stroke="rgba(255, 255, 255, 0.5)"
+                  strokeWidth="1"
+                  strokeDasharray="8 8"
+                />
+              </g>
+
+              {/* Lens Flare Glow Sparkle at bottom-right of the orbit ring */}
+              <g transform="translate(730, 370)">
+                <circle cx="0" cy="0" r="14" fill="white" opacity="0.9" filter="drop-shadow(0 0 8px #ffffff)" />
+                <line x1="-30" y1="0" x2="30" y2="0" stroke="white" strokeWidth="2.5" opacity="0.85" />
+                <line x1="0" y1="-30" x2="0" y2="30" stroke="white" strokeWidth="2.5" opacity="0.85" />
+                <line x1="-18" y1="-18" x2="18" y2="18" stroke="rgba(0, 229, 255, 0.7)" strokeWidth="1.5" />
+                <line x1="18" y1="-18" x2="-18" y2="18" stroke="rgba(0, 229, 255, 0.7)" strokeWidth="1.5" />
+              </g>
+            </svg>
+          </div>
+
+          {/* Foreground Hero Content */}
+          <div className="relative z-10 space-y-6">
+            {/* Top Pill Badge */}
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/95 border border-white/80 shadow-xs text-xs sm:text-sm font-extrabold text-[#10383f]">
+              <span className="text-emerald-700">✳️</span>
+              <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
+            </div>
+
+            {/* Centerpiece Bold Headlines */}
+            <div className="space-y-1 pt-2">
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0f2329] leading-tight">
+                لا تعش في جانب واحد..
+              </h1>
+              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0f4b52] leading-tight">
+                وازن حياتك كاملة
+              </h2>
+            </div>
+
+            {/* Legible Paragraph */}
+            <p className="text-base sm:text-lg text-[#23383c] leading-relaxed max-w-2xl mx-auto font-medium pt-1">
+              منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب
+              وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
+            </p>
+
+            {/* CTA Button */}
+            <div className="pt-3">
+              <button
+                onClick={() => onNavigateToAuth('login')}
+                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#0d2a30] hover:bg-[#133c44] text-white text-sm sm:text-base font-black shadow-xl shadow-teal-950/20 border border-cyan-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+              >
+                <span className="text-cyan-300 font-bold">&larr;</span>
+                <span>تسجيل الدخول إلى وزان</span>
+              </button>
+            </div>
           </div>
         </div>
 
