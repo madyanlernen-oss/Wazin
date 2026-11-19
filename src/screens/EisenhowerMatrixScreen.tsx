@@ -9,10 +9,12 @@ import {
   Calendar,
   CalendarDays,
   Layers,
-  Zap,
   Clock,
   Printer,
   Flame,
+  RotateCcw,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { EisenhowerGoalItem, EisenhowerQuadrant, GoalTimeframe, LifeAreaId } from '../types/lifeBalance';
@@ -152,7 +154,7 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
     source: 'user',
   },
 
-  // 4. غير مهم وغير عاجل (احذفه)
+  // 4. غير مهم وغير عاجل (احذفه أو قلله)
   {
     id: 'g10',
     title: 'تحديد وقت التصفح العشوائي لشبكات التواصل بـ 30 دقيقة يومياً',
@@ -178,13 +180,17 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
 interface EisenhowerMatrixScreenProps {
   goals?: EisenhowerGoalItem[];
   onUpdateGoals?: (goals: EisenhowerGoalItem[]) => void;
+  theme?: 'light' | 'dark';
 }
 
 export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   goals: propGoals,
   onUpdateGoals,
+  theme: _theme = 'light',
 }) => {
-  const [goals, setGoals] = useState<EisenhowerGoalItem[]>(propGoals && propGoals.length > 0 ? propGoals : INITIAL_EISENHOWER_GOALS);
+  const [goals, setGoals] = useState<EisenhowerGoalItem[]>(
+    propGoals && propGoals.length > 0 ? propGoals : INITIAL_EISENHOWER_GOALS
+  );
   const [activeTimeframe, setActiveTimeframe] = useState<GoalTimeframe>('weekly');
 
   // Sync propGoals when updated externally (e.g. from AI Advisors)
@@ -203,6 +209,12 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   const [newQuadrant, setNewQuadrant] = useState<EisenhowerQuadrant>('q2_important_not_urgent');
   const [newAreaId, setNewAreaId] = useState<LifeAreaId>('career');
 
+  // Confirmation state for deleting a single goal
+  const [goalToDelete, setGoalToDelete] = useState<EisenhowerGoalItem | null>(null);
+
+  // Confirmation state for resetting all goals to initial defaults
+  const [showResetGoalsConfirm, setShowResetGoalsConfirm] = useState(false);
+
   const updateAllGoals = (updated: EisenhowerGoalItem[]) => {
     setGoals(updated);
     if (onUpdateGoals) onUpdateGoals(updated);
@@ -214,10 +226,18 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
     updateAllGoals(updated);
   };
 
-  // Delete goal
-  const handleDeleteGoal = (id: string) => {
-    const updated = goals.filter((g) => g.id !== id);
+  // Confirm delete goal
+  const handleConfirmDeleteGoal = () => {
+    if (!goalToDelete) return;
+    const updated = goals.filter((g) => g.id !== goalToDelete.id);
     updateAllGoals(updated);
+    setGoalToDelete(null);
+  };
+
+  // Reset goals to defaults
+  const handleConfirmResetGoals = () => {
+    updateAllGoals(INITIAL_EISENHOWER_GOALS);
+    setShowResetGoalsConfirm(false);
   };
 
   // Move goal to another quadrant
@@ -282,40 +302,145 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   const completedInTimeframe = currentGoals.filter((g) => g.completed).length;
   const completionPercent = totalInTimeframe ? Math.round((completedInTimeframe / totalInTimeframe) * 100) : 0;
 
+  // Reusable card renderer
+  const renderGoalCard = (g: EisenhowerGoalItem, quadrantColor: 'rose' | 'emerald' | 'amber' | 'slate') => {
+    const adv = ADVISORS_LIST.find((a) => a.id === g.areaId);
+
+    const colorClasses = {
+      rose: g.completed
+        ? 'bg-slate-50/70 dark:bg-[#0B161C]/80 border-slate-200/70 dark:border-slate-800 text-slate-400 dark:text-slate-500'
+        : 'bg-rose-50/40 dark:bg-rose-950/25 border-rose-200/80 dark:border-rose-900/40 text-[#0F172A] dark:text-slate-100 hover:border-rose-300 dark:hover:border-rose-700/60 hover:shadow-xs',
+      emerald: g.completed
+        ? 'bg-slate-50/70 dark:bg-[#0B161C]/80 border-slate-200/70 dark:border-slate-800 text-slate-400 dark:text-slate-500'
+        : 'bg-emerald-50/40 dark:bg-emerald-950/25 border-emerald-200/80 dark:border-emerald-900/40 text-[#0F172A] dark:text-slate-100 hover:border-emerald-300 dark:hover:border-emerald-700/60 hover:shadow-xs',
+      amber: g.completed
+        ? 'bg-slate-50/70 dark:bg-[#0B161C]/80 border-slate-200/70 dark:border-slate-800 text-slate-400 dark:text-slate-500'
+        : 'bg-amber-50/40 dark:bg-amber-950/25 border-amber-200/80 dark:border-amber-900/40 text-[#0F172A] dark:text-slate-100 hover:border-amber-300 dark:hover:border-amber-700/60 hover:shadow-xs',
+      slate: g.completed
+        ? 'bg-slate-50/70 dark:bg-[#0B161C]/80 border-slate-200/70 dark:border-slate-800 text-slate-400 dark:text-slate-500'
+        : 'bg-slate-50/80 dark:bg-slate-900/30 border-slate-200/80 dark:border-slate-800 text-[#0F172A] dark:text-slate-100 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs',
+    }[quadrantColor];
+
+    const checkColors = {
+      rose: g.completed ? 'text-rose-600 dark:text-rose-400' : 'text-rose-400 dark:text-rose-500 hover:text-rose-600',
+      emerald: g.completed ? 'text-emerald-600 dark:text-emerald-400' : 'text-emerald-400 dark:text-emerald-500 hover:text-emerald-600',
+      amber: g.completed ? 'text-amber-600 dark:text-amber-400' : 'text-amber-400 dark:text-amber-500 hover:text-amber-600',
+      slate: g.completed ? 'text-slate-500 dark:text-slate-400' : 'text-slate-400 dark:text-slate-500 hover:text-slate-600',
+    }[quadrantColor];
+
+    return (
+      <div
+        key={g.id}
+        draggable
+        onDragStart={(e) => handleDragStart(e, g.id)}
+        className={`p-3.5 rounded-2xl border transition-all flex items-start justify-between gap-3 cursor-grab active:cursor-grabbing group min-w-0 ${colorClasses}`}
+      >
+        {/* Left Side: Checkbox & Goal Content */}
+        <div className="flex items-start gap-2.5 min-w-0 flex-1">
+          <button
+            type="button"
+            onClick={() => handleToggleGoal(g.id)}
+            className={`mt-0.5 flex-shrink-0 cursor-pointer transition-transform hover:scale-110 ${checkColors}`}
+            title={g.completed ? 'تعليم كغير مكتمل' : 'تعليم كمكتمل'}
+          >
+            {g.completed ? (
+              <CheckCircle2 className="w-4 h-4 fill-current text-white dark:text-[#112028]" />
+            ) : (
+              <Circle className="w-4 h-4" />
+            )}
+          </button>
+
+          <div className="min-w-0 flex-1 space-y-1.5">
+            <p
+              className={`text-xs font-bold leading-relaxed break-words ${
+                g.completed
+                  ? 'line-through text-slate-400 dark:text-slate-500'
+                  : 'text-[#0F172A] dark:text-white'
+              }`}
+            >
+              {g.title}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-1.5 pt-0.5">
+              {/* Full Domain Name - Never truncated */}
+              {adv && (
+                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#475569] dark:text-slate-300 bg-white/90 dark:bg-[#112028] px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-slate-700 shadow-2xs">
+                  <span>{adv.avatarSvg}</span>
+                  <span>{adv.title}</span>
+                </span>
+              )}
+
+              {/* Advisor Guidance Tag */}
+              {g.advisorName && (
+                <span className="inline-flex items-center text-[10px] font-bold text-[#0B6E72] dark:text-cyan-300 bg-[#0B6E72]/10 dark:bg-cyan-950/60 border border-[#0B6E72]/20 dark:border-cyan-800/40 px-2 py-0.5 rounded-md">
+                  توجيه: {g.advisorName}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Quadrant Selector & Delete Button */}
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          <select
+            aria-label="نقل المربع"
+            value={g.quadrant}
+            onChange={(e) => handleMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
+            className="text-[11px] font-semibold bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1 text-[#334155] dark:text-slate-300 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer shadow-2xs transition-colors"
+          >
+            <option value="q1_urgent_important">المربع 1 (نفذ)</option>
+            <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
+            <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
+            <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
+          </select>
+
+          <button
+            type="button"
+            onClick={() => setGoalToDelete(g)}
+            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+            title="حذف الهدف"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#FAF7F2]">
+    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 transition-colors duration-300">
       {/* Header and Timeframe Selector */}
-      <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="bg-white dark:bg-[#112028] border border-slate-200/90 dark:border-slate-800/80 rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-colors">
         <div>
-          <div className="flex items-center gap-2 mb-2">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1b605b]/10 text-[#1b605b] text-xs font-bold">
-              <Target className="w-3.5 h-3.5 text-[#bd9240]" />
-              مصفوفة أيزنهاور لتنظيم الأولويات
+          <div className="flex flex-wrap items-center gap-2 mb-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-950/60 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/40 text-xs font-bold">
+              <Target className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
+              مصفوفة أيزنهاور لإدارة الأولويات
             </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-black border border-amber-200">
-              <Flame className="w-3.5 h-3.5 text-amber-600 fill-amber-500" />
-              الالتزام: 4 أسابيع متتالية 🔥
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-[#FBBF24] text-xs font-black border border-amber-200 dark:border-amber-800/50">
+              <Flame className="w-3.5 h-3.5 text-amber-600 dark:text-[#FBBF24] fill-amber-500" />
+              <span>الالتزام: 4 أسابيع متتالية 🔥</span>
             </span>
           </div>
 
-          <h1 className="text-2xl sm:text-3xl font-black text-[#1d2e2b]">
+          <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white transition-colors">
             أهدافي (إدارة الأولويات الذكية)
           </h1>
-          <p className="text-xs sm:text-sm text-[#536561] mt-1 max-w-2xl leading-relaxed">
-            رتّب أهدافك واسحبها بين المربعات الأربعة بحرية. المربع الثاني (مهم وغير عاجل) هو وقود التوازن والنجاح المستدام.
+          <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-300 mt-1 max-w-2xl leading-relaxed transition-colors">
+            رتّب أهدافك واسحبها بين المربعات الأربعة بحرية. <strong className="text-emerald-700 dark:text-emerald-400">المربع الثاني (مهم وغير عاجل)</strong> هو وقود التوازن الشامل والنجاح المستدام.
           </p>
         </div>
 
-        {/* Timeframe Toggle Buttons & Export Actions */}
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="inline-flex p-1.5 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl shadow-xs">
+        {/* Timeframe Toggle Buttons & Actions */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="inline-flex p-1 bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-xs">
             <button
               type="button"
               onClick={() => setActiveTimeframe('daily')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTimeframe === 'daily'
-                  ? 'bg-[#1b605b] text-white shadow-xs'
-                  : 'text-[#536561] hover:text-[#1d2e2b]'
+                  ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
+                  : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
               }`}
             >
               <Clock className="w-3.5 h-3.5" />
@@ -324,10 +449,10 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <button
               type="button"
               onClick={() => setActiveTimeframe('weekly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTimeframe === 'weekly'
-                  ? 'bg-[#1b605b] text-white shadow-xs'
-                  : 'text-[#536561] hover:text-[#1d2e2b]'
+                  ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
+                  : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
               }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />
@@ -336,10 +461,10 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <button
               type="button"
               onClick={() => setActiveTimeframe('monthly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTimeframe === 'monthly'
-                  ? 'bg-[#1b605b] text-white shadow-xs'
-                  : 'text-[#536561] hover:text-[#1d2e2b]'
+                  ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
+                  : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
               }`}
             >
               <Calendar className="w-3.5 h-3.5" />
@@ -348,10 +473,10 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <button
               type="button"
               onClick={() => setActiveTimeframe('yearly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer ${
                 activeTimeframe === 'yearly'
-                  ? 'bg-[#1b605b] text-white shadow-xs'
-                  : 'text-[#536561] hover:text-[#1d2e2b]'
+                  ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
+                  : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
               }`}
             >
               <Layers className="w-3.5 h-3.5" />
@@ -363,15 +488,24 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             type="button"
             onClick={handlePrint}
             title="طباعة وتصدير المصفوفة"
-            className="p-2.5 rounded-xl bg-white border border-[#ded7c8] text-[#536561] hover:text-[#1b605b] shadow-xs cursor-pointer"
+            className="p-2.5 rounded-xl bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-400 shadow-xs cursor-pointer transition-colors"
           >
             <Printer className="w-4 h-4" />
           </button>
 
           <button
             type="button"
+            onClick={() => setShowResetGoalsConfirm(true)}
+            title="إعادة تعيين الأهداف الافتراضية"
+            className="p-2.5 rounded-xl bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 text-[#64748B] dark:text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 shadow-xs cursor-pointer transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+          </button>
+
+          <button
+            type="button"
             onClick={() => setShowAddModal(true)}
-            className="px-4 py-2.5 rounded-2xl bg-[#bd9240] hover:bg-[#a88235] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+            className="px-4 py-2.5 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
             <span>إضافة هدف</span>
@@ -380,436 +514,203 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
       </div>
 
       {/* Progress Bar for Current Timeframe */}
-      <div className="bg-white border border-[#eae3d5] rounded-2xl p-4 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#112028] border border-slate-200/90 dark:border-slate-800/80 rounded-2xl p-4 sm:p-5 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center font-black">
+          <div
+            className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-center font-black text-sm sm:text-base tabular-nums flex-shrink-0"
+            dir="ltr"
+          >
             {completionPercent}%
           </div>
           <div>
-            <h4 className="text-xs font-bold text-[#1d2e2b]">
-              معدل إنجاز أهداف النطاق ({completedInTimeframe} من {totalInTimeframe} مهام مكتملة)
+            <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white">
+              معدل إنجاز أهداف النطاق الزمني{' '}
+              <span dir="ltr" className="font-extrabold tabular-nums text-[#0B6E72] dark:text-cyan-400">
+                ({completedInTimeframe} / {totalInTimeframe})
+              </span>
             </h4>
-            <span className="text-[11px] text-[#7a8c88]">
-              اسحب أي مهمة وأسقطها لتغيير مربعها أو استخدم السهم السريع
+            <span className="text-[11px] text-[#64748B] dark:text-slate-400 mt-0.5 block">
+              اسحب أي مهمة وأسقطها لتغيير مربعها، أو استخدم القائمة المنسدلة السريعة داخل البطاقة.
             </span>
           </div>
         </div>
 
-        <div className="w-full sm:w-64 h-2.5 bg-[#FAF7F2] rounded-full overflow-hidden border border-[#eae3d5]">
+        <div className="w-full sm:w-64 h-2.5 bg-slate-100 dark:bg-[#0B161C] rounded-full overflow-hidden border border-slate-200/70 dark:border-slate-800">
           <div
-            className="h-full bg-emerald-600 rounded-full transition-all duration-500"
+            className="h-full bg-emerald-600 dark:bg-emerald-500 rounded-full transition-all duration-500"
             style={{ width: `${completionPercent}%` }}
           />
         </div>
       </div>
 
-      {/* The 4 Eisenhower Quadrants Grid (Interactive Drag & Drop Zones) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {/* Quadrant 1: مهم وعاجل (نفّذ الآن) */}
+      {/* The 4 Eisenhower Quadrants Grid (Strict 2x2 Natural Arabic RTL Flow) */}
+      {/* 
+        In RTL layout:
+        Row 1: Column 1 (Right) is Quadrant 1 ("مهم وعاجل") | Column 2 (Left) is Quadrant 2 ("مهم وغير عاجل")
+        Row 2: Column 1 (Right) is Quadrant 3 ("غير مهم وعاجل") | Column 2 (Left) is Quadrant 4 ("غير مهم وغير عاجل")
+      */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6" dir="rtl">
+        {/* Quadrant 1: مهم وعاجل (أعلى اليمين • نفّذ الآن) */}
         <div
           onDragOver={handleDragOver}
           onDrop={(e) => handleDrop(e, 'q1_urgent_important')}
-          className="bg-white border-2 border-rose-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 hover:border-rose-400 transition-colors"
+          className="bg-white dark:bg-[#112028] border-2 border-rose-200 dark:border-rose-900/60 hover:border-rose-300 dark:hover:border-rose-700/80 rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 transition-all"
         >
-          <div className="flex items-start justify-between pb-3 border-b border-rose-100">
+          <div className="flex items-start justify-between pb-3 border-b border-rose-100 dark:border-rose-900/40">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 text-rose-700 text-[10px] font-black uppercase mb-1 border border-rose-200">
-                <span>المربع 1</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[11px] font-black uppercase mb-1 border border-rose-200 dark:border-rose-800/60">
+                <span>1️⃣ المربع 1</span>
                 <span>•</span>
-                <span>نفّذ الآن</span>
+                <span>نفّذ الآن (Do First)</span>
               </div>
-              <h2 className="text-lg font-black text-rose-950">مهم وعاجل</h2>
-              <p className="text-xs text-[#536561] mt-0.5">
-                مهام لها موعد نهائي قريب أو مشكلة تتطلب تدخلاً فورياً.
+              <h2 className="text-lg font-black text-rose-900 dark:text-rose-200">
+                مهم وعاجل
+              </h2>
+              <p className="text-xs text-[#64748B] dark:text-slate-400 mt-0.5">
+                أزمات ومواعيد نهائية وشؤون حيوية تتطلب تدخلك الفوري والمباشر.
               </p>
             </div>
-            <span className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 font-black text-sm flex items-center justify-center">
+            <span
+              className="w-8 h-8 rounded-xl bg-rose-100 dark:bg-rose-950/80 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800/60 font-black text-sm flex items-center justify-center tabular-nums"
+              dir="ltr"
+            >
               {q1Goals.length}
             </span>
           </div>
 
           {/* Goal List */}
-          <div className="space-y-2.5 min-h-[160px]">
+          <div className="space-y-2.5 min-h-[170px] flex-1">
             {q1Goals.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#8a9995] border-2 border-dashed border-rose-100 rounded-2xl">
-                <CheckCircle2 className="w-8 h-8 text-rose-300 mb-1" />
-                <span className="text-xs font-semibold">اسحب أي مهمة إلى هنا</span>
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-rose-500/70 dark:text-rose-400/60 border-2 border-dashed border-rose-200 dark:border-rose-900/40 bg-rose-50/20 dark:bg-rose-950/10 rounded-2xl">
+                <CheckCircle2 className="w-8 h-8 text-rose-300 dark:text-rose-700 mb-1" />
+                <span className="text-xs font-semibold">اسحب أي مهمة عاجلة ومهمة إلى هنا</span>
               </div>
             ) : (
-              q1Goals.map((g) => {
-                const adv = ADVISORS_LIST.find((a) => a.id === g.areaId);
-                return (
-                  <div
-                    key={g.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, g.id)}
-                    className={`p-3.5 rounded-2xl border transition-all flex items-start justify-between gap-3 cursor-grab active:cursor-grabbing ${
-                      g.completed
-                        ? 'bg-rose-50/40 border-rose-100 text-rose-900/60 line-through'
-                        : 'bg-rose-50/20 border-rose-200/80 text-[#1d2e2b] hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleGoal(g.id)}
-                        className="mt-0.5 text-rose-600 cursor-pointer"
-                      >
-                        {g.completed ? (
-                          <CheckCircle2 className="w-4 h-4 fill-rose-600 text-white" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-rose-400" />
-                        )}
-                      </button>
-                      <div>
-                        <span className="text-xs font-extrabold block leading-snug">{g.title}</span>
-                        <div className="flex items-center gap-2 mt-1">
-                          {adv && (
-                            <span className="text-[10px] text-[#536561] flex items-center gap-1">
-                              <span>{adv.avatarSvg}</span>
-                              <span>{adv.title.split(' ')[0]}</span>
-                            </span>
-                          )}
-                          {g.advisorName && (
-                            <span className="text-[10px] text-rose-700 font-bold bg-rose-100/60 px-1.5 py-0.2 rounded">
-                              توجيه {g.advisorName}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <select
-                        aria-label="نقل المربع"
-                        value={g.quadrant}
-                        onChange={(e) => handleMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
-                        className="text-[10px] bg-white border border-[#ded7c8] rounded-md px-1 py-0.5 text-[#536561] cursor-pointer"
-                      >
-                        <option value="q1_urgent_important">المربع 1 (نفذ)</option>
-                        <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
-                        <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
-                        <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteGoal(g.id)}
-                        className="text-rose-400 hover:text-rose-700 p-1 cursor-pointer"
-                        title="حذف"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              q1Goals.map((g) => renderGoalCard(g, 'rose'))
             )}
           </div>
         </div>
 
-        {/* Quadrant 2: مهم وغير عاجل (جدول له - سر النجاح المستمر) */}
+        {/* Quadrant 2: مهم وغير عاجل (أعلى اليسار • جدوله • سر التوازن) */}
         <div
           onDragOver={handleDragOver}
           onDrop={(e) => handleDrop(e, 'q2_important_not_urgent')}
-          className="bg-white border-2 border-emerald-300 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 hover:border-emerald-500 transition-colors"
+          className="bg-white dark:bg-[#112028] border-2 border-emerald-200 dark:border-emerald-900/60 hover:border-emerald-300 dark:hover:border-emerald-700/80 rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 transition-all"
         >
-          <div className="flex items-start justify-between pb-3 border-b border-emerald-100">
+          <div className="flex items-start justify-between pb-3 border-b border-emerald-100 dark:border-emerald-900/40">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 text-[10px] font-black uppercase mb-1 border border-emerald-300">
-                <Sparkles className="w-3 h-3 text-[#bd9240]" />
-                <span>المربع 2</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-black uppercase mb-1 border border-emerald-200 dark:border-emerald-800/60">
+                <Sparkles className="w-3 h-3 text-amber-500 dark:text-amber-400" />
+                <span>2️⃣ المربع 2</span>
                 <span>•</span>
-                <span>جدول له (مربع التوازن)</span>
+                <span>جدوله (Schedule • مربع التوازن)</span>
               </div>
-              <h2 className="text-lg font-black text-emerald-950">مهم وغير عاجل</h2>
-              <p className="text-xs text-[#536561] mt-0.5">
-                مهام تخدم أهدافك المستقبلية، وتصنع النمو والسكينة الحقيقية.
+              <h2 className="text-lg font-black text-emerald-900 dark:text-emerald-200">
+                مهم وغير عاجل
+              </h2>
+              <p className="text-xs text-[#64748B] dark:text-slate-400 mt-0.5">
+                تطوير الذات، بناء العادات، الصحة، التخطيط الاستراتيجي، والعلاقات العميقة.
               </p>
             </div>
-            <span className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-800 font-black text-sm flex items-center justify-center">
+            <span
+              className="w-8 h-8 rounded-xl bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-black text-sm flex items-center justify-center tabular-nums"
+              dir="ltr"
+            >
               {q2Goals.length}
             </span>
           </div>
 
           {/* Goal List */}
-          <div className="space-y-2.5 min-h-[160px]">
+          <div className="space-y-2.5 min-h-[170px] flex-1">
             {q2Goals.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#8a9995] border-2 border-dashed border-emerald-100 rounded-2xl">
-                <Target className="w-8 h-8 text-emerald-300 mb-1" />
-                <span className="text-xs font-semibold">اسحب أهدافك الاستراتيجية إلى هنا</span>
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-emerald-600/70 dark:text-emerald-400/60 border-2 border-dashed border-emerald-200 dark:border-emerald-900/40 bg-emerald-50/20 dark:bg-emerald-950/10 rounded-2xl">
+                <Target className="w-8 h-8 text-emerald-300 dark:text-emerald-700 mb-1" />
+                <span className="text-xs font-semibold">اسحب أهدافك الاستراتيجية هنا لحمايتها من التسويف</span>
               </div>
             ) : (
-              q2Goals.map((g) => {
-                const adv = ADVISORS_LIST.find((a) => a.id === g.areaId);
-                return (
-                  <div
-                    key={g.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, g.id)}
-                    className={`p-3.5 rounded-2xl border transition-all flex items-start justify-between gap-3 cursor-grab active:cursor-grabbing ${
-                      g.completed
-                        ? 'bg-emerald-50/40 border-emerald-200 text-emerald-900/60 line-through'
-                        : 'bg-emerald-50/20 border-emerald-200 text-[#1d2e2b] hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleGoal(g.id)}
-                        className="mt-0.5 text-emerald-600 cursor-pointer"
-                      >
-                        {g.completed ? (
-                          <CheckCircle2 className="w-4 h-4 fill-emerald-600 text-white" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-emerald-500" />
-                        )}
-                      </button>
-                      <div>
-                        <span className="text-xs font-extrabold block leading-snug">{g.title}</span>
-                        <div className="flex items-center gap-2 mt-1">
-                          {adv && (
-                            <span className="text-[10px] text-[#536561] flex items-center gap-1">
-                              <span>{adv.avatarSvg}</span>
-                              <span>{adv.title.split(' ')[0]}</span>
-                            </span>
-                          )}
-                          {g.advisorName && (
-                            <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100/70 px-1.5 py-0.2 rounded">
-                              توجيه {g.advisorName}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <select
-                        aria-label="نقل المربع"
-                        value={g.quadrant}
-                        onChange={(e) => handleMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
-                        className="text-[10px] bg-white border border-[#ded7c8] rounded-md px-1 py-0.5 text-[#536561] cursor-pointer"
-                      >
-                        <option value="q1_urgent_important">المربع 1 (نفذ)</option>
-                        <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
-                        <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
-                        <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteGoal(g.id)}
-                        className="text-emerald-400 hover:text-emerald-700 p-1 cursor-pointer"
-                        title="حذف"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              q2Goals.map((g) => renderGoalCard(g, 'emerald'))
             )}
           </div>
         </div>
 
-        {/* Quadrant 3: غير مهم وعاجل (فوّضه) */}
+        {/* Quadrant 3: غير مهم وعاجل (أسفل اليمين • فوّضه) */}
         <div
           onDragOver={handleDragOver}
           onDrop={(e) => handleDrop(e, 'q3_urgent_not_important')}
-          className="bg-white border-2 border-amber-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 hover:border-amber-400 transition-colors"
+          className="bg-white dark:bg-[#112028] border-2 border-amber-200 dark:border-amber-900/60 hover:border-amber-300 dark:hover:border-amber-700/80 rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 transition-all"
         >
-          <div className="flex items-start justify-between pb-3 border-b border-amber-100">
+          <div className="flex items-start justify-between pb-3 border-b border-amber-100 dark:border-amber-900/40">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 text-[10px] font-black uppercase mb-1 border border-amber-200">
-                <span>المربع 3</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-[#FBBF24] text-[11px] font-black uppercase mb-1 border border-amber-200 dark:border-amber-800/60">
+                <span>3️⃣ المربع 3</span>
                 <span>•</span>
-                <span>فوّضه</span>
+                <span>فوّضه (Delegate)</span>
               </div>
-              <h2 className="text-lg font-black text-amber-950">غير مهم وعاجل</h2>
-              <p className="text-xs text-[#536561] mt-0.5">
-                أمور تستدعي انتباهك لكنها لا تتطلب بالضرورة أن تقوم بها بنفسك.
+              <h2 className="text-lg font-black text-amber-900 dark:text-amber-200">
+                غير مهم وعاجل
+              </h2>
+              <p className="text-xs text-[#64748B] dark:text-slate-400 mt-0.5">
+                مقاطعات وطلبات عاجلة يمكن أتمتتها أو إسنادها لغيرك دون تعطيل يومك.
               </p>
             </div>
-            <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-800 font-black text-sm flex items-center justify-center">
+            <span
+              className="w-8 h-8 rounded-xl bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-[#FBBF24] border border-amber-200 dark:border-amber-800/60 font-black text-sm flex items-center justify-center tabular-nums"
+              dir="ltr"
+            >
               {q3Goals.length}
             </span>
           </div>
 
           {/* Goal List */}
-          <div className="space-y-2.5 min-h-[160px]">
+          <div className="space-y-2.5 min-h-[170px] flex-1">
             {q3Goals.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#8a9995] border-2 border-dashed border-amber-100 rounded-2xl">
-                <Clock className="w-8 h-8 text-amber-300 mb-1" />
-                <span className="text-xs font-semibold">اسحب مهام التفويض إلى هنا</span>
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-amber-600/70 dark:text-amber-400/60 border-2 border-dashed border-amber-200 dark:border-amber-900/40 bg-amber-50/20 dark:bg-amber-950/10 rounded-2xl">
+                <Clock className="w-8 h-8 text-amber-300 dark:text-amber-700 mb-1" />
+                <span className="text-xs font-semibold">اسحب مهام التفويض أو الأتمتة إلى هنا</span>
               </div>
             ) : (
-              q3Goals.map((g) => {
-                const adv = ADVISORS_LIST.find((a) => a.id === g.areaId);
-                return (
-                  <div
-                    key={g.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, g.id)}
-                    className={`p-3.5 rounded-2xl border transition-all flex items-start justify-between gap-3 cursor-grab active:cursor-grabbing ${
-                      g.completed
-                        ? 'bg-amber-50/40 border-amber-200 text-amber-900/60 line-through'
-                        : 'bg-amber-50/20 border-amber-200 text-[#1d2e2b] hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleGoal(g.id)}
-                        className="mt-0.5 text-amber-600 cursor-pointer"
-                      >
-                        {g.completed ? (
-                          <CheckCircle2 className="w-4 h-4 fill-amber-600 text-white" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-amber-500" />
-                        )}
-                      </button>
-                      <div>
-                        <span className="text-xs font-extrabold block leading-snug">{g.title}</span>
-                        <div className="flex items-center gap-2 mt-1">
-                          {adv && (
-                            <span className="text-[10px] text-[#536561] flex items-center gap-1">
-                              <span>{adv.avatarSvg}</span>
-                              <span>{adv.title.split(' ')[0]}</span>
-                            </span>
-                          )}
-                          {g.advisorName && (
-                            <span className="text-[10px] text-amber-800 font-bold bg-amber-100/70 px-1.5 py-0.2 rounded">
-                              توجيه {g.advisorName}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <select
-                        aria-label="نقل المربع"
-                        value={g.quadrant}
-                        onChange={(e) => handleMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
-                        className="text-[10px] bg-white border border-[#ded7c8] rounded-md px-1 py-0.5 text-[#536561] cursor-pointer"
-                      >
-                        <option value="q1_urgent_important">المربع 1 (نفذ)</option>
-                        <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
-                        <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
-                        <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteGoal(g.id)}
-                        className="text-amber-400 hover:text-amber-700 p-1 cursor-pointer"
-                        title="حذف"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              q3Goals.map((g) => renderGoalCard(g, 'amber'))
             )}
           </div>
         </div>
 
-        {/* Quadrant 4: غير مهم وغير عاجل (احذفه) */}
+        {/* Quadrant 4: غير مهم وغير عاجل (أسفل اليسار • احذفه أو قلّله) */}
         <div
           onDragOver={handleDragOver}
           onDrop={(e) => handleDrop(e, 'q4_not_urgent_not_important')}
-          className="bg-white border-2 border-slate-200 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 hover:border-slate-400 transition-colors"
+          className="bg-white dark:bg-[#112028] border-2 border-slate-200 dark:border-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 transition-all"
         >
-          <div className="flex items-start justify-between pb-3 border-b border-slate-100">
+          <div className="flex items-start justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <div>
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-700 text-[10px] font-black uppercase mb-1 border border-slate-200">
-                <span>المربع 4</span>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 text-[11px] font-black uppercase mb-1 border border-slate-200 dark:border-slate-800">
+                <span>4️⃣ المربع 4</span>
                 <span>•</span>
-                <span>احذفه أو قلله</span>
+                <span>احذفه أو قلّله (Eliminate)</span>
               </div>
-              <h2 className="text-lg font-black text-slate-900">غير مهم وغير عاجل</h2>
-              <p className="text-xs text-[#536561] mt-0.5">
-                أنشطة تستهلك وقتك وطاقتك دون قيمة حقيقية لحياتك.
+              <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">
+                غير مهم وغير عاجل
+              </h2>
+              <p className="text-xs text-[#64748B] dark:text-slate-400 mt-0.5">
+                مشتتات ومضيعات الوقت والالتزامات المستنزفة التي ينبغي شطبها أو تقليصها.
               </p>
             </div>
-            <span className="w-8 h-8 rounded-xl bg-slate-100 text-slate-700 font-black text-sm flex items-center justify-center">
+            <span
+              className="w-8 h-8 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 font-black text-sm flex items-center justify-center tabular-nums"
+              dir="ltr"
+            >
               {q4Goals.length}
             </span>
           </div>
 
           {/* Goal List */}
-          <div className="space-y-2.5 min-h-[160px]">
+          <div className="space-y-2.5 min-h-[170px] flex-1">
             {q4Goals.length === 0 ? (
-              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-[#8a9995] border-2 border-dashed border-slate-100 rounded-2xl">
-                <Zap className="w-8 h-8 text-slate-300 mb-1" />
-                <span className="text-xs font-semibold">اسحب مضيعات الوقت إلى هنا لتقليلها</span>
+              <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-500/70 dark:text-slate-400/60 border-2 border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/20 rounded-2xl">
+                <Trash2 className="w-8 h-8 text-slate-300 dark:text-slate-700 mb-1" />
+                <span className="text-xs font-semibold">اسحب المشتتات والمهام المستنزفة إلى هنا لحذفها</span>
               </div>
             ) : (
-              q4Goals.map((g) => {
-                const adv = ADVISORS_LIST.find((a) => a.id === g.areaId);
-                return (
-                  <div
-                    key={g.id}
-                    draggable
-                    onDragStart={(e) => handleDragStart(e, g.id)}
-                    className={`p-3.5 rounded-2xl border transition-all flex items-start justify-between gap-3 cursor-grab active:cursor-grabbing ${
-                      g.completed
-                        ? 'bg-slate-100/60 border-slate-200 text-slate-500 line-through'
-                        : 'bg-slate-50 border-slate-200 text-[#1d2e2b] hover:shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-start gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => handleToggleGoal(g.id)}
-                        className="mt-0.5 text-slate-500 cursor-pointer"
-                      >
-                        {g.completed ? (
-                          <CheckCircle2 className="w-4 h-4 fill-slate-500 text-white" />
-                        ) : (
-                          <Circle className="w-4 h-4 text-slate-400" />
-                        )}
-                      </button>
-                      <div>
-                        <span className="text-xs font-extrabold block leading-snug">{g.title}</span>
-                        <div className="flex items-center gap-2 mt-1">
-                          {adv && (
-                            <span className="text-[10px] text-[#536561] flex items-center gap-1">
-                              <span>{adv.avatarSvg}</span>
-                              <span>{adv.title.split(' ')[0]}</span>
-                            </span>
-                          )}
-                          {g.advisorName && (
-                            <span className="text-[10px] text-slate-700 font-bold bg-slate-200/80 px-1.5 py-0.2 rounded">
-                              توجيه {g.advisorName}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1 flex-shrink-0">
-                      <select
-                        aria-label="نقل المربع"
-                        value={g.quadrant}
-                        onChange={(e) => handleMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
-                        className="text-[10px] bg-white border border-[#ded7c8] rounded-md px-1 py-0.5 text-[#536561] cursor-pointer"
-                      >
-                        <option value="q1_urgent_important">المربع 1 (نفذ)</option>
-                        <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
-                        <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
-                        <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteGoal(g.id)}
-                        className="text-slate-400 hover:text-slate-700 p-1 cursor-pointer"
-                        title="حذف"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })
+              q4Goals.map((g) => renderGoalCard(g, 'slate'))
             )}
           </div>
         </div>
@@ -817,16 +718,25 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
 
       {/* Manual Add Goal Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative text-right space-y-5">
-            <h3 className="text-lg font-black text-[#1d2e2b] flex items-center gap-2">
-              <Plus className="w-5 h-5 text-[#1b605b]" />
-              إضافة هدف إلى مصفوفة أيزنهاور
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative text-right space-y-5">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+              <h3 className="text-lg font-black text-[#0F172A] dark:text-white flex items-center gap-2">
+                <Plus className="w-5 h-5 text-[#0B6E72] dark:text-cyan-400" />
+                إضافة هدف جديد لمصفوفة أيزنهاور
+              </h3>
+              <button
+                type="button"
+                onClick={() => setShowAddModal(false)}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
             <form onSubmit={handleAddGoal} className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#1d2e2b] mb-1">
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
                   نص الهدف أو المهمة:
                 </label>
                 <input
@@ -834,20 +744,21 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="مثال: قراءة 20 صفحة يومياً، إنهاء تقرير المبيعات..."
-                  className="w-full bg-[#FAF7F2] border border-[#ded7c8] rounded-xl px-4 py-2.5 text-xs sm:text-sm text-[#1d2e2b] focus:outline-none focus:border-[#1b605b]"
+                  placeholder="مثال: قراءة 20 صفحة يومياً، إنهاء تقرير الميزانية..."
+                  className="w-full bg-slate-50 dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400"
                   dir="rtl"
+                  autoFocus
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#1d2e2b] mb-1">
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
                   المربع المستهدف في مصفوفة أيزنهاور:
                 </label>
                 <select
                   value={newQuadrant}
                   onChange={(e) => setNewQuadrant(e.target.value as EisenhowerQuadrant)}
-                  className="w-full bg-[#FAF7F2] border border-[#ded7c8] rounded-xl px-4 py-2.5 text-xs text-[#1d2e2b] focus:outline-none focus:border-[#1b605b]"
+                  className="w-full bg-slate-50 dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer"
                 >
                   <option value="q1_urgent_important">1 - مهم وعاجل (نفّذ الآن)</option>
                   <option value="q2_important_not_urgent">2 - مهم وغير عاجل (جدول له - بناء المستقبل)</option>
@@ -857,13 +768,13 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#1d2e2b] mb-1">
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
                   المجال المرتبط بالهدف:
                 </label>
                 <select
                   value={newAreaId}
                   onChange={(e) => setNewAreaId(e.target.value as LifeAreaId)}
-                  className="w-full bg-[#FAF7F2] border border-[#ded7c8] rounded-xl px-4 py-2.5 text-xs text-[#1d2e2b] focus:outline-none focus:border-[#1b605b]"
+                  className="w-full bg-slate-50 dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer"
                 >
                   {ADVISORS_LIST.map((adv) => (
                     <option key={adv.id} value={adv.id}>
@@ -873,22 +784,99 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                 </select>
               </div>
 
-              <div className="pt-2 flex items-center justify-end gap-2">
+              <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2.5 rounded-xl border border-[#ded7c8] text-xs font-bold text-[#536561] hover:bg-[#FAF7F2]"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-[#64748B] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#1b605b] hover:bg-[#16504c] text-white text-xs font-black shadow-xs cursor-pointer"
+                  className="px-5 py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs cursor-pointer transition-colors"
                 >
                   حفظ الهدف
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Delete Goal (Guards Against Accidental Deletion) */}
+      {goalToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl relative text-right space-y-4">
+            <div className="flex items-center gap-3 text-rose-600 dark:text-rose-400">
+              <div className="w-10 h-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-900/50 flex items-center justify-center flex-shrink-0">
+                <Trash2 className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-black text-[#0F172A] dark:text-white">
+                تأكيد حذف الهدف
+              </h3>
+            </div>
+
+            <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
+              هل أنت متأكد من رغبتك في حذف الهدف:{' '}
+              <strong className="text-[#0F172A] dark:text-white block mt-1 p-2 rounded-xl bg-slate-50 dark:bg-[#102033] border border-slate-200 dark:border-slate-800">
+                "{goalToDelete.title}"
+              </strong>
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setGoalToDelete(null)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-[#64748B] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteGoal}
+                className="px-5 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              >
+                نعم، احذف الهدف
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confirmation Modal: Reset All Goals to Defaults (Guards Against Accidental Bulk Reset) */}
+      {showResetGoalsConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-md w-full shadow-2xl relative text-right space-y-4">
+            <div className="flex items-center gap-3 text-amber-600 dark:text-amber-400">
+              <div className="w-10 h-10 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-900/50 flex items-center justify-center flex-shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <h3 className="text-base font-black text-[#0F172A] dark:text-white">
+                تأكيد إعادة تعيين الأهداف
+              </h3>
+            </div>
+
+            <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
+              هل أنت متأكد من رغبتك في استعادة قائمة الأهداف النموذجية الأولية؟ سيتم استبدال أي أهداف مخصصة قمت بإضافتها بالأهداف النموذجية المتوازنة.
+            </p>
+
+            <div className="pt-2 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowResetGoalsConfirm(false)}
+                className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-[#64748B] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+              >
+                إلغاء
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResetGoals}
+                className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shadow-xs cursor-pointer transition-colors"
+              >
+                نعم، استعد الأهداف الافتراضية
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -433,6 +433,7 @@ export default function App() {
               onUpdateGoals={(updated) =>
                 setAppState((prev) => ({ ...prev, eisenhowerGoals: updated }))
               }
+              theme={theme}
             />
           )}
         </main>
