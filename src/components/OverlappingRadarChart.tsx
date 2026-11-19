@@ -15,6 +15,7 @@ interface OverlappingRadarChartProps {
   selectedAreaId: LifeAreaId;
   onSelectArea: (areaId: LifeAreaId) => void;
   size?: number;
+  theme?: 'light' | 'dark';
 }
 
 export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
@@ -22,8 +23,10 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
   selectedAreaId,
   onSelectArea,
   size = 460,
+  theme = 'light',
 }) => {
   const [hoveredArea, setHoveredArea] = useState<LifeAreaId | null>(null);
+  const isDark = theme === 'dark';
 
   const center = size / 2;
   const radius = (size - 110) / 2;
@@ -51,7 +54,7 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
       >
         <defs>
           <filter id="overlapGlow" x="-20%" y="-20%" width="140%" height="140%">
-            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor="#1b605b" floodOpacity="0.15" />
+            <feDropShadow dx="0" dy="2" stdDeviation="3" floodColor={isDark ? '#06b6d4' : '#0B6E72'} floodOpacity={isDark ? '0.35' : '0.15'} />
           </filter>
         </defs>
 
@@ -60,8 +63,8 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
           cx={center}
           cy={center}
           r={radius + 8}
-          fill="#FAF7F2"
-          className="transition-all"
+          fill={isDark ? '#071318' : '#FAF7F2'}
+          className="transition-colors duration-300"
         />
 
         {/* Concentric rings */}
@@ -74,14 +77,14 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
                 cy={center}
                 r={r}
                 fill="none"
-                stroke={lvl === 10 ? '#d4cbbe' : '#e8e2d5'}
+                stroke={isDark ? (lvl === 10 ? '#223847' : '#162733') : (lvl === 10 ? '#cbd5e1' : '#e2e8f0')}
                 strokeWidth={lvl === 10 ? '1.5' : '1'}
                 strokeDasharray={lvl % 4 === 0 ? undefined : '3 3'}
               />
               <text
                 x={center + 4}
                 y={center - r + 11}
-                fill="#8f8373"
+                fill={isDark ? '#94A3B8' : '#64748B'}
                 fontSize="9"
                 fontWeight="bold"
                 className="select-none pointer-events-none"
@@ -103,7 +106,7 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
               y1={center}
               x2={x}
               y2={y}
-              stroke={isSelected ? '#1b605b' : '#ded7c8'}
+              stroke={isSelected ? (isDark ? '#22D3EE' : '#0B6E72') : (isDark ? '#1a2c38' : '#e2e8f0')}
               strokeWidth={isSelected ? '2' : '1'}
               strokeDasharray={isSelected ? undefined : '2 2'}
             />
@@ -160,8 +163,8 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
           cx={center}
           cy={center}
           r={26}
-          fill="#ffffff"
-          stroke="#1b605b"
+          fill={isDark ? '#0E1D24' : '#ffffff'}
+          stroke={isDark ? '#0891B2' : '#0B6E72'}
           strokeWidth="2"
           className="shadow-sm"
         />
@@ -169,7 +172,7 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
           x={center}
           y={center - 3}
           textAnchor="middle"
-          fill="#1d2e2b"
+          fill={isDark ? '#F1F5F9' : '#0F172A'}
           fontSize="13"
           fontWeight="900"
         >
@@ -179,7 +182,7 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
           x={center}
           y={center + 11}
           textAnchor="middle"
-          fill="#7a8c88"
+          fill={isDark ? '#94A3B8' : '#64748B'}
           fontSize="8"
           fontWeight="bold"
         >
@@ -216,13 +219,13 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
                 <div
                   className={`flex flex-col items-center justify-center p-1.5 rounded-2xl transition-all duration-200 border text-center shadow-xs select-none ${
                     isSelected
-                      ? 'bg-white text-[#1d2e2b] scale-110 shadow-md ring-2 ring-[#1b605b]'
+                      ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] scale-110 shadow-md ring-2 ring-[#0F6E6E] dark:ring-[#22D3EE]'
                       : isHovered
-                      ? 'bg-white text-[#1d2e2b] scale-105'
-                      : 'bg-white/95 text-[#2c3d39] border-[#ded7c8]'
+                      ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] scale-105'
+                      : 'bg-white/95 dark:bg-[#0E1D24]/95 text-[#334155] dark:text-slate-200 border-[#E2E8F0] dark:border-[#1E343F]'
                   }`}
                   style={{
-                    borderColor: isSelected ? '#1b605b' : `${advisor.themeColor}50`,
+                    borderColor: isSelected ? (isDark ? '#22D3EE' : '#0F6E6E') : `${advisor.themeColor}50`,
                   }}
                 >
                   <div className="flex items-center gap-1">
@@ -231,7 +234,7 @@ export const OverlappingRadarChart: React.FC<OverlappingRadarChartProps> = ({
                       {advisor.title.split(' ')[0]} {advisor.title.split(' ')[1] || ''}
                     </span>
                   </div>
-                  <div className="flex items-center gap-1 mt-0.5">
+                  <div className="flex items-center gap-1 mt-0.5" dir="ltr">
                     <span
                       className="text-[10px] font-extrabold"
                       style={{ color: advisor.themeColor }}

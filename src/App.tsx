@@ -406,6 +406,7 @@ export default function App() {
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
               onBackToDashboard={() => setActiveScreen('dashboard')}
+              theme={theme}
             />
           )}
 
@@ -426,6 +427,7 @@ export default function App() {
             <ComparisonScreen
               userProfile={appState.userProfile}
               onNavigateToDashboard={() => setActiveScreen('dashboard')}
+              theme={theme}
             />
           )}
 

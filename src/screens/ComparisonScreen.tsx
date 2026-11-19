@@ -311,11 +311,13 @@ const AVAILABLE_WEEKS: PeriodItem[] = [
 interface ComparisonScreenProps {
   userProfile: UserProfile | null;
   onNavigateToDashboard: () => void;
+  theme?: 'light' | 'dark';
 }
 
 export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
   userProfile,
   onNavigateToDashboard,
+  theme = 'light',
 }) => {
   const [periodType, setPeriodType] = useState<'weeks' | 'months' | 'years'>('months');
 
@@ -368,8 +370,11 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
   // Selected items resolved
   const selectedItems = currentPool.filter((item) => selectedIds.includes(item.id));
 
-  // Colors for selected comparison items
-  const itemColors = ['#1b605b', '#bd9240', '#6366f1', '#10b981', '#f43f5e'];
+  // Colors for selected comparison items adjusted for theme contrast
+  const isDark = theme === 'dark';
+  const itemColors = isDark
+    ? ['#06B6D4', '#F59E0B', '#818CF8', '#34D399', '#F87171']
+    : ['#0F6E6E', '#8A5A00', '#6366F1', '#10B981', '#F43F5E'];
 
   // Trigger AI comprehensive comparative analysis
   const handleRunAnalysis = () => {
@@ -410,39 +415,39 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#FAF7F2]">
+    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
       {/* Top Banner */}
-      <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-colors">
         <div>
           <button
             type="button"
             onClick={onNavigateToDashboard}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline mb-3 cursor-pointer"
+            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F6E6E] dark:text-[#22D3EE] hover:underline mb-3 cursor-pointer"
           >
             <ArrowRight className="w-3.5 h-3.5" />
             <span>العودة للوحة التحكم</span>
           </button>
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1b605b]/10 text-[#1b605b] text-xs font-bold mb-2">
-            <GitCompare className="w-3.5 h-3.5 text-[#bd9240]" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0F6E6E]/10 dark:bg-[#0891B2]/20 text-[#0F6E6E] dark:text-[#22D3EE] text-xs font-bold mb-2">
+            <GitCompare className="w-3.5 h-3.5 text-[#8A5A00] dark:text-amber-400" />
             أداة المقارنة التراكمية
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-[#1d2e2b]">
+          <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-[#F1F5F9]">
             مقارنة أبعاد الحياة (أسابيع • شهور • سنين)
           </h1>
-          <p className="text-xs sm:text-sm text-[#536561] mt-1 max-w-2xl leading-relaxed">
+          <p className="text-xs sm:text-sm text-[#475569] dark:text-[#94A3B8] mt-1 max-w-2xl leading-relaxed">
             قارن حتى 5 فترات زمنية معاً لمشاهدة كيف نمت جودة حياتك وتطورت درجات المستشارين، مع إمكانية استخراج تحليل ذكي شامل بنقرة واحدة.
           </p>
         </div>
 
         {/* Period Selector Tabs (Weeks, Months, Years) */}
-        <div className="inline-flex p-1.5 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl self-start lg:self-center shadow-xs">
+        <div className="inline-flex p-1.5 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl self-start lg:self-center shadow-xs">
           <button
             type="button"
             onClick={() => handleSwitchPeriodType('weeks')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               periodType === 'weeks'
-                ? 'bg-[#1b605b] text-white shadow-xs'
-                : 'text-[#536561] hover:text-[#1d2e2b]'
+                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs'
+                : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
             }`}
           >
             <CalendarDays className="w-3.5 h-3.5" />
@@ -453,8 +458,8 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
             onClick={() => handleSwitchPeriodType('months')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               periodType === 'months'
-                ? 'bg-[#1b605b] text-white shadow-xs'
-                : 'text-[#536561] hover:text-[#1d2e2b]'
+                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs'
+                : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
@@ -465,8 +470,8 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
             onClick={() => handleSwitchPeriodType('years')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
               periodType === 'years'
-                ? 'bg-[#1b605b] text-white shadow-xs'
-                : 'text-[#536561] hover:text-[#1d2e2b]'
+                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs'
+                : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
@@ -476,13 +481,13 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
       </div>
 
       {/* Selection Chips Bar (Choose up to 5 items) */}
-      <div className="bg-white border border-[#eae3d5] rounded-3xl p-5 sm:p-6 shadow-xs space-y-3">
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-5 sm:p-6 shadow-xs space-y-3 transition-colors">
         <div className="flex items-center justify-between text-xs font-bold">
-          <span className="text-[#1d2e2b] flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-[#bd9240]" />
+          <span className="text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-1.5">
+            <Sparkles className="w-4 h-4 text-[#8A5A00] dark:text-amber-400" />
             حدد الفترات المراد مقارنتها (اختر حتى 5 عناصر):
           </span>
-          <span className="text-[#1b605b]">
+          <span className="text-[#0F6E6E] dark:text-[#22D3EE]">
             المحدد: {selectedIds.length} من 5
           </span>
         </div>
@@ -491,7 +496,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
           {currentPool.map((item) => {
             const isSelected = selectedIds.includes(item.id);
             const colorIdx = selectedIds.indexOf(item.id);
-            const activeColor = colorIdx !== -1 ? itemColors[colorIdx] : '#1b605b';
+            const activeColor = colorIdx !== -1 ? itemColors[colorIdx] : (isDark ? '#0891B2' : '#0F6E6E');
 
             return (
               <button
@@ -501,20 +506,20 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                 className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex items-center gap-2 border ${
                   isSelected
                     ? 'text-white shadow-sm'
-                    : 'bg-[#FAF7F2] text-[#2c3d39] border-[#ded7c8] hover:border-[#1b605b]'
+                    : 'bg-[#F7F6F2] dark:bg-[#071318] text-[#334155] dark:text-slate-200 border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE]'
                 }`}
                 style={isSelected ? { backgroundColor: activeColor, borderColor: activeColor } : {}}
               >
                 <div
                   className={`w-4 h-4 rounded-full flex items-center justify-center border text-[9px] ${
-                    isSelected ? 'bg-white text-black font-black' : 'border-[#ded7c8]'
+                    isSelected ? 'bg-white text-black font-black' : 'border-[#CBD5E1] dark:border-slate-600'
                   }`}
                 >
                   {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                 </div>
                 <span>{item.name}</span>
-                <span className={`text-[10px] ${isSelected ? 'opacity-85' : 'text-[#7a8c88]'}`}>
-                  ({item.averageScore}/10)
+                <span className={`text-[10px] ${isSelected ? 'opacity-90' : 'text-[#64748B] dark:text-slate-400'}`} dir="ltr">
+                  ({item.averageScore} / 10)
                 </span>
               </button>
             );
@@ -529,7 +534,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
           return (
             <div
               key={item.id}
-              className="bg-white border-2 rounded-3xl p-5 shadow-xs relative overflow-hidden flex flex-col justify-between space-y-3"
+              className="bg-white dark:bg-[#0E1D24] border-2 rounded-3xl p-5 shadow-xs relative overflow-hidden flex flex-col justify-between space-y-3 transition-colors"
               style={{ borderColor: `${color}40` }}
             >
               <div
@@ -543,21 +548,21 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                 >
                   فترة #{idx + 1}
                 </span>
-                <h3 className="font-black text-sm text-[#1d2e2b]">{item.name}</h3>
-                <p className="text-[11px] text-[#536561] line-clamp-1">{item.subtitle}</p>
+                <h3 className="font-black text-sm text-[#0F172A] dark:text-[#F1F5F9]">{item.name}</h3>
+                <p className="text-[11px] text-[#475569] dark:text-[#94A3B8] line-clamp-1">{item.subtitle}</p>
               </div>
 
-              <div className="pt-2 border-t border-[#f0eae0] flex items-center justify-between">
+              <div className="pt-2 border-t border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between">
                 <div>
-                  <span className="text-[10px] text-[#7a8c88] block">معدل التوازن</span>
-                  <span className="text-2xl font-black" style={{ color }}>
-                    {item.averageScore}
-                    <span className="text-xs text-[#7a8c88]">/10</span>
+                  <span className="text-[10px] text-[#64748B] dark:text-slate-400 block">معدل التوازن</span>
+                  <span className="text-2xl font-black font-mono inline-flex items-baseline gap-1" dir="ltr" style={{ color }}>
+                    <span>{item.averageScore}</span>
+                    <span className="text-xs text-[#64748B] dark:text-slate-400">/ 10</span>
                   </span>
                 </div>
                 <div className="text-left">
-                  <span className="text-[10px] text-[#7a8c88] block">العادات المنجزة</span>
-                  <span className="text-sm font-extrabold text-[#1d2e2b]">
+                  <span className="text-[10px] text-[#64748B] dark:text-slate-400 block">العادات المنجزة</span>
+                  <span className="text-sm font-extrabold text-[#0F172A] dark:text-[#F1F5F9]">
                     {item.completedHabits}
                   </span>
                 </div>
@@ -568,14 +573,14 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
       </div>
 
       {/* Visual Chart: 8 Areas Comparative Bar Group */}
-      <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#f0eae0]">
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0] dark:border-[#1E343F]">
           <div>
-            <h3 className="text-lg font-black text-[#1d2e2b] flex items-center gap-2">
-              <BarChart3 className="w-5 h-5 text-[#1b605b]" />
+            <h3 className="text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-2">
+              <BarChart3 className="w-5 h-5 text-[#0F6E6E] dark:text-[#22D3EE]" />
               مقارنة تفصيلية لمجالات الحياة الثمانية
             </h3>
-            <p className="text-xs text-[#536561] mt-0.5">
+            <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
               مقارنة درجات كل جانب جنباً إلى جنب بين الفترات المحددة.
             </p>
           </div>
@@ -588,7 +593,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                   className="w-3 h-3 rounded-md"
                   style={{ backgroundColor: itemColors[idx % itemColors.length] }}
                 />
-                <span className="text-[#2c3d39]">{item.name}</span>
+                <span className="text-[#334155] dark:text-slate-300">{item.name}</span>
               </div>
             ))}
           </div>
@@ -601,9 +606,9 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
               <div className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-2">
                   <span className="text-base">{advisor.avatarSvg}</span>
-                  <span className="font-extrabold text-[#1d2e2b]">{advisor.title}</span>
+                  <span className="font-extrabold text-[#0F172A] dark:text-[#F1F5F9]">{advisor.title}</span>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] font-bold">
+                <div className="flex items-center gap-3 text-[11px] font-bold" dir="ltr">
                   {selectedItems.map((item, idx) => {
                     const score = item.scores[advisor.id] || 0;
                     return (
@@ -619,7 +624,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
               </div>
 
               {/* Multi-Bar Row */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 bg-[#FAF7F2] p-2 rounded-2xl border border-[#eae3d5]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2 bg-[#F7F6F2] dark:bg-[#071318] p-2.5 rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] transition-colors">
                 {selectedItems.map((item, idx) => {
                   const score = item.scores[advisor.id] || 0;
                   const color = itemColors[idx % itemColors.length];
@@ -628,10 +633,10 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                   return (
                     <div key={item.id} className="space-y-1">
                       <div className="flex justify-between text-[10px] font-bold">
-                        <span className="text-[#7a8c88] truncate">{item.name}</span>
-                        <span style={{ color }}>{score}/10</span>
+                        <span className="text-[#64748B] dark:text-slate-400 truncate">{item.name}</span>
+                        <span dir="ltr" style={{ color }}>{score} / 10</span>
                       </div>
-                      <div className="w-full h-2 bg-[#ded7c8]/50 rounded-full overflow-hidden">
+                      <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full transition-all duration-500"
                           style={{
@@ -650,17 +655,17 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
       </div>
 
       {/* INTERACTIVE COMPARATIVE LIFE WHEEL DASHBOARD (عجلة الحياة المقارنة المتداخلة) */}
-      <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#f0eae0]">
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0] dark:border-[#1E343F]">
           <div>
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1b605b]/10 text-[#1b605b] text-xs font-bold mb-1.5">
-              <Compass className="w-3.5 h-3.5 text-[#bd9240]" />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0F6E6E]/10 dark:bg-[#0891B2]/20 text-[#0F6E6E] dark:text-[#22D3EE] text-xs font-bold mb-1.5">
+              <Compass className="w-3.5 h-3.5 text-[#8A5A00] dark:text-amber-400" />
               عجلة الحياة المقارنة التفاعلية (تداخل الفترات)
             </div>
-            <h3 className="text-xl font-black text-[#1d2e2b]">
+            <h3 className="text-xl font-black text-[#0F172A] dark:text-[#F1F5F9]">
               تداخل عجلة الحياة بين الفترات السابقة والحالية
             </h3>
-            <p className="text-xs text-[#536561] mt-0.5">
+            <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
               انقر على أي جانب في العجلة أو من القوائم لعرض تحليله المفصل ومقدار التحسن الزمني فيه.
             </p>
           </div>
@@ -672,13 +677,13 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
               return (
                 <div
                   key={item.id}
-                  className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#FAF7F2] border text-xs font-bold"
+                  className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border text-xs font-bold transition-colors"
                   style={{ borderColor: `${color}60` }}
                 >
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
-                  <span className="text-[#1d2e2b]">{item.name}</span>
+                  <span className="text-[#0F172A] dark:text-[#F1F5F9]">{item.name}</span>
                   {isLast && (
-                    <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded font-black">
+                    <span className="text-[10px] bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 px-1.5 py-0.2 rounded font-black">
                       الحالي
                     </span>
                   )}
@@ -691,7 +696,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
         {/* Dashboard Grid: Wheel on Left, Drilldown Analysis on Right */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
           {/* Left: Overlapping Radar Wheel */}
-          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-[#FAF7F2] p-4 rounded-3xl border border-[#eae3d5]">
+          <div className="lg:col-span-7 flex flex-col items-center justify-center bg-[#F7F6F2] dark:bg-[#071318] p-4 rounded-3xl border border-[#E2E8F0] dark:border-[#1E343F] transition-colors">
             <OverlappingRadarChart
               periods={selectedItems.map((item, idx) => ({
                 id: item.id,
@@ -703,14 +708,15 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
               selectedAreaId={selectedAreaId}
               onSelectArea={(id) => setSelectedAreaId(id)}
               size={440}
+              theme={theme}
             />
-            <span className="text-[11px] text-[#7a8c88] mt-2 font-medium">
+            <span className="text-[11px] text-[#64748B] dark:text-slate-400 mt-2 font-medium">
               💡 انقر على اسم أو دائرة أي جانب لرؤية تحليل الفارق ومعدل التحسن
             </span>
           </div>
 
           {/* Right: Area Drilldown Details Card */}
-          <div className="lg:col-span-5 bg-white border-2 border-[#eae3d5] rounded-3xl p-6 shadow-xs space-y-5">
+          <div className="lg:col-span-5 bg-white dark:bg-[#0E1D24] border-2 border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 shadow-xs space-y-5 transition-colors">
             {(() => {
               const activeAdv = ADVISORS_LIST.find((a) => a.id === selectedAreaId) || ADVISORS_LIST[0];
               const firstVal = selectedItems[0]?.scores[selectedAreaId] || 0;
@@ -721,25 +727,25 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
               return (
                 <div className="space-y-4">
                   {/* Area Card Header */}
-                  <div className="flex items-center justify-between pb-3 border-b border-[#f0eae0]">
+                  <div className="flex items-center justify-between pb-3 border-b border-[#E2E8F0] dark:border-[#1E343F]">
                     <div className="flex items-center gap-3">
                       <div
-                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5"
+                        className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5 dark:border-white/5"
                         style={{ backgroundColor: `${activeAdv.themeColor}15` }}
                       >
                         {activeAdv.avatarSvg}
                       </div>
                       <div>
-                        <h4 className="text-base font-black text-[#1d2e2b]">{activeAdv.title}</h4>
+                        <h4 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">{activeAdv.title}</h4>
                         <p className="text-xs font-semibold" style={{ color: activeAdv.themeColor }}>
                           {activeAdv.name} ({activeAdv.badge})
                         </p>
                       </div>
                     </div>
 
-                    <div className="text-left">
-                      <span className="text-2xl font-black text-[#1d2e2b]">{lastVal}</span>
-                      <span className="text-xs text-[#7a8c88]">/10</span>
+                    <div className="text-left" dir="ltr">
+                      <span className="text-2xl font-black text-[#0F172A] dark:text-[#F1F5F9]">{lastVal}</span>
+                      <span className="text-xs text-[#64748B] dark:text-slate-400"> / 10</span>
                     </div>
                   </div>
 
@@ -747,15 +753,15 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                   <div
                     className={`p-3.5 rounded-2xl border flex items-center justify-between ${
                       isImproved
-                        ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
-                        : 'bg-rose-50/80 border-rose-200 text-rose-900'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800/60 text-emerald-900 dark:text-emerald-300'
+                        : 'bg-rose-50 dark:bg-rose-950/40 border-rose-200 dark:border-rose-800/60 text-rose-900 dark:text-rose-300'
                     }`}
                   >
                     <div className="flex items-center gap-2">
                       {isImproved ? (
-                        <ArrowUpRight className="w-5 h-5 text-emerald-600" />
+                        <ArrowUpRight className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                       ) : (
-                        <ArrowDownRight className="w-5 h-5 text-rose-600" />
+                        <ArrowDownRight className="w-5 h-5 text-rose-600 dark:text-rose-400" />
                       )}
                       <div>
                         <span className="text-xs font-bold block">
@@ -767,14 +773,14 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                       </div>
                     </div>
 
-                    <span className="text-lg font-black font-mono">
+                    <span className="text-lg font-black font-mono" dir="ltr">
                       {isImproved ? `+${scoreDiff}` : scoreDiff} درجة
                     </span>
                   </div>
 
                   {/* Progression Across All Selected Periods */}
                   <div className="space-y-2 pt-1">
-                    <span className="text-xs font-bold text-[#536561] block">
+                    <span className="text-xs font-bold text-[#475569] dark:text-[#94A3B8] block">
                       مسار التطور عبر الفترات المحددة:
                     </span>
                     <div className="space-y-1.5">
@@ -784,12 +790,12 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                         const pct = Math.min(100, (sc / 10) * 100);
 
                         return (
-                          <div key={item.id} className="bg-[#FAF7F2] p-2.5 rounded-xl border border-[#eae3d5] space-y-1">
+                          <div key={item.id} className="bg-[#F7F6F2] dark:bg-[#071318] p-2.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] space-y-1 transition-colors">
                             <div className="flex items-center justify-between text-[11px] font-bold">
-                              <span className="text-[#1d2e2b]">{item.name}</span>
-                              <span style={{ color }}>{sc} / 10</span>
+                              <span className="text-[#0F172A] dark:text-[#F1F5F9]">{item.name}</span>
+                              <span dir="ltr" style={{ color }}>{sc} / 10</span>
                             </div>
-                            <div className="w-full h-1.5 bg-[#ded7c8]/50 rounded-full overflow-hidden">
+                            <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                               <div
                                 className="h-full rounded-full transition-all duration-300"
                                 style={{ width: `${pct}%`, backgroundColor: color }}
@@ -802,12 +808,12 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                   </div>
 
                   {/* Actionable Strategic Insight for this Area */}
-                  <div className="bg-[#FAF7F2] p-4 rounded-2xl border border-[#ded7c8] text-xs text-[#2c3d39] space-y-1.5">
-                    <span className="font-bold text-[#1b605b] flex items-center gap-1.5">
-                      <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
+                  <div className="bg-[#F7F6F2] dark:bg-[#071318] p-4 rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] text-xs space-y-1.5 transition-colors">
+                    <span className="font-bold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#8A5A00] dark:text-amber-400" />
                       رؤية المستشار للتحسين المستمر:
                     </span>
-                    <p className="leading-relaxed text-[#536561]">
+                    <p className="leading-relaxed text-[#334155] dark:text-slate-300">
                       {isImproved
                         ? `استمرارية الأداء في ${activeAdv.title} تدل على ترسخ العادات المحورية. حافظ على التوازن ولا ترفع التوقعات بشكل يولد ضغطاً غير ضروري.`
                         : `هذا الجانب يحتاج إلى خطوة إجرائية صغيرة ومحددة هذا الأسبوع في مصفوفة أيزنهاور (المربع 2) لاستعادة زخمه.`}
@@ -821,17 +827,17 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
       </div>
 
       {/* AI Comparative Deep Analysis Section (زر تحليل) */}
-      <div className="bg-gradient-to-br from-[#1b605b] to-[#12423e] text-white rounded-3xl p-6 sm:p-8 shadow-lg space-y-6">
+      <div className="bg-gradient-to-br from-[#0F6E6E] to-[#0A4848] dark:from-[#0E2833] dark:to-[#07151C] dark:border dark:border-[#1E343F] text-white rounded-3xl p-6 sm:p-8 shadow-lg space-y-6 transition-colors">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 text-emerald-200 text-xs font-bold">
-              <Bot className="w-3.5 h-3.5 text-[#ffd67a]" />
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 dark:bg-cyan-500/10 text-emerald-200 dark:text-cyan-300 text-xs font-bold">
+              <Bot className="w-3.5 h-3.5 text-[#ffd67a] dark:text-cyan-400" />
               محرك التحليل الذكي التكاملي
             </div>
             <h3 className="text-xl sm:text-2xl font-black">
               تحليل ما حدث عبر هذه البيانات والفترات
             </h3>
-            <p className="text-xs sm:text-sm text-emerald-100/80 max-w-2xl leading-relaxed">
+            <p className="text-xs sm:text-sm text-emerald-100/80 dark:text-slate-300 max-w-2xl leading-relaxed">
               انقر على زر "تحليل" ليقوم الذكاء الاصطناعي بربط المتغيرات واكتشاف الأسباب الجذرية وراء صعود أو هبوط المؤشرات وتقديم خطة استباقية.
             </p>
           </div>
@@ -840,7 +846,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
             type="button"
             onClick={handleRunAnalysis}
             disabled={isAnalyzing}
-            className="px-6 py-3.5 rounded-2xl bg-[#bd9240] hover:bg-[#a88235] text-white font-black text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 hover:scale-[1.02] disabled:opacity-50 self-start sm:self-center cursor-pointer flex-shrink-0"
+            className="px-6 py-3.5 rounded-2xl bg-[#D97706] hover:bg-[#B45309] dark:bg-[#0891B2] dark:hover:bg-[#06B6D4] text-white font-black text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 hover:scale-[1.02] disabled:opacity-50 self-start sm:self-center cursor-pointer flex-shrink-0"
           >
             {isAnalyzing ? (
               <>
@@ -858,7 +864,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
 
         {/* Analysis Output Box */}
         {analysisResult && (
-          <div className="bg-white/10 backdrop-blur-md border border-white/20 rounded-2xl p-5 sm:p-6 text-xs sm:text-sm leading-relaxed text-white space-y-3 animate-fadeIn">
+          <div className="bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-2xl p-5 sm:p-6 text-xs sm:text-sm leading-relaxed text-white space-y-3 animate-fadeIn">
             <div className="whitespace-pre-line prose prose-invert max-w-none">
               {analysisResult}
             </div>

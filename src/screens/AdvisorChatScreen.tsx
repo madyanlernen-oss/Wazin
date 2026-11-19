@@ -77,6 +77,7 @@ interface AdvisorChatScreenProps {
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
   onBackToDashboard: () => void;
+  theme?: 'light' | 'dark';
 }
 
 export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
@@ -89,6 +90,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   onAddGoal,
   onAddEisenhowerGoal,
   onBackToDashboard,
+  theme: _theme = 'light',
 }) => {
   const currentAdvisor: AdvisorConfig =
     ADVISORS_LIST.find((a) => a.id === currentAdvisorId) || ADVISORS_LIST[0];
@@ -297,24 +299,24 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-20 bg-[#FAF7F2]">
+    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-20 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
       {/* Top Bar with Back Navigation */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToDashboard}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white border border-[#eae3d5] text-[#536561] hover:text-[#1b605b] hover:bg-[#FAF7F2] text-xs font-bold transition-all shadow-xs"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-xs font-bold transition-all shadow-xs cursor-pointer"
           >
             <ArrowRight className="w-4 h-4" />
             <span>العودة إلى عجلة الحياة</span>
           </button>
-          <span className="text-sm font-black text-[#1d2e2b] hidden sm:inline">
+          <span className="text-sm font-black text-[#0F172A] dark:text-[#F1F5F9] hidden sm:inline">
             غرف استشارة المستشارين الثمانية
           </span>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs text-[#536561] font-semibold hidden md:inline">
+          <span className="text-xs text-[#475569] dark:text-[#94A3B8] font-semibold hidden md:inline">
             المستشار الحالي:
           </span>
           <span
@@ -332,10 +334,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Advisors Switcher Sidebar */}
-        <div className="lg:col-span-4 bg-white border border-[#eae3d5] rounded-3xl p-4 shadow-xs space-y-3">
+        <div className="lg:col-span-4 bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-4 shadow-xs space-y-3 transition-colors">
           <div className="px-2 py-1">
-            <h3 className="font-extrabold text-sm text-[#1d2e2b]">اختر المستشار للمحادثة</h3>
-            <p className="text-[11px] text-[#536561]">
+            <h3 className="font-extrabold text-sm text-[#0F172A] dark:text-[#F1F5F9]">اختر المستشار للمحادثة</h3>
+            <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
               لكل مستشار سياق مستقل مبني على نتائجك وأهدافك
             </p>
           </div>
@@ -349,34 +351,34 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 <button
                   key={advisor.id}
                   onClick={() => onSelectAdvisor(advisor.id)}
-                  className={`w-full text-right p-3 rounded-2xl transition-all duration-200 flex items-center justify-between border ${
+                  className={`w-full text-right p-3 rounded-2xl transition-all duration-200 flex items-center justify-between border cursor-pointer ${
                     isSelected
-                      ? 'bg-[#FAF7F2] border-[#1b605b] shadow-xs'
-                      : 'bg-white border-[#eae3d5] hover:bg-[#FAF7F2] text-[#2c3d39]'
+                      ? 'bg-[#F7F6F2] dark:bg-[#112028] border-[#0F6E6E] dark:border-[#0891B2] shadow-xs'
+                      : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#0F172A] dark:text-[#F1F5F9]'
                   }`}
                   style={isSelected ? { borderRightColor: advisor.themeColor, borderRightWidth: '4px' } : {}}
                 >
                   <div className="flex items-center gap-3">
                     <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-xs border border-black/5"
+                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-xs border border-black/5 dark:border-white/10"
                       style={{ backgroundColor: `${advisor.themeColor}15` }}
                     >
                       {advisor.avatarSvg}
                     </div>
                     <div>
-                      <h4 className="font-extrabold text-xs text-[#1d2e2b]">{advisor.name}</h4>
-                      <p className="text-[10px] text-[#536561]">{advisor.title}</p>
+                      <h4 className="font-extrabold text-xs text-[#0F172A] dark:text-[#F1F5F9]">{advisor.name}</h4>
+                      <p className="text-[10px] text-[#475569] dark:text-[#94A3B8]">{advisor.title}</p>
                     </div>
                   </div>
 
-                  <div className="text-left">
+                  <div dir="ltr" className="text-left font-mono font-bold">
                     <span
-                      className="text-xs font-black"
+                      className="text-xs"
                       style={{ color: advisor.themeColor }}
                     >
                       {sc.toFixed(1)}
                     </span>
-                    <span className="text-[9px] text-[#7a8c88]"> /10</span>
+                    <span className="text-[9px] text-[#64748B] dark:text-[#94A3B8]"> / 10</span>
                   </div>
                 </button>
               );
@@ -385,23 +387,23 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         </div>
 
         {/* Right: The Active Advisor Consultation Room */}
-        <div className="lg:col-span-8 flex flex-col bg-white border border-[#eae3d5] rounded-3xl overflow-hidden shadow-xs h-[78vh]">
+        <div className="lg:col-span-8 flex flex-col bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl overflow-hidden shadow-xs h-[78vh] transition-colors">
           {/* Room Header Banner */}
-          <div className="p-4 sm:p-5 border-b border-[#f0eae0] bg-[#FAF7F2] flex items-center justify-between">
+          <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-[#1E343F] bg-[#F7F6F2] dark:bg-[#0B161C] flex items-center justify-between transition-colors">
             <div className="flex items-center gap-3.5">
               <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5 relative"
+                className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5 dark:border-white/10 relative"
                 style={{ backgroundColor: `${currentAdvisor.themeColor}20` }}
               >
                 {currentAdvisor.avatarSvg}
                 <span
-                  className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white"
+                  className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#0B161C]"
                   style={{ backgroundColor: currentAdvisor.themeColor }}
                 />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <h3 className="text-base font-black text-[#1d2e2b]">{currentAdvisor.name}</h3>
+                  <h3 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">{currentAdvisor.name}</h3>
                   <span
                     className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
                     style={{
@@ -413,7 +415,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                     {currentAdvisor.badge}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#536561]">{currentAdvisor.role}</p>
+                <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">{currentAdvisor.role}</p>
               </div>
             </div>
 
@@ -424,7 +426,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => setShowModeDropdown(!showModeDropdown)}
-                  className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs hover:shadow-sm"
+                  className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs hover:shadow-sm cursor-pointer"
                   style={{
                     backgroundColor: currentModeConfig.bgColor,
                     borderColor: `${currentModeConfig.color}40`,
@@ -445,10 +447,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                       className="fixed inset-0 z-40"
                       onClick={() => setShowModeDropdown(false)}
                     />
-                    <div className="absolute left-0 mt-2 w-72 sm:w-80 bg-white rounded-2xl border border-[#ded7c8] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                      <div className="px-3 py-2 border-b border-[#f0eae0] mb-1">
-                        <span className="text-[11px] font-black text-[#1d2e2b] block">مستوى تفكير الذكاء الاصطناعي (Gemini)</span>
-                        <span className="text-[10px] text-[#7a8c88]">اختر نمط الإجابة والتحليل المناسب لاحتياجك</span>
+                    <div className="absolute left-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#0E1D24] rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                      <div className="px-3 py-2 border-b border-[#E2E8F0] dark:border-[#1E343F] mb-1">
+                        <span className="text-[11px] font-black text-[#0F172A] dark:text-[#F1F5F9] block">مستوى تفكير الذكاء الاصطناعي (Gemini)</span>
+                        <span className="text-[10px] text-[#475569] dark:text-[#94A3B8]">اختر نمط الإجابة والتحليل المناسب لاحتياجك</span>
                       </div>
 
                       <div className="space-y-1">
@@ -463,10 +465,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                                 handleSelectAiMode(mode.id);
                                 setShowModeDropdown(false);
                               }}
-                              className={`w-full text-right p-2.5 rounded-xl transition-all flex items-start gap-2.5 border ${
+                              className={`w-full text-right p-2.5 rounded-xl transition-all flex items-start gap-2.5 border cursor-pointer ${
                                 isSelected
-                                  ? 'border-[#1b605b] shadow-xs'
-                                  : 'border-transparent hover:bg-[#FAF7F2]'
+                                  ? 'border-[#0F6E6E] dark:border-[#22D3EE] shadow-xs'
+                                  : 'border-transparent hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
                               }`}
                               style={isSelected ? { backgroundColor: mode.bgColor } : {}}
                             >
@@ -478,7 +480,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                               </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-xs font-black text-[#1d2e2b]">{mode.title}</span>
+                                  <span className="text-xs font-black text-[#0F172A] dark:text-[#F1F5F9]">{mode.title}</span>
                                   <span
                                     className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
                                     style={{ backgroundColor: `${mode.color}20`, color: mode.color }}
@@ -486,9 +488,9 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                                     {mode.badge}
                                   </span>
                                 </div>
-                                <p className="text-[10px] text-[#536561] leading-tight mt-1">{mode.desc}</p>
+                                <p className="text-[10px] text-[#475569] dark:text-[#94A3B8] leading-tight mt-1">{mode.desc}</p>
                               </div>
-                              {isSelected && <Check className="w-4 h-4 text-[#1b605b] flex-shrink-0 mt-1" />}
+                              {isSelected && <Check className="w-4 h-4 text-[#0F6E6E] dark:text-[#22D3EE] flex-shrink-0 mt-1" />}
                             </button>
                           );
                         })}
@@ -498,10 +500,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 )}
               </div>
 
-              {/* Current Score Tag */}
-              <div className="bg-white px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#eae3d5] text-left shadow-xs">
-                <span className="text-[9px] sm:text-[10px] text-[#7a8c88] block">درجتك</span>
-                <span className="text-xs sm:text-sm font-black" style={{ color: currentAdvisor.themeColor }}>
+              {/* Current Score Tag with proper LTR format */}
+              <div dir="ltr" className="bg-white dark:bg-[#0E1D24] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] text-left shadow-xs transition-colors">
+                <span className="text-[9px] sm:text-[10px] text-[#64748B] dark:text-[#94A3B8] block text-right font-sans">درجتك</span>
+                <span className="text-xs sm:text-sm font-black font-mono block" style={{ color: currentAdvisor.themeColor }}>
                   {currentScore.toFixed(1)} / 10
                 </span>
               </div>
@@ -509,7 +511,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           </div>
 
           {/* Chat Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-white">
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F7F6F2]/50 dark:bg-[#071318]/90 transition-colors">
             {activeMessages.map((msg) => {
               const isUser = msg.sender === 'user';
 
@@ -522,8 +524,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                   <div
                     className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 ${
                       isUser
-                        ? 'bg-[#1b605b] text-white'
-                        : 'border border-black/5'
+                        ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white'
+                        : 'border border-black/5 dark:border-white/10'
                     }`}
                     style={!isUser ? { backgroundColor: `${currentAdvisor.themeColor}15` } : {}}
                   >
@@ -540,8 +542,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                     <div
                       className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
                         isUser
-                          ? 'bg-[#1b605b] text-white rounded-tr-none shadow-xs'
-                          : 'bg-[#FAF7F2] text-[#1d2e2b] border border-[#eae3d5] rounded-tl-none shadow-xs'
+                          ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white rounded-tr-none shadow-xs'
+                          : 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] rounded-tl-none shadow-xs'
                       }`}
                     >
                       <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -552,8 +554,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
                     {/* Actionable Steps suggested by advisor */}
                     {!isUser && msg.actionSteps && msg.actionSteps.length > 0 && (
-                      <div className="bg-white border border-[#eae3d5] rounded-2xl p-3.5 space-y-2 shadow-xs">
-                        <span className="text-[11px] font-bold text-[#1b605b] flex items-center gap-1.5">
+                      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-3.5 space-y-2 shadow-xs transition-colors">
+                        <span className="text-[11px] font-bold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
                           خطوات عملية مقترحة من المستشار:
                         </span>
@@ -563,16 +565,16 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                             return (
                               <div
                                 key={sIdx}
-                                className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#FAF7F2] border border-[#eae3d5] text-xs text-[#2c3d39]"
+                                className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9]"
                               >
                                 <span>{step}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleAddActionToGoals(step)}
-                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all flex-shrink-0 shadow-xs ${
+                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all flex-shrink-0 shadow-xs cursor-pointer ${
                                     isAdded
                                       ? 'bg-emerald-700 text-white'
-                                      : 'bg-white text-[#1b605b] border border-[#ded7c8] hover:bg-[#FAF7F2]'
+                                      : 'bg-white dark:bg-[#0E1D24] text-[#0F6E6E] dark:text-[#22D3EE] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
                                   }`}
                                 >
                                   {isAdded ? (
@@ -596,10 +598,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
                     {/* Reflection Question */}
                     {!isUser && msg.reflectionQuestion && (
-                      <div className="bg-[#FAF7F2] border border-[#bd9240]/30 rounded-xl p-3 text-xs text-[#70551c] flex items-start gap-2 shadow-xs">
-                        <Lightbulb className="w-4 h-4 text-[#bd9240] mt-0.5 flex-shrink-0" />
+                      <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl p-3 text-xs text-[#8A5A00] dark:text-[#FBBF24] flex items-start gap-2 shadow-xs">
+                        <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
                         <div>
-                          <span className="font-bold text-[#bd9240] block mb-0.5">
+                          <span className="font-bold text-[#8A5A00] dark:text-[#FBBF24] block mb-0.5">
                             سؤال للتأمل الذاتي:
                           </span>
                           <span>{msg.reflectionQuestion}</span>
@@ -612,15 +614,15 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
             })}
 
             {isLoading && (
-              <div className="flex gap-3 items-center text-xs text-[#536561]">
+              <div className="flex gap-3 items-center text-xs text-[#475569] dark:text-[#94A3B8]">
                 <div
                   className="w-8 h-8 rounded-xl flex items-center justify-center text-sm shadow-xs"
                   style={{ backgroundColor: `${currentAdvisor.themeColor}15` }}
                 >
                   {currentAdvisor.avatarSvg}
                 </div>
-                <div className="bg-[#FAF7F2] p-3 rounded-2xl border border-[#eae3d5] flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#1b605b]" />
+                <div className="bg-white dark:bg-[#0E1D24] p-3 rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#0F6E6E] dark:text-[#22D3EE]" />
                   <span>
                     {aiMode === 'fast' && `${currentAdvisor.name} يصيغ لك نصيحة فورية سريعة ⚡...`}
                     {aiMode === 'deep' && `${currentAdvisor.name} يفكك استشارتك بعمق وتحليل استراتيجي 🧠...`}
@@ -634,14 +636,14 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           </div>
 
           {/* Suggested Questions Chips */}
-          <div className="px-4 py-2 border-t border-[#f0eae0] bg-[#FAF7F2] flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs">
-            <span className="text-[10px] text-[#7a8c88] font-bold flex-shrink-0">أسئلة مقترحة:</span>
+          <div className="px-4 py-2 border-t border-[#E2E8F0] dark:border-[#1E343F] bg-[#F7F6F2] dark:bg-[#0B161C] flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs transition-colors">
+            <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] font-bold flex-shrink-0">أسئلة مقترحة:</span>
             {currentAdvisor.suggestedQuestions.map((qText, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => handleSendMessage(qText)}
-                className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#536561] hover:text-[#1b605b] text-[11px] transition-all shadow-xs"
+                className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-[11px] transition-all shadow-xs cursor-pointer"
               >
                 {qText}
               </button>
@@ -649,12 +651,12 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           </div>
 
           {/* Chat Input Box */}
-          <div className="p-3 sm:p-4 border-t border-[#f0eae0] bg-white space-y-2.5">
+          <div className="p-3 sm:p-4 border-t border-[#E2E8F0] dark:border-[#1E343F] bg-white dark:bg-[#0E1D24] space-y-2.5 transition-colors">
             {/* Quick AI Mode Selector Pill */}
             <div className="flex items-center justify-between px-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-[#7a8c88] font-bold">نمط التفكير:</span>
-                <div className="inline-flex rounded-xl p-0.5 bg-[#FAF7F2] border border-[#ded7c8]">
+                <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] font-bold">نمط التفكير:</span>
+                <div className="inline-flex rounded-xl p-0.5 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F]">
                   {AI_MODES.map((m) => {
                     const isSelected = m.id === aiMode;
                     const IconC = m.icon;
@@ -663,10 +665,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                         key={m.id}
                         type="button"
                         onClick={() => handleSelectAiMode(m.id)}
-                        className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all ${
+                        className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
                           isSelected
-                            ? 'bg-white shadow-xs'
-                            : 'text-[#7a8c88] hover:text-[#1d2e2b]'
+                            ? 'bg-white dark:bg-[#0E1D24] shadow-xs'
+                            : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
                         }`}
                         style={isSelected ? { color: m.color } : {}}
                         title={m.desc}
@@ -678,7 +680,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                   })}
                 </div>
               </div>
-              <span className="text-[10px] text-[#7a8c88] hidden md:inline font-medium">
+              <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] hidden md:inline font-medium">
                 {currentModeConfig.desc}
               </span>
             </div>
@@ -702,7 +704,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder={`اطرح سؤالك أو تحدث بصوتك مع ${currentAdvisor.name}...`}
-                className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
+                className="flex-1 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
                 dir="rtl"
                 disabled={isLoading}
               />
@@ -710,8 +712,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
               <button
                 type="submit"
                 disabled={isLoading || !inputMessage.trim()}
-                className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95"
-                style={{ backgroundColor: currentAdvisor.themeColor }}
+                className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
+                style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
               >
                 <Send className="w-5 h-5 -rotate-90" />
               </button>
