@@ -27,6 +27,30 @@ interface DirectorSummaryScreenProps {
   report: DirectorSummaryReport | null;
   onSaveReport: (report: DirectorSummaryReport) => void;
   onBackToDashboard: () => void;
+  theme?: 'light' | 'dark';
+}
+
+// Helper to isolate numbers and ratios like "4.8/10", "5.2/10", "8/10" in LTR so Arabic text flow remains natural
+function renderWithIsolatedNumbers(text: string): React.ReactNode {
+  if (!text) return null;
+  const regex = /(\(?\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\)?)/g;
+  const parts = text.split(regex);
+
+  return parts.map((part, idx) => {
+    if (regex.test(part)) {
+      return (
+        <span
+          key={idx}
+          dir="ltr"
+          className="inline-block font-sans font-bold mx-0.5 text-inherit"
+          style={{ unicodeBidi: 'isolate' }}
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
 }
 
 export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
@@ -37,6 +61,7 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
   report,
   onSaveReport,
   onBackToDashboard,
+  theme: _theme = 'light',
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -217,20 +242,24 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
     window.print();
   };
 
+  const sortedRoadmapWeeks = [...(report?.thirtyDayRoadmap || [])].sort(
+    (a, b) => a.weekNumber - b.weekNumber
+  );
+
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 space-y-8 bg-[#FAF7F2]">
+    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 space-y-8 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
       {/* Top Breadcrumb & Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#eae3d5]">
+      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0] dark:border-[#1E343F]">
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToDashboard}
-            className="px-3 py-2 rounded-xl bg-white border border-[#ded7c8] hover:bg-[#FAF7F2] text-[#536561] hover:text-[#1b605b] transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs"
+            className="px-3 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
           >
             <ArrowRight className="w-4 h-4" />
             <span>العودة للوحة التحكم</span>
           </button>
-          <div className="h-4 w-px bg-[#ded7c8]" />
-          <span className="text-xs font-extrabold text-[#1b605b] flex items-center gap-1.5">
+          <div className="h-4 w-px bg-[#E2E8F0] dark:bg-[#1E343F]" />
+          <span className="text-xs font-extrabold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-[#bd9240]" />
             تقرير المنسق العام للتوازن الذكي (منصة وازن)
           </span>
@@ -241,16 +270,16 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             <>
               <button
                 onClick={handleCopy}
-                className="px-3 py-1.5 rounded-xl bg-white border border-[#ded7c8] hover:bg-[#FAF7F2] text-[#536561] text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
                 title="نسخ ملخص التقرير"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-[#1b605b]" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'تم النسخ' : 'نسخ التقرير'}</span>
               </button>
 
               <button
                 onClick={handlePrint}
-                className="px-3 py-1.5 rounded-xl bg-white border border-[#ded7c8] hover:bg-[#FAF7F2] text-[#536561] text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs"
+                className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
               >
                 <Printer className="w-3.5 h-3.5" />
                 <span>طباعة</span>
@@ -261,7 +290,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
           <button
             onClick={handleGenerateReport}
             disabled={isGenerating}
-            className="px-4 py-2 rounded-xl bg-[#1b605b] hover:bg-[#16504c] text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs disabled:opacity-50 transition-all"
+            className="px-4 py-2 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs disabled:opacity-50 transition-all cursor-pointer"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
             <span>{report ? 'إعادة التحليل التكاملي' : 'توليد التقرير بالذكاء الاصطناعي'}</span>
@@ -270,27 +299,27 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
       </div>
 
       {error && (
-        <div className="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-bold">
+        <div className="p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/50 text-rose-800 dark:text-rose-300 text-xs font-bold">
           {error}
         </div>
       )}
 
       {/* Hero Director Card */}
-      <div className="relative overflow-hidden bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs">
-        <div className="absolute top-0 right-0 w-80 h-80 bg-[#1b605b]/5 rounded-full blur-3xl pointer-events-none" />
+      <div className="relative overflow-hidden bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs transition-colors">
+        <div className="absolute top-0 right-0 w-80 h-80 bg-[#0F6E6E]/5 dark:bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
         <div className="relative flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-start sm:items-center gap-4">
-            <div className="w-16 h-16 rounded-3xl bg-[#FAF7F2] border border-[#ded7c8] flex items-center justify-center text-3xl shadow-xs flex-shrink-0">
+            <div className="w-16 h-16 rounded-3xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-center text-3xl shadow-xs flex-shrink-0">
               🧭
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-black text-[#1d2e2b]">المنسق العام للتوازن الذكي</h1>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#1b605b]/10 text-[#1b605b] border border-[#1b605b]/20">
+                <h1 className="text-2xl font-black text-[#0F172A] dark:text-[#F1F5F9]">المنسق العام للتوازن الذكي</h1>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0F6E6E]/10 dark:bg-cyan-950/50 text-[#0F6E6E] dark:text-[#22D3EE] border border-[#0F6E6E]/20 dark:border-cyan-800/40">
                   تحليل تكاملي شامل
                 </span>
               </div>
-              <p className="text-xs text-[#536561] mt-1 max-w-xl leading-relaxed">
+              <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1 max-w-xl leading-relaxed">
                 رؤية بانورامية تفحص تقاطع مجالات الحياة الثمانية معاً، وتكشف كيف يؤثر جانب على آخر،
                 لتخرج بخطة 30 يوماً ذكية وعادات محورية تحدث أثراً مضاعفاً.
               </p>
@@ -298,9 +327,9 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
           </div>
 
           {report && (
-            <div className="bg-[#FAF7F2] border border-[#eae3d5] rounded-2xl p-4 text-left self-start md:self-auto shadow-xs">
-              <span className="text-[10px] text-[#7a8c88] block font-semibold">تشخيص الحالة العامة</span>
-              <span className="text-sm font-black text-[#1b605b]">
+            <div className="bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-4 text-left self-start md:self-auto shadow-xs transition-colors">
+              <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] block font-semibold">تشخيص الحالة العامة</span>
+              <span className="text-sm font-black text-[#0F6E6E] dark:text-[#22D3EE]">
                 {report.balanceIndexLabel}
               </span>
             </div>
@@ -312,35 +341,37 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
       {report ? (
         <div className="space-y-8">
           {/* Section 1: Strategic Diagnosis */}
-          <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs space-y-4">
-            <h2 className="text-lg font-black text-[#1d2e2b] flex items-center gap-2">
-              <Layers className="w-5 h-5 text-[#1b605b]" />
+          <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-4 transition-colors">
+            <h2 className="text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-2">
+              <Layers className="w-5 h-5 text-[#0F6E6E] dark:text-[#22D3EE]" />
               <span>التشخيص الاستراتيجي العام لمنظومة حياتك</span>
             </h2>
-            <div className="text-sm text-[#2c3d39] leading-relaxed whitespace-pre-wrap bg-[#FAF7F2] p-5 rounded-2xl border border-[#eae3d5]">
-              {report.overallDiagnosis}
+            <div className="text-sm text-[#0F172A] dark:text-[#F1F5F9] leading-relaxed whitespace-pre-wrap bg-[#F7F6F2] dark:bg-[#071318] p-5 rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] transition-colors">
+              {renderWithIsolatedNumbers(report.overallDiagnosis)}
             </div>
           </div>
 
           {/* Section 2: Cross-Domain Intersections (Synergy + Critical Bottleneck) */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
             {/* Strongest Synergy */}
-            <div className="bg-white border border-emerald-200 rounded-3xl p-6 shadow-xs space-y-3 relative overflow-hidden">
-              <div className="flex items-center gap-2 text-emerald-800 text-xs font-bold">
-                <TrendingUp className="w-4 h-4 text-emerald-600" />
-                <span>أقوى نقطة تناغم وترابط إيجابي</span>
+            <div className="bg-white dark:bg-[#0E1D24] border border-emerald-200 dark:border-emerald-800/60 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 relative overflow-hidden h-full transition-colors">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 text-xs font-bold">
+                  <TrendingUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span>أقوى نقطة تناغم وترابط إيجابي</span>
+                </div>
+                <h3 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">
+                  {report.strongestSynergy.title}
+                </h3>
+                <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
+                  {renderWithIsolatedNumbers(report.strongestSynergy.description)}
+                </p>
               </div>
-              <h3 className="text-base font-black text-[#1d2e2b]">
-                {report.strongestSynergy.title}
-              </h3>
-              <p className="text-xs text-[#536561] leading-relaxed">
-                {report.strongestSynergy.description}
-              </p>
-              <div className="pt-2 flex flex-wrap gap-1.5">
+              <div className="pt-2 flex flex-wrap gap-1.5 mt-auto">
                 {(report.strongestSynergy?.domainsInvolved || []).map((dom, i) => (
                   <span
                     key={i}
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200"
+                    className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                   >
                     {dom}
                   </span>
@@ -349,60 +380,62 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
 
             {/* Critical Bottleneck */}
-            <div className="bg-white border border-amber-200 rounded-3xl p-6 shadow-xs space-y-3 relative overflow-hidden">
-              <div className="flex items-center gap-2 text-amber-800 text-xs font-bold">
-                <AlertOctagon className="w-4 h-4 text-amber-600" />
-                <span>عنق الزجاجة الأبرز (يحتاج معالجة فورية)</span>
+            <div className="bg-white dark:bg-[#0E1D24] border border-amber-200 dark:border-amber-800/60 rounded-3xl p-6 shadow-xs flex flex-col justify-between space-y-4 relative overflow-hidden h-full transition-colors">
+              <div className="space-y-3">
+                <div className="flex items-center gap-2 text-amber-800 dark:text-amber-300 text-xs font-bold">
+                  <AlertOctagon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  <span>عنق الزجاجة الأبرز (يحتاج معالجة فورية)</span>
+                </div>
+                <h3 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">
+                  {report.criticalBottleneck.title}
+                </h3>
+                <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
+                  {renderWithIsolatedNumbers(report.criticalBottleneck.impact)}
+                </p>
               </div>
-              <h3 className="text-base font-black text-[#1d2e2b]">
-                {report.criticalBottleneck.title}
-              </h3>
-              <p className="text-xs text-[#536561] leading-relaxed">
-                {report.criticalBottleneck.impact}
-              </p>
-              <div className="bg-[#FAF7F2] p-3 rounded-xl border border-[#eae3d5] text-xs text-[#2c3d39]">
-                <span className="font-bold text-amber-800 block mb-0.5">الحل العاجل:</span>
-                {report.criticalBottleneck.recommendation}
+              <div className="bg-[#F7F6F2] dark:bg-[#071318] p-3.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9] mt-auto transition-colors">
+                <span className="font-bold text-amber-800 dark:text-[#FBBF24] block mb-0.5">الحل العاجل:</span>
+                {renderWithIsolatedNumbers(report.criticalBottleneck.recommendation)}
               </div>
             </div>
           </div>
 
           {/* Section 3: Keystone Habits (العادات المحورية المركبة) */}
-          <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs space-y-5">
+          <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-5 transition-colors">
             <div>
-              <h2 className="text-lg font-black text-[#1d2e2b] flex items-center gap-2">
+              <h2 className="text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-2">
                 <Zap className="w-5 h-5 text-[#bd9240]" />
                 <span>العادات المحورية (Keystone Habits)</span>
               </h2>
-              <p className="text-xs text-[#536561] mt-1">
+              <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
                 عادات ذكية واحدة تؤثر تلقائياً على عدة جوانب من حياتك دفعة واحدة
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
               {(report.keystoneHabits || []).map((habit, idx) => (
                 <div
                   key={idx}
-                  className="bg-[#FAF7F2] border border-[#eae3d5] rounded-2xl p-5 flex flex-col justify-between space-y-3 shadow-xs"
+                  className="bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-5 flex flex-col justify-between space-y-3 shadow-xs h-full transition-colors"
                 >
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between text-[10px] text-[#7a8c88]">
-                      <span className="font-bold text-[#1b605b]">عادة رقم {idx + 1}</span>
-                      <span className="bg-white px-2 py-0.5 rounded-full border border-[#ded7c8]">{habit.triggerTime}</span>
+                    <div className="flex items-center justify-between text-[10px] text-[#475569] dark:text-[#94A3B8]">
+                      <span className="font-bold text-[#0F6E6E] dark:text-[#22D3EE]">عادة رقم {idx + 1}</span>
+                      <span className="bg-white dark:bg-[#0E1D24] px-2 py-0.5 rounded-full border border-[#E2E8F0] dark:border-[#1E343F]">{habit.triggerTime}</span>
                     </div>
-                    <h4 className="font-black text-sm text-[#1d2e2b] leading-snug">
+                    <h4 className="font-black text-sm text-[#0F172A] dark:text-[#F1F5F9] leading-snug">
                       {habit.name}
                     </h4>
-                    <p className="text-xs text-[#536561] leading-relaxed">
-                      {habit.expectedImpact}
+                    <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
+                      {renderWithIsolatedNumbers(habit.expectedImpact)}
                     </p>
                   </div>
 
-                  <div className="pt-2 border-t border-[#ded7c8] flex flex-wrap gap-1">
+                  <div className="pt-2.5 border-t border-[#E2E8F0] dark:border-[#1E343F] flex flex-wrap gap-1 mt-auto">
                     {(habit.targetDomains || []).map((dom, dIdx) => (
                       <span
                         key={dIdx}
-                        className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white text-[#2c3d39] border border-[#ded7c8]"
+                        className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white dark:bg-[#0E1D24] text-[#334155] dark:text-slate-300 border border-[#E2E8F0] dark:border-[#1E343F]"
                       >
                         {dom}
                       </span>
@@ -414,39 +447,47 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
           </div>
 
           {/* Section 4: 30-Day Integrated Roadmap (خطة 30 يوماً متكاملة) */}
-          <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6">
+          <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6 transition-colors">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-black text-[#1d2e2b] flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-[#1b605b]" />
+                <h2 className="text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-[#0F6E6E] dark:text-[#22D3EE]" />
                   <span>خارطة طريق الـ 30 يوماً المتكاملة (أسبوعياً)</span>
                 </h2>
-                <p className="text-xs text-[#536561] mt-0.5">
+                <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
                   تدرج مدروس ينقلك خطوة بخطوة نحو التوازن الحقيقي
                 </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-              {(report.thirtyDayRoadmap || []).map((week) => (
+            {/* 2x2 Grid in Natural Arabic RTL Order:
+                Top-Right: Week 1
+                Top-Left: Week 2
+                Bottom-Right: Week 3
+                Bottom-Left: Week 4
+            */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch" dir="rtl">
+              {sortedRoadmapWeeks.map((week) => (
                 <div
                   key={week.weekNumber}
-                  className="bg-[#FAF7F2] border border-[#eae3d5] rounded-2xl p-5 space-y-3"
+                  className="bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-xs h-full transition-colors"
                 >
-                  <div className="flex items-center justify-between pb-2 border-b border-[#ded7c8]">
-                    <span className="text-xs font-black text-[#1b605b]">
-                      الأسبوع {week.weekNumber}
-                    </span>
-                    <h4 className="font-extrabold text-xs text-[#1d2e2b]">
-                      {week.weekTitle}
-                    </h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0] dark:border-[#1E343F]">
+                      <span className="text-xs font-black text-[#0F6E6E] dark:text-[#22D3EE] px-2.5 py-0.5 rounded-lg bg-[#0F6E6E]/10 dark:bg-cyan-950/50 border border-[#0F6E6E]/20 dark:border-cyan-800/40">
+                        الأسبوع {week.weekNumber}
+                      </span>
+                      <h4 className="font-extrabold text-xs text-[#0F172A] dark:text-[#F1F5F9]">
+                        {week.weekTitle}
+                      </h4>
+                    </div>
+
+                    <p className="text-xs text-[#0F6E6E] dark:text-[#22D3EE] font-bold">
+                      التركيز الأساسي: {renderWithIsolatedNumbers(week.coreFocus)}
+                    </p>
                   </div>
 
-                  <p className="text-xs text-[#1b605b] font-bold">
-                    التركيز الأساسي: {week.coreFocus}
-                  </p>
-
-                  <div className="space-y-2 pt-1">
+                  <div className="space-y-2 pt-1 flex-1">
                     {(week.actions || []).map((act, aIdx) => {
                       const actId = `w${week.weekNumber}_a${aIdx}`;
                       const isDone = completedRoadmapActions[actId];
@@ -457,20 +498,20 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
                           onClick={() => toggleActionCheck(actId)}
                           className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all shadow-xs ${
                             isDone
-                              ? 'bg-emerald-50 border-emerald-200 text-emerald-800 line-through opacity-75'
-                              : 'bg-white border-[#ded7c8] text-[#2c3d39] hover:border-[#1b605b]'
+                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 line-through opacity-75'
+                              : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] text-[#0F172A] dark:text-[#F1F5F9] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE]'
                           }`}
                         >
                           <div
-                            className={`w-4 h-4 rounded-md flex items-center justify-center border mt-0.5 flex-shrink-0 ${
+                            className={`w-4 h-4 rounded-md flex items-center justify-center border mt-0.5 flex-shrink-0 transition-colors ${
                               isDone
-                                ? 'bg-[#1b605b] border-[#1b605b] text-white'
-                                : 'border-[#ded7c8] bg-transparent'
+                                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] border-[#0F6E6E] dark:border-[#0891B2] text-white'
+                                : 'border-slate-300 dark:border-slate-600 bg-transparent'
                             }`}
                           >
                             {isDone && <Check className="w-3 h-3 stroke-[3]" />}
                           </div>
-                          <span className="leading-relaxed">{act}</span>
+                          <span className="leading-relaxed">{renderWithIsolatedNumbers(act)}</span>
                         </div>
                       );
                     })}
@@ -481,26 +522,26 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
           </div>
 
           {/* Section 5: Golden Rule from Director */}
-          <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 shadow-xs text-center space-y-3">
-            <span className="text-xs font-bold text-[#bd9240] block">
+          <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs text-center space-y-3 transition-colors">
+            <span className="text-xs font-bold text-[#8A5A00] dark:text-[#FBBF24] block">
               الوصية الذهبية لمنسق التوازن
             </span>
-            <blockquote className="text-base sm:text-lg font-black text-[#1d2e2b] italic max-w-2xl mx-auto leading-relaxed">
-              "{report.directorGoldenRule}"
+            <blockquote className="text-base sm:text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] italic max-w-2xl mx-auto leading-relaxed">
+              "{renderWithIsolatedNumbers(report.directorGoldenRule)}"
             </blockquote>
           </div>
         </div>
       ) : (
         /* Empty State / Prompt to Generate */
-        <div className="bg-white border border-[#eae3d5] rounded-3xl p-10 text-center space-y-6 max-w-xl mx-auto shadow-xs">
-          <div className="w-16 h-16 mx-auto rounded-3xl bg-[#FAF7F2] text-[#1b605b] border border-[#ded7c8] flex items-center justify-center text-3xl">
+        <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-10 text-center space-y-6 max-w-xl mx-auto shadow-xs transition-colors">
+          <div className="w-16 h-16 mx-auto rounded-3xl bg-[#F7F6F2] dark:bg-[#071318] text-[#0F6E6E] dark:text-[#22D3EE] border border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-center text-3xl">
             🧭
           </div>
           <div>
-            <h3 className="text-xl font-black text-[#1d2e2b]">
+            <h3 className="text-xl font-black text-[#0F172A] dark:text-[#F1F5F9]">
               جاهز لإعداد تقرير التوازن التكاملي؟
             </h3>
-            <p className="text-xs text-[#536561] mt-2 leading-relaxed">
+            <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-2 leading-relaxed">
               يقوم الذكاء الاصطناعي بربط جميع إجاباتك ودرجاتك في مجالات الحياة الثمانية، واكتشاف
               العادات المحورية وخطة الـ 30 يوماً المخصصة لك.
             </p>
@@ -510,7 +551,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             type="button"
             onClick={handleGenerateReport}
             disabled={isGenerating}
-            className="w-full py-3.5 px-6 rounded-xl bg-[#1b605b] hover:bg-[#16504c] text-white text-xs font-extrabold shadow-xs transition-all flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-6 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-extrabold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-[#ffd67a]" />
             <span>{isGenerating ? 'جارٍ التحليل والربط التكاملي...' : 'توليد التقرير التكاملي الآن'}</span>

@@ -418,6 +418,7 @@ export default function App() {
               report={appState.directorReport}
               onSaveReport={handleSaveDirectorReport}
               onBackToDashboard={() => setActiveScreen('dashboard')}
+              theme={theme}
             />
           )}
 
