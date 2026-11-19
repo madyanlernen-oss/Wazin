@@ -5,13 +5,21 @@ import {
   CheckCircle2,
   Scale,
 } from 'lucide-react';
-import wheelImage from '../assets/images/wheel_of_life_dimensions_1794404528259.jpg';
+import { InteractiveLifeWheel } from './InteractiveLifeWheel';
 import scaleImage from '../assets/images/balance_scale_guide_1794404547579.jpg';
 
-export const LifeDimensionsGuide: React.FC = () => {
+interface LifeDimensionsGuideProps {
+  onNavigateToAuth?: (mode: 'login' | 'signup') => void;
+  theme?: 'light' | 'dark';
+}
+
+export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
+  onNavigateToAuth,
+  theme = 'light',
+}) => {
   const dimensions = [
     {
-      name: 'الجانب الروحي (Spiritual)',
+      name: 'الجانب الروحي',
       icon: '🕌',
       color: '#10b981',
       bgColor: 'rgba(16, 185, 129, 0.1)',
@@ -19,47 +27,47 @@ export const LifeDimensionsGuide: React.FC = () => {
       desc: 'السلام الداخلي، الصلة بالخالق، استشعار المعنى والرسالة في الحياة، والصفاء القلبي والتسامح.',
     },
     {
-      name: 'الجانب المالي (Financial)',
-      icon: '💎',
-      color: '#f59e0b',
-      bgColor: 'rgba(245, 158, 11, 0.1)',
-      borderColor: 'rgba(245, 158, 11, 0.3)',
-      desc: 'الأمان المالي، التحرر من الديون، بناء صندوق الطوارئ، التخطيط الاستثماري، والإنفاق الواعي.',
+      name: 'الجانب الصحي',
+      icon: '🌿',
+      color: '#22c55e',
+      bgColor: 'rgba(34, 197, 94, 0.1)',
+      borderColor: 'rgba(34, 197, 94, 0.3)',
+      desc: 'حيوية الجسد، النوم العميق الكافي، الرياضة والحركة المنتظمة، التغذية السليمة، والوقاية الطبية.',
     },
     {
-      name: 'الجانب المهني (Career)',
+      name: 'الجانب المهني',
       icon: '💼',
-      color: '#6366f1',
-      bgColor: 'rgba(99, 102, 241, 0.1)',
-      borderColor: 'rgba(99, 102, 241, 0.3)',
-      desc: 'الشغف بالعمل، التطور القيادي، وضوح المسار الوظيفي والريادي، وصناعة أثر حقيقي وملموس.',
-    },
-    {
-      name: 'الجانب الشخصي (Personal)',
-      icon: '✨',
       color: '#8b5cf6',
       bgColor: 'rgba(139, 92, 246, 0.1)',
       borderColor: 'rgba(139, 92, 246, 0.3)',
-      desc: 'الوعي الذاتي، تقدير الذات، وضع حدود صحية، الانضباط، وتخصيص وقت للاسترخاء والهوايات المغذية.',
+      desc: 'الشغف بالعمل، التطور القيادي، وضوح المسار الوظيفي والريادي، وصناعة أثر حقيقي وملموس.',
     },
     {
-      name: 'الجانب التعليمي (Learning)',
+      name: 'الجانب المالي',
+      icon: '💎',
+      color: '#0ea5e9',
+      bgColor: 'rgba(14, 165, 233, 0.1)',
+      borderColor: 'rgba(14, 165, 233, 0.3)',
+      desc: 'الأمان المالي، التحرر من الديون، بناء صندوق الطوارئ، التخطيط الاستثماري، والإنفاق الواعي.',
+    },
+    {
+      name: 'الجانب التعليمي',
       icon: '📚',
-      color: '#06b6d4',
-      bgColor: 'rgba(6, 182, 212, 0.1)',
-      borderColor: 'rgba(6, 182, 212, 0.3)',
+      color: '#f59e0b',
+      bgColor: 'rgba(245, 158, 11, 0.1)',
+      borderColor: 'rgba(245, 158, 11, 0.3)',
       desc: 'التعلم المستمر، الفضول الفكري، قراءة الكتب، اكتساب مهارات المستقبل، والتفكير النقدي.',
     },
     {
-      name: 'الجانب الأسري (Family)',
+      name: 'الجانب الأسري',
       icon: '🏡',
-      color: '#f43f5e',
-      bgColor: 'rgba(244, 63, 94, 0.1)',
-      borderColor: 'rgba(244, 63, 94, 0.3)',
+      color: '#f97316',
+      bgColor: 'rgba(249, 115, 22, 0.1)',
+      borderColor: 'rgba(249, 115, 22, 0.3)',
       desc: 'دفء المنزل، جودة الوقت مع العائلة بدون ملهيات، بر الوالدين، ولغة الحوار الواعي لحل الخلافات.',
     },
     {
-      name: 'الجانب الاجتماعي (Social)',
+      name: 'الجانب الاجتماعي',
       icon: '🤝',
       color: '#14b8a6',
       bgColor: 'rgba(20, 184, 166, 0.1)',
@@ -67,12 +75,12 @@ export const LifeDimensionsGuide: React.FC = () => {
       desc: 'بناء صداقات داعمة وملهمة، تجنب العلاقات المستنزفة، المشاركة التطوعية، والأثر الإيجابي.',
     },
     {
-      name: 'الجانب الصحي (Health)',
-      icon: '🌿',
-      color: '#22c55e',
-      bgColor: 'rgba(34, 197, 94, 0.1)',
-      borderColor: 'rgba(34, 197, 94, 0.3)',
-      desc: 'حيوية الجسد، النوم العميق الكافي، الرياضة والحركة المنتظمة، التغذية السليمة، والوقاية الطبية.',
+      name: 'الجانب الشخصي',
+      icon: '✨',
+      color: '#ec4899',
+      bgColor: 'rgba(236, 72, 153, 0.1)',
+      borderColor: 'rgba(236, 72, 153, 0.3)',
+      desc: 'الوعي الذاتي، تقدير الذات، وضع حدود صحية، الانضباط، وتخصيص وقت للاسترخاء والهوايات المغذية.',
     },
   ];
 
@@ -88,11 +96,11 @@ export const LifeDimensionsGuide: React.FC = () => {
         <h2 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white leading-tight transition-colors">
           ماهية نموذج أبعاد الحياة الثمانية{' '}
           <span className="text-[#0B6E72] dark:text-cyan-400 font-bold text-lg sm:text-2xl block sm:inline">
-            (The Eight Dimensions of Life)
+            — منظومة التوازن المتكاملة
           </span>
         </h2>
 
-        {/* The Exact User Requested Paragraph */}
+        {/* Paragraph */}
         <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm space-y-4 transition-colors">
           <p className="text-sm sm:text-base text-[#334155] dark:text-slate-300 leading-relaxed transition-colors">
             هو إطار للتقييم الذاتي والتطوير الشخصي، يقوم على تقسيم حياة الإنسان إلى ثمانية مجالات رئيسية مترابطة، بهدف قياس مستوى الرضا والتوازن والتقدم في كل مجال، واكتشاف جوانب القوة والضعف، ثم وضع أهداف وخطط لتحسين جودة الحياة بصورة متكاملة.
@@ -108,28 +116,8 @@ export const LifeDimensionsGuide: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Visual Conceptual Illustration */}
-      <div className="relative rounded-3xl overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-md bg-white dark:bg-[#0c1827] group">
-        <img
-          src={wheelImage}
-          alt="The 8 Dimensions of Life Wheel Diagram"
-          className="w-full h-auto max-h-[460px] object-cover transition-transform duration-700 group-hover:scale-[1.02]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-t from-[#0F172A]/80 dark:from-[#07111c]/90 via-transparent to-transparent" />
-        <div className="absolute bottom-4 right-4 left-4 p-4 rounded-2xl bg-white/95 dark:bg-[#0c1827]/95 backdrop-blur-md border border-slate-200/90 dark:border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-sm">
-          <div>
-            <h3 className="text-sm font-black text-[#0F172A] dark:text-white">
-              عجلة الحياة المتكاملة (Life Wheel Holistic Balance)
-            </h3>
-            <p className="text-xs text-[#334155] dark:text-slate-400">
-              تناغم الأبعاد الثمانية يصنع عجلة تدور بسلاسة وأمان نحو أهدافك
-            </p>
-          </div>
-          <span className="text-[11px] font-bold px-3 py-1 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-950/60 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-500/30 self-start sm:self-center">
-            8 أبعاد مترابطة
-          </span>
-        </div>
-      </div>
+      {/* 2. Interactive Arabic Life Wheel (Replaces static English image with blurred side duplicates) */}
+      <InteractiveLifeWheel onNavigateToAuth={onNavigateToAuth} theme={theme} />
 
       {/* 3. The 8 Dimensions Breakdown */}
       <div className="space-y-6">

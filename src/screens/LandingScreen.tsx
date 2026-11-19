@@ -299,7 +299,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
 
         {/* The Eight Dimensions of Life Educational Guide (ماهية نموذج أبعاد الحياة الثمانية) */}
         <div>
-          <LifeDimensionsGuide />
+          <LifeDimensionsGuide onNavigateToAuth={onNavigateToAuth} theme={theme} />
         </div>
 
         {/* 8 Advisors Section */}
