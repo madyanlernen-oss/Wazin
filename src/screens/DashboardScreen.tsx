@@ -537,7 +537,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       </div>
 
       {/* Yearly and Weekly Longitudinal Analytics Component */}
-      <YearlyAndWeeklyAnalytics theme={theme} />
+      <YearlyAndWeeklyAnalytics />
     </div>
   );
 };

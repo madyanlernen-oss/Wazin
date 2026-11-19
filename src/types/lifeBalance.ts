@@ -137,3 +137,26 @@ export interface ChatMessage {
   summary?: string;
   advice?: string;
 }
+
+export interface MonthData {
+  month: string;
+  monthName: string;
+  averageScore: number;
+  highlight: string;
+  completedTasks: number;
+  topArea: string;
+  bottleneckArea: string;
+  scores: Record<LifeAreaId, number>;
+}
+
+export interface WeekData {
+  weekNumber: number;
+  startDate?: string;
+  dateRange: string;
+  balanceScore: number;
+  weeklyHabitCompletion: number; // percentage
+  reflection: string;
+  wins: string[];
+  challenges: string[];
+}
+
