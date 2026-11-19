@@ -146,13 +146,33 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
   const [isSpinning, setIsSpinning] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  // Keyboard accessibility focus tracking
+  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
+  const [isCenterFocused, setIsCenterFocused] = useState(false);
+
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const dragStartRef = useRef<{ angle: number; currentRotation: number; lastTime: number; velocity: number }>({
-    angle: 0,
+
+  // Directional gesture intent tracking (preserves native vertical page scroll)
+  const gestureRef = useRef<{
+    startX: number;
+    startY: number;
+    startAngle: number;
+    currentRotation: number;
+    hasDeterminedIntent: boolean;
+    isIntentRotation: boolean;
+    lastTime: number;
+    velocity: number;
+  }>({
+    startX: 0,
+    startY: 0,
+    startAngle: 0,
     currentRotation: 0,
+    hasDeterminedIntent: false,
+    isIntentRotation: false,
     lastTime: 0,
     velocity: 0,
   });
+
   const animFrameRef = useRef<number | null>(null);
 
   const activeDomain = WHEEL_DOMAINS[selectedIndex] || WHEEL_DOMAINS[0];
@@ -191,29 +211,29 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     ].join(' ');
   };
 
-  // Rotate smoothly to target index
+  // Rotate smoothly to target index with shortest-arc settling
   const rotateToIndex = useCallback((index: number) => {
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     setSelectedIndex(index);
-    // In our orientation, segment index * 45 is centered at top when rotationAngle = -index * 45
-    const targetAngle = -index * 45;
 
-    // Smoothly animate rotation
+    const targetAngle = -index * 45;
     const startAngle = rotationAngle;
-    const diff = targetAngle - (startAngle % 360);
-    // Normalize difference to shortest rotational path
-    const shortestDiff = ((diff + 540) % 360) - 180;
-    const finalTarget = startAngle + shortestDiff;
+
+    // Calculate shortest rotational delta (avoiding sudden jumps or reverse full spins)
+    let diff = (targetAngle - startAngle) % 360;
+    if (diff > 180) diff -= 360;
+    if (diff < -180) diff += 360;
+    const finalTarget = startAngle + diff;
 
     const startTime = performance.now();
-    const duration = 450; // ms
+    const duration = 460; // ms
 
     const animate = (currentTime: number) => {
       const elapsed = currentTime - startTime;
       const progress = Math.min(1, elapsed / duration);
-      // Ease out cubic
+      // Clean cubic ease-out for calm, smooth settling
       const ease = 1 - Math.pow(1 - progress, 3);
-      setRotationAngle(startAngle + shortestDiff * ease);
+      setRotationAngle(startAngle + diff * ease);
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animate);
@@ -236,7 +256,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     rotateToIndex(nextIdx);
   }, [selectedIndex, rotateToIndex]);
 
-  // Playful Roulette Spin Animation
+  // Playful Roulette Spin Animation with smooth deceleration
   const handlePlayfulSpin = useCallback(() => {
     if (isSpinning) return;
     setIsSpinning(true);
@@ -275,7 +295,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     animFrameRef.current = requestAnimationFrame(animate);
   }, [isSpinning, rotationAngle]);
 
-  // Pointer drag handling (Touch-action pan-y ensures vertical scrolling remains 100% smooth)
+  // Pointer drag angle calculation
   const getPointerAngle = (clientX: number, clientY: number) => {
     if (!svgRef.current) return 0;
     const rect = svgRef.current.getBoundingClientRect();
@@ -287,60 +307,100 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
   };
 
   const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (isSpinning) return;
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+
     const startAngle = getPointerAngle(e.clientX, e.clientY);
-    dragStartRef.current = {
-      angle: startAngle,
+    gestureRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      startAngle,
       currentRotation: rotationAngle,
+      hasDeterminedIntent: false,
+      isIntentRotation: false,
       lastTime: performance.now(),
       velocity: 0,
     };
-    setIsDragging(true);
-    try {
-      e.currentTarget.setPointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
+    // Do NOT capture pointer immediately here: allows native vertical scrolling to proceed
+    // without interference if the user's initial touch movement is vertical!
   };
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!isDragging) return;
-    const currentAngle = getPointerAngle(e.clientX, e.clientY);
-    let delta = currentAngle - dragStartRef.current.angle;
-    // Normalize delta to [-180, 180]
-    if (delta > 180) delta -= 360;
-    if (delta < -180) delta += 360;
+    if (isSpinning) return;
+    const g = gestureRef.current;
 
-    const now = performance.now();
-    const dt = now - dragStartRef.current.lastTime;
-    if (dt > 0) {
-      dragStartRef.current.velocity = delta / dt;
+    // 1. Initial intent detection (preserves native vertical page scroll)
+    if (!g.hasDeterminedIntent) {
+      const dx = Math.abs(e.clientX - g.startX);
+      const dy = Math.abs(e.clientY - g.startY);
+      const distance = Math.hypot(dx, dy);
+
+      // Still within tiny movement threshold
+      if (distance < 7) return;
+
+      // If vertical movement is dominant (dy > dx * 1.25), yield to native page scroll
+      if (dy > dx * 1.25) {
+        g.hasDeterminedIntent = true;
+        g.isIntentRotation = false;
+        return;
+      }
+
+      // Horizontal or circular intent confirmed: lock into wheel rotation
+      g.hasDeterminedIntent = true;
+      g.isIntentRotation = true;
+      setIsDragging(true);
+
+      try {
+        e.currentTarget.setPointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
     }
-    dragStartRef.current.lastTime = now;
 
-    const newRot = dragStartRef.current.currentRotation + delta;
-    setRotationAngle(newRot);
+    // 2. Track circular rotation smoothly
+    if (g.isIntentRotation) {
+      const currentAngle = getPointerAngle(e.clientX, e.clientY);
+      let delta = currentAngle - g.startAngle;
+      if (delta > 180) delta -= 360;
+      if (delta < -180) delta += 360;
 
-    // Update selected index as wheel turns to top (top is index 0)
-    const activeIdx = ((-Math.round(newRot / 45) % 8) + 8) % 8;
-    setSelectedIndex(activeIdx);
+      const now = performance.now();
+      const dt = now - g.lastTime;
+      if (dt > 0) {
+        g.velocity = delta / dt;
+      }
+      g.lastTime = now;
+
+      const newRot = g.currentRotation + delta;
+      setRotationAngle(newRot);
+
+      const activeIdx = ((-Math.round(newRot / 45) % 8) + 8) % 8;
+      setSelectedIndex(activeIdx);
+    }
   };
 
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    try {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    } catch {
-      // ignore
-    }
+    const g = gestureRef.current;
+    const wasRotating = g.isIntentRotation;
 
-    // Gentle snap to nearest 45deg
-    const nearestIdx = ((-Math.round(rotationAngle / 45) % 8) + 8) % 8;
-    rotateToIndex(nearestIdx);
+    g.hasDeterminedIntent = false;
+    g.isIntentRotation = false;
+
+    if (wasRotating) {
+      setIsDragging(false);
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+
+      // Settle cleanly on the nearest segment
+      const nearestIdx = ((-Math.round(rotationAngle / 45) % 8) + 8) % 8;
+      rotateToIndex(nearestIdx);
+    }
   };
 
-  // Keyboard navigation
+  // Keyboard navigation & accessibility controls
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
       e.preventDefault();
@@ -351,6 +411,9 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     } else if (e.key === 'Home') {
       e.preventDefault();
       rotateToIndex(0);
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      rotateToIndex(7);
     } else if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       handlePlayfulSpin();
@@ -409,7 +472,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
 
   return (
     <div
-      className="relative rounded-3xl overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-xl bg-white dark:bg-[#0c1827] transition-all duration-300 select-none p-5 sm:p-8"
+      className="relative rounded-3xl overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-xl bg-white dark:bg-[#0c1827] transition-all duration-300 select-none p-5 sm:p-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0c1827]"
       role="region"
       aria-label="عجلة أبعاد الحياة التفاعلية"
       tabIndex={0}
@@ -445,9 +508,9 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
           <button
             type="button"
             onClick={handlePrev}
-            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F8FAFA] dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:border-[#0B6E72] dark:hover:border-cyan-400 hover:text-[#0B6E72] dark:hover:text-cyan-300 transition-all shadow-xs active:scale-95 cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F8FAFA] dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:border-[#0B6E72] dark:hover:border-cyan-400 hover:text-[#0B6E72] dark:hover:text-cyan-300 transition-all shadow-xs active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0c1827]"
             title="البُعد السابق (سهم يمين)"
-            aria-label="البُعد السابق"
+            aria-label="الانتقال إلى البُعد السابق"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -456,8 +519,9 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
             type="button"
             onClick={handlePlayfulSpin}
             disabled={isSpinning}
-            className="px-3.5 py-2 sm:py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#085255] dark:bg-[#0891B2] dark:hover:bg-[#0e7490] text-white text-xs font-black transition-all shadow-xs flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer"
+            className="px-3.5 py-2 sm:py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#085255] dark:bg-[#0891B2] dark:hover:bg-[#0e7490] text-white text-xs font-black transition-all shadow-xs flex items-center gap-1.5 active:scale-95 disabled:opacity-50 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0c1827]"
             title="تدوير عشوائي تفاعلي (Spin & Explore)"
+            aria-label={isSpinning ? 'جاري دوران عجلة الحياة...' : 'تدوير عشوائي تفاعلي لعجلة الحياة'}
           >
             <Sparkles className={`w-3.5 h-3.5 ${isSpinning ? 'animate-spin' : ''}`} />
             <span>{isSpinning ? 'جاري الدوران...' : 'استكشف عشوائياً'}</span>
@@ -466,9 +530,9 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
           <button
             type="button"
             onClick={handleNext}
-            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F8FAFA] dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:border-[#0B6E72] dark:hover:border-cyan-400 hover:text-[#0B6E72] dark:hover:text-cyan-300 transition-all shadow-xs active:scale-95 cursor-pointer"
+            className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F8FAFA] dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:border-[#0B6E72] dark:hover:border-cyan-400 hover:text-[#0B6E72] dark:hover:text-cyan-300 transition-all shadow-xs active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0c1827]"
             title="البُعد التالي (سهم يسار)"
-            aria-label="البُعد التالي"
+            aria-label="الانتقال إلى البُعد التالي"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -545,15 +609,19 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
               >
                 {segments.map(({ domain, index, path, iconPos, labelPos, textRot, midAngle }) => {
                   const isSelected = index === selectedIndex;
+                  const isFocused = index === focusedIndex;
 
                   return (
                     <g
                       key={domain.id}
                       onClick={() => rotateToIndex(index)}
-                      className="cursor-pointer transition-transform duration-300 group"
+                      className="cursor-pointer transition-transform duration-300 group outline-none focus:outline-none"
                       tabIndex={0}
                       role="button"
-                      aria-label={`${domain.title} - ${domain.advisorName}`}
+                      aria-pressed={isSelected}
+                      aria-label={`${domain.title} (${domain.advisorName}) - اضغط للتحديد والتدوير`}
+                      onFocus={() => setFocusedIndex(index)}
+                      onBlur={() => setFocusedIndex(null)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
@@ -565,9 +633,9 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                       <path
                         d={path}
                         fill={`url(#grad_${domain.id})`}
-                        stroke={isDark ? '#0c1827' : '#FFFFFF'}
-                        strokeWidth={isSelected ? '4' : '2'}
-                        opacity={isSelected ? 1 : 0.82}
+                        stroke={isFocused ? (isDark ? '#22D3EE' : '#0B6E72') : (isDark ? '#0c1827' : '#FFFFFF')}
+                        strokeWidth={isFocused ? '4.5' : (isSelected ? '4' : '2')}
+                        opacity={isSelected ? 1 : (isFocused ? 0.95 : 0.82)}
                         filter={isSelected ? 'url(#activeGlow)' : undefined}
                         className="transition-all duration-300 hover:opacity-100 hover:brightness-105"
                       />
@@ -610,10 +678,19 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
 
               {/* Center Hub: "عجلة الحياة — توازن متناغم" */}
               <g
-                className="cursor-pointer"
+                className="cursor-pointer outline-none focus:outline-none"
                 onClick={handlePlayfulSpin}
+                tabIndex={0}
                 role="button"
-                aria-label="مركز عجلة الحياة - انقر للتدوير"
+                aria-label="مركز عجلة الحياة - توازن متناغم (انقر للتدوير العشوائي)"
+                onFocus={() => setIsCenterFocused(true)}
+                onBlur={() => setIsCenterFocused(false)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handlePlayfulSpin();
+                  }
+                }}
               >
                 {/* Center Outer Border Ring */}
                 <circle
@@ -621,9 +698,9 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                   cy={center}
                   r={rInner - 2}
                   fill={isDark ? '#0c1827' : '#FFFFFF'}
-                  stroke={activeDomain.themeColor}
-                  strokeWidth="3.5"
-                  className="transition-colors duration-300 shadow-lg"
+                  stroke={isCenterFocused ? (isDark ? '#22D3EE' : '#0B6E72') : activeDomain.themeColor}
+                  strokeWidth={isCenterFocused ? '5' : '3.5'}
+                  className="transition-all duration-300 shadow-lg"
                 />
 
                 {/* Inner Subtle Radial Glow */}
@@ -774,7 +851,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
           </div>
 
           {/* Quick Domain Indicator Pills */}
-          <div className="grid grid-cols-4 gap-1.5">
+          <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="أبعاد عجلة الحياة الثمانية">
             {WHEEL_DOMAINS.map((domain, idx) => {
               const isItemActive = idx === selectedIndex;
               return (
@@ -782,7 +859,9 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                   key={domain.id}
                   type="button"
                   onClick={() => rotateToIndex(idx)}
-                  className={`p-2 rounded-xl text-center border transition-all cursor-pointer ${
+                  aria-pressed={isItemActive}
+                  aria-label={`${domain.title} - ${domain.advisorName}`}
+                  className={`p-2 rounded-xl text-center border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0c1827] ${
                     isItemActive
                       ? 'border-[#0B6E72] dark:border-cyan-400 bg-white dark:bg-slate-800 shadow-xs'
                       : 'border-slate-200/70 dark:border-slate-800 bg-[#F8FAFA] dark:bg-slate-900/60 opacity-75 hover:opacity-100'
