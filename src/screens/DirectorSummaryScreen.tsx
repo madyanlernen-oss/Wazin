@@ -249,48 +249,62 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 space-y-8 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
       {/* Top Breadcrumb & Actions Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0] dark:border-[#1E343F]">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0] dark:border-[#1E343F]">
+        {/* Navigation & Screen Label */}
+        <div className="flex items-center gap-2.5 flex-wrap">
           <button
+            type="button"
             onClick={onBackToDashboard}
-            className="px-3 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] transition-all flex items-center gap-1.5 text-xs font-bold shadow-xs cursor-pointer"
+            className="px-3.5 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-slate-50 dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9] transition-all flex items-center gap-1.5 text-xs font-bold shadow-2xs cursor-pointer group"
           >
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5" />
             <span>العودة للوحة التحكم</span>
           </button>
-          <div className="h-4 w-px bg-[#E2E8F0] dark:bg-[#1E343F]" />
+          <div className="h-4 w-px bg-[#E2E8F0] dark:bg-[#1E343F] hidden sm:block" />
           <span className="text-xs font-extrabold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4 text-[#bd9240]" />
-            تقرير المنسق العام للتوازن الذكي (منصة وازن)
+            <Sparkles className="w-3.5 h-3.5 text-[#8A5A00] dark:text-[#FBBF24]" />
+            تقرير المنسق العام للتوازن الذكي
           </span>
         </div>
 
-        <div className="flex items-center gap-2">
+        {/* Action Controls: Secondary utilities + Clear Primary CTA */}
+        <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           {report && (
             <>
+              {/* Secondary Utility: Copy */}
               <button
+                type="button"
                 onClick={handleCopy}
-                className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                className="px-3 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-slate-50 dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
                 title="نسخ ملخص التقرير"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
+                )}
                 <span>{copied ? 'تم النسخ' : 'نسخ التقرير'}</span>
               </button>
 
+              {/* Secondary Utility: Print */}
               <button
+                type="button"
                 onClick={handlePrint}
-                className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] text-xs font-bold flex items-center gap-1.5 transition-all shadow-xs cursor-pointer"
+                className="px-3 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-slate-50 dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
+                title="طباعة التقرير"
               >
-                <Printer className="w-3.5 h-3.5" />
+                <Printer className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                 <span>طباعة</span>
               </button>
             </>
           )}
 
+          {/* Primary Action Button */}
           <button
+            type="button"
             onClick={handleGenerateReport}
             disabled={isGenerating}
-            className="px-4 py-2 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-extrabold flex items-center gap-1.5 shadow-xs disabled:opacity-50 transition-all cursor-pointer"
+            className="px-4.5 py-2 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-black flex items-center gap-2 shadow-xs hover:shadow-sm disabled:opacity-50 transition-all cursor-pointer flex-shrink-0"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${isGenerating ? 'animate-spin' : ''}`} />
             <span>{report ? 'إعادة التحليل التكاملي' : 'توليد التقرير بالذكاء الاصطناعي'}</span>
@@ -521,14 +535,20 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
           </div>
 
-          {/* Section 5: Golden Rule from Director */}
-          <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs text-center space-y-3 transition-colors">
-            <span className="text-xs font-bold text-[#8A5A00] dark:text-[#FBBF24] block">
-              الوصية الذهبية لمنسق التوازن
-            </span>
-            <blockquote className="text-base sm:text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] italic max-w-2xl mx-auto leading-relaxed">
-              "{renderWithIsolatedNumbers(report.directorGoldenRule)}"
+          {/* Section 5: Golden Rule from Director (Calm, Centered, Generous Breathing Room) */}
+          <div className="bg-gradient-to-b from-white to-[#F8FAFA] dark:from-[#0E1D24] dark:to-[#081318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl py-10 sm:py-14 px-6 sm:px-12 shadow-xs text-center space-y-4 transition-colors">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800/50 text-xs font-bold text-[#8A5A00] dark:text-[#FBBF24]">
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>الوصية الذهبية لمنسق التوازن</span>
+            </div>
+
+            <blockquote className="text-base sm:text-lg md:text-xl font-black text-[#0F172A] dark:text-[#F1F5F9] max-w-2xl mx-auto leading-relaxed">
+              «{renderWithIsolatedNumbers(report.directorGoldenRule.replace(/^[«"'\s]+|[»"'\s]+$/g, ''))}»
             </blockquote>
+
+            <p className="text-[11px] text-[#475569] dark:text-[#94A3B8] font-medium pt-3 border-t border-[#E2E8F0]/70 dark:border-[#1E343F]/70 max-w-xs mx-auto">
+              بوصلة التوازن اليومي لمنظومة وازن
+            </p>
           </div>
         </div>
       ) : (
