@@ -30,10 +30,10 @@ interface DirectorSummaryScreenProps {
   theme?: 'light' | 'dark';
 }
 
-// Helper to isolate numbers and ratios like "4.8/10", "5.2/10", "8/10" in LTR so Arabic text flow remains natural
+// Helper to isolate numbers, percentages, and ratios like "4.8/10", "85%", "+15%", "8/10" in LTR so Arabic text flow remains natural
 function renderWithIsolatedNumbers(text: string): React.ReactNode {
   if (!text) return null;
-  const regex = /(\(?\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\)?)/g;
+  const regex = /(\b[+-]?\d+(?:\.\d+)?%|\(?\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\)?|[+-]\d+(?:\.\d+)?)/g;
   const parts = text.split(regex);
 
   return parts.map((part, idx) => {

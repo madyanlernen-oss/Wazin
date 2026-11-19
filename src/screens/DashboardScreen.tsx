@@ -116,7 +116,13 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                   {isBrandNewUser ? 'إنجاز التقييم' : 'مؤشر التوازن العام'}
                 </span>
                 <span className="text-xs font-bold text-[#0B6E72] dark:text-cyan-400">
-                  {isBrandNewUser ? 'بانتظار البدء' : `${balancePercentage}% اكتمال المنظومة`}
+                  {isBrandNewUser ? (
+                    'بانتظار البدء'
+                  ) : (
+                    <span>
+                      <span dir="ltr" className="inline-block font-sans font-bold tabular-nums" style={{ unicodeBidi: 'isolate' }}>{balancePercentage}%</span> اكتمال المنظومة
+                    </span>
+                  )}
                 </span>
               </div>
             </div>
@@ -128,7 +134,9 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 className="flex items-center gap-2 px-6 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-black text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-white" />
-                <span>ابدأ رحلة تقييم مجالات حياتك (0/8)</span>
+                <span>
+                  ابدأ رحلة تقييم مجالات حياتك (<span dir="ltr" style={{ unicodeBidi: 'isolate' }}>0/8</span>)
+                </span>
                 <ArrowLeft className="w-4 h-4" />
               </button>
             ) : (

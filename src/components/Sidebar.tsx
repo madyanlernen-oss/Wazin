@@ -139,7 +139,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => handleSelectNav(item.id)}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                   isActive
                     ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs font-black'
                     : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028]'
@@ -175,7 +175,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {userProfile?.name || 'مستخدم وازن'}
               </span>
               <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate mt-0.5">
-                {userProfile?.email || (completedCount > 0 ? `${completedCount} مجالات مكتملة` : 'حساب نشط')}
+                {userProfile?.email || (completedCount > 0 ? (
+                  <span>
+                    <span dir="ltr" className="font-bold tabular-nums" style={{ unicodeBidi: 'isolate' }}>{completedCount}</span> مجالات مكتملة
+                  </span>
+                ) : 'حساب نشط')}
               </span>
             </div>
           </div>
@@ -186,7 +190,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             onClick={onSignOut}
             title="تسجيل الخروج من الحساب"
             aria-label="تسجيل الخروج"
-            className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-[#0B161C] border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700/60 transition-all cursor-pointer flex-shrink-0"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-[#0B161C] border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700/60 transition-all cursor-pointer flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
           >
             <LogOut className="w-4 h-4" />
           </button>
@@ -199,7 +203,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               type="button"
               onClick={() => setShowResetConfirm(true)}
               title="إعادة تعيين تقييمات المنظومة وبياناتها"
-              className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
+              aria-label="إعادة ضبط التقييم والبيانات"
+              className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
             >
               <RotateCcw className="w-3 h-3 text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" />
               <span>إعادة ضبط التقييم والبيانات</span>

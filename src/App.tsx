@@ -337,17 +337,17 @@ export default function App() {
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 flex flex-col min-h-screen overflow-x-hidden">
         {/* Mobile Header with Menu Toggle */}
-        <header className="lg:hidden sticky top-0 z-20 bg-white/95 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-[#eae3d5] dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-xs transition-colors">
+        <header className="lg:hidden sticky top-0 z-20 bg-white/95 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-xs transition-colors">
           <div className="flex items-center gap-3">
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="p-2 rounded-xl bg-[#FAF7F2] dark:bg-slate-800 text-[#1b605b] dark:text-cyan-400 border border-[#ded7c8] dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 transition-colors"
+              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-[#0B6E72] dark:text-cyan-400 border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
               aria-label="فتح القائمة الجانبية"
             >
               <Menu className="w-5 h-5" />
             </button>
-            <span className="text-xs sm:text-sm font-black text-[#1d2e2b] dark:text-white">
+            <span className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-white">
               {screenTitles[activeScreen] || 'وازن'}
             </span>
           </div>
@@ -356,8 +356,9 @@ export default function App() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="p-2 rounded-xl border border-[#eae3d5] dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#1b605b] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#0B6E72] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
               title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
+              aria-label="تبديل الوضع الليلي والنهاري"
             >
               {theme === 'dark' ? (
                 <Sun className="w-4 h-4 text-amber-400" />

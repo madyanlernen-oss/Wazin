@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   LayoutDashboard,
   MessageSquare,
@@ -10,6 +10,7 @@ import {
   LogIn,
   Sun,
   Moon,
+  AlertTriangle,
 } from 'lucide-react';
 import { UserProfile } from '../types/lifeBalance';
 import { WazanLogo } from './WazanLogo';
@@ -37,6 +38,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   theme = 'light',
   onToggleTheme,
 }) => {
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
   // If on the dedicated login page, show ONLY the program name and logo + theme toggle!
   if (currentScreen === 'login') {
     return (
@@ -132,11 +134,12 @@ export const Navbar: React.FC<NavbarProps> = ({
         {/* Navigation Tabs (Only when authenticated inside dashboard/tools) */}
         <nav className="flex items-center gap-1 sm:gap-2">
           <button
+            type="button"
             onClick={() => onNavigate('dashboard')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 ${
               currentScreen === 'dashboard'
-                ? 'bg-[#1b605b] dark:bg-cyan-600 text-white shadow-sm'
-                : 'text-[#4e605d] dark:text-slate-300 hover:text-[#1b605b] dark:hover:text-white hover:bg-[#f1ebd8] dark:hover:bg-slate-800'
+                ? 'bg-[#0B6E72] dark:bg-[#0891B2] text-white shadow-xs font-black'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <LayoutDashboard className="w-4 h-4" />
@@ -145,11 +148,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={() => onNavigate('goals_matrix')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 ${
               currentScreen === 'goals_matrix'
-                ? 'bg-[#1b605b] dark:bg-cyan-600 text-white shadow-sm'
-                : 'text-[#4e605d] dark:text-slate-300 hover:text-[#1b605b] dark:hover:text-white hover:bg-[#f1ebd8] dark:hover:bg-slate-800'
+                ? 'bg-[#0B6E72] dark:bg-[#0891B2] text-white shadow-xs font-black'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Target className="w-4 h-4" />
@@ -158,11 +162,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={() => onNavigate('comparison')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 ${
               currentScreen === 'comparison'
-                ? 'bg-[#1b605b] dark:bg-cyan-600 text-white shadow-sm'
-                : 'text-[#4e605d] dark:text-slate-300 hover:text-[#1b605b] dark:hover:text-white hover:bg-[#f1ebd8] dark:hover:bg-slate-800'
+                ? 'bg-[#0B6E72] dark:bg-[#0891B2] text-white shadow-xs font-black'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <GitCompare className="w-4 h-4" />
@@ -171,11 +176,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={() => onNavigate('advisor_chat')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 ${
               currentScreen === 'advisor_chat'
-                ? 'bg-[#1b605b] dark:bg-cyan-600 text-white shadow-sm'
-                : 'text-[#4e605d] dark:text-slate-300 hover:text-[#1b605b] dark:hover:text-white hover:bg-[#f1ebd8] dark:hover:bg-slate-800'
+                ? 'bg-[#0B6E72] dark:bg-[#0891B2] text-white shadow-xs font-black'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <MessageSquare className="w-4 h-4" />
@@ -184,11 +190,12 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={() => onNavigate('onboarding')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 ${
               currentScreen === 'onboarding'
-                ? 'bg-[#1b605b] dark:bg-cyan-600 text-white shadow-sm'
-                : 'text-[#4e605d] dark:text-slate-300 hover:text-[#1b605b] dark:hover:text-white hover:bg-[#f1ebd8] dark:hover:bg-slate-800'
+                ? 'bg-[#0B6E72] dark:bg-[#0891B2] text-white shadow-xs font-black'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <ClipboardList className="w-4 h-4" />
@@ -197,13 +204,13 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </nav>
 
-        {/* Top Actions: Theme toggle, User name & Sign out */}
+        {/* Top Actions: Theme toggle, User name, Reset & Sign out */}
         <div className="flex items-center gap-2 sm:gap-3">
           {onToggleTheme && (
             <button
               type="button"
               onClick={onToggleTheme}
-              className="p-2 rounded-xl border border-[#eae3d5] dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#1b605b] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/90 dark:bg-slate-800/90 text-[#0B6E72] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
               title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
               aria-label="تبديل الوضع الليلي والنهاري"
             >
@@ -215,36 +222,80 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           )}
 
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-[#eae3d5] dark:border-slate-700 px-2.5 py-1.5 rounded-xl shadow-xs">
-            <div className="w-6 h-6 rounded-lg bg-[#1b605b]/10 dark:bg-cyan-500/20 border border-[#1b605b]/20 dark:border-cyan-500/30 flex items-center justify-center text-xs text-[#1b605b] dark:text-cyan-300 font-black">
+          <div className="flex items-center gap-2 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 px-2.5 py-1.5 rounded-xl shadow-xs">
+            <div className="w-6 h-6 rounded-lg bg-[#0B6E72]/15 dark:bg-cyan-500/20 border border-[#0B6E72]/20 dark:border-cyan-500/30 flex items-center justify-center text-xs text-[#0B6E72] dark:text-cyan-300 font-black">
               {userProfile.name.charAt(0)}
             </div>
             <div className="hidden sm:flex flex-col text-right">
-              <span className="text-xs font-bold text-[#1d2e2b] dark:text-white leading-none">{userProfile.name}</span>
-              <span className="text-[9px] text-[#1b605b] dark:text-cyan-400 font-semibold mt-0.5">نشط الآن</span>
+              <span className="text-xs font-bold text-[#0F172A] dark:text-white leading-none">{userProfile.name}</span>
+              <span className="text-[9.5px] text-[#0B6E72] dark:text-cyan-400 font-semibold mt-0.5">نشط الآن</span>
             </div>
           </div>
 
-          {/* Reset Evaluation */}
+          {/* Reset Evaluation Button (Guarded with Confirmation Modal) */}
           <button
-            onClick={onReset}
-            title="إعادة تعيين التقييم"
-            className="p-2 rounded-xl text-[#6b7d79] dark:text-slate-400 hover:text-[#b88d3b] hover:bg-[#f1ebd8] dark:hover:bg-slate-700 border border-[#eae3d5] dark:border-slate-700 transition-colors"
+            type="button"
+            onClick={() => setShowResetConfirm(true)}
+            title="إعادة ضبط التقييم والبيانات"
+            aria-label="إعادة ضبط التقييم والبيانات"
+            className="p-2 rounded-xl text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
           >
             <RotateCcw className="w-4 h-4" />
           </button>
 
           {/* Sign Out (تسجيل الخروج) */}
           <button
+            type="button"
             onClick={onSignOut}
             title="تسجيل الخروج من الحساب"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[#536561] dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-[#eae3d5] dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-800/50 text-xs font-bold transition-all shadow-xs group"
+            aria-label="تسجيل الخروج"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-800 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-[#475569] dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200 dark:border-slate-700 hover:border-rose-200 dark:hover:border-rose-800/50 text-xs font-bold transition-all shadow-xs group cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-500"
           >
             <LogOut className="w-3.5 h-3.5 text-rose-500 group-hover:-translate-x-0.5 transition-transform" />
             <span className="hidden sm:inline">تسجيل الخروج</span>
           </button>
         </div>
       </div>
+
+      {/* Reset Confirmation Dialog Modal */}
+      {showResetConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#112028] border border-slate-200 dark:border-slate-700 rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl text-right space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-[#FBBF24] flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6" />
+            </div>
+
+            <div className="text-center space-y-1.5">
+              <h3 className="text-base font-black text-[#0F172A] dark:text-white">
+                تأكيد إعادة تعيين التقييم
+              </h3>
+              <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
+                هل أنت متأكد من رغبتك في مسح كافة التقييمات والأهداف والبدء بحساب نظيف؟ لا يمكن التراجع عن هذا الإجراء بعد تنفيذه.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B161C] hover:bg-slate-100 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white font-bold text-xs transition-colors cursor-pointer"
+              >
+                إلغاء والاحتفاظ بالبيانات
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowResetConfirm(false);
+                  onReset();
+                }}
+                className="flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+              >
+                نعم، إعادة الضبط
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </header>
   );
 };

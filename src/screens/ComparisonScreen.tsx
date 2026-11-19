@@ -20,6 +20,29 @@ import { ADVISORS_LIST } from '../data/advisorsData';
 import { OverlappingRadarChart } from '../components/OverlappingRadarChart';
 import { LifeAreaId, UserProfile } from '../types/lifeBalance';
 
+// Helper to isolate numbers, percentages, and ratios like "4.8/10", "85%", "+1.5", "8/10" in LTR so Arabic text flow remains natural
+function renderWithIsolatedNumbers(text: string): React.ReactNode {
+  if (!text) return null;
+  const regex = /(\b[+-]?\d+(?:\.\d+)?%|\(?\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\)?|[+-]\d+(?:\.\d+)?)/g;
+  const parts = text.split(regex);
+
+  return parts.map((part, idx) => {
+    if (regex.test(part)) {
+      return (
+        <span
+          key={idx}
+          dir="ltr"
+          className="inline-block font-sans font-bold mx-0.5 text-inherit"
+          style={{ unicodeBidi: 'isolate' }}
+        >
+          {part}
+        </span>
+      );
+    }
+    return part;
+  });
+}
+
 // Historical Years Data
 interface PeriodItem {
   id: string;
@@ -565,7 +588,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                   {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
                 </div>
                 <span>{item.name}</span>
-                <span className={`text-[10px] ${isSelected ? 'opacity-90' : 'text-[#64748B] dark:text-slate-400'}`} dir="ltr">
+                <span className={`text-[10px] ${isSelected ? 'opacity-90' : 'text-[#64748B] dark:text-slate-400'}`} dir="ltr" style={{ unicodeBidi: 'isolate' }}>
                   ({item.averageScore} / 10)
                 </span>
               </button>
@@ -602,14 +625,14 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
               <div className="pt-2 border-t border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between">
                 <div>
                   <span className="text-[10px] text-[#64748B] dark:text-slate-400 block">معدل التوازن</span>
-                  <span className="text-2xl font-black font-mono inline-flex items-baseline gap-1" dir="ltr" style={{ color }}>
+                  <span className="text-2xl font-black font-mono inline-flex items-baseline gap-1" dir="ltr" style={{ color, unicodeBidi: 'isolate' }}>
                     <span>{item.averageScore}</span>
                     <span className="text-xs text-[#64748B] dark:text-slate-400">/ 10</span>
                   </span>
                 </div>
                 <div className="text-left">
                   <span className="text-[10px] text-[#64748B] dark:text-slate-400 block">العادات المنجزة</span>
-                  <span className="text-sm font-extrabold text-[#0F172A] dark:text-[#F1F5F9]">
+                  <span className="text-sm font-extrabold text-[#0F172A] dark:text-[#F1F5F9] tabular-nums" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
                     {item.completedHabits}
                   </span>
                 </div>
@@ -655,7 +678,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                   <span className="text-base">{advisor.avatarSvg}</span>
                   <span className="font-extrabold text-[#0F172A] dark:text-[#F1F5F9]">{advisor.title}</span>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] font-bold" dir="ltr">
+                <div className="flex items-center gap-3 text-[11px] font-bold" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
                   {selectedItems.map((item, idx) => {
                     const score = item.scores[advisor.id] || 0;
                     return (
@@ -681,7 +704,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                     <div key={item.id} className="space-y-1">
                       <div className="flex justify-between text-[10px] font-bold">
                         <span className="text-[#64748B] dark:text-slate-400 truncate">{item.name}</span>
-                        <span dir="ltr" style={{ color }}>{score} / 10</span>
+                        <span dir="ltr" style={{ color, unicodeBidi: 'isolate' }}>{score} / 10</span>
                       </div>
                       <div className="w-full h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div
@@ -790,7 +813,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                       </div>
                     </div>
 
-                    <div className="text-left" dir="ltr">
+                    <div className="text-left" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
                       <span className="text-2xl font-black text-[#0F172A] dark:text-[#F1F5F9]">{lastVal}</span>
                       <span className="text-xs text-[#64748B] dark:text-slate-400"> / 10</span>
                     </div>
@@ -820,9 +843,12 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                       </div>
                     </div>
 
-                    <span className="text-lg font-black font-mono" dir="ltr">
-                      {isImproved ? `+${scoreDiff}` : scoreDiff} درجة
-                    </span>
+                    <div className="inline-flex items-center gap-1.5" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                      <span className="text-lg font-black font-mono">
+                        {isImproved ? `+${scoreDiff}` : scoreDiff}
+                      </span>
+                      <span className="text-xs font-bold font-sans">درجة</span>
+                    </div>
                   </div>
 
                   {/* Progression Across All Selected Periods */}
@@ -840,7 +866,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                           <div key={item.id} className="bg-[#F7F6F2] dark:bg-[#071318] p-2.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] space-y-1 transition-colors">
                             <div className="flex items-center justify-between text-[11px] font-bold">
                               <span className="text-[#0F172A] dark:text-[#F1F5F9]">{item.name}</span>
-                              <span dir="ltr" style={{ color }}>{sc} / 10</span>
+                              <span dir="ltr" style={{ color, unicodeBidi: 'isolate' }}>{sc} / 10</span>
                             </div>
                             <div className="w-full h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
                               <div
@@ -912,8 +938,8 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
         {/* Analysis Output Box */}
         {analysisResult && (
           <div className="bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-2xl p-5 sm:p-6 text-xs sm:text-sm leading-relaxed text-white space-y-3 animate-fadeIn">
-            <div className="whitespace-pre-line prose prose-invert max-w-none">
-              {analysisResult}
+            <div className="whitespace-pre-line prose prose-invert max-w-none text-right">
+              {renderWithIsolatedNumbers(analysisResult)}
             </div>
           </div>
         )}
