@@ -79,7 +79,7 @@ export const TadbeerLogo: React.FC<TadbeerLogoProps> = ({
                   : 'text-4xl'
               }`}
             >
-              وازن
+              وزان
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#1b605b]/10 text-[#1b605b] border border-[#1b605b]/20">
               توازن الحياة
