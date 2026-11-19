@@ -107,9 +107,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 if (onNavigateToAuth) onNavigateToAuth('login');
                 else onNavigate('login');
               }}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1b605b] hover:bg-[#16504c] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-xs font-black transition-all shadow-sm shadow-[#1b605b]/20 hover:shadow-md cursor-pointer"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#0A757E] hover:bg-[#075359] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-xs font-black transition-all shadow-md shadow-[#0A757E]/20 dark:shadow-cyan-900/40 border border-white/30 dark:border-cyan-400/25 hover:scale-105 active:scale-95 cursor-pointer"
             >
-              <LogIn className="w-3.5 h-3.5" />
+              <LogIn className="w-3.5 h-3.5 text-cyan-200 dark:text-cyan-300" />
               <span>تسجيل الدخول</span>
             </button>
           </div>

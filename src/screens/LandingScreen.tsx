@@ -6,6 +6,7 @@ import {
   BarChart3,
   LogIn,
   UserPlus,
+  Play,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LifeDimensionsGuide } from '../components/LifeDimensionsGuide';
@@ -26,17 +27,17 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
 
   return (
     <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-[#E6ECEB] dark:bg-[#07111c] transition-colors duration-300">
-      {/* 4-Corner Rich Ambient Mesh Gradient: Deep Teal, Lavender, Sand framing a restful eye-friendly center */}
+      {/* 4-Corner Rich Ambient Mesh Gradient with Ultra-Slow Ambient Drift Animation */}
       <div
-        className="absolute inset-0 pointer-events-none transition-all duration-500"
+        className="absolute inset-0 pointer-events-none transition-all duration-500 animate-ambient-drift"
         style={{
           background: isDark
             ? `
-              radial-gradient(ellipse 65% 50% at 50% 36%, rgba(13, 26, 44, 0.95) 0%, rgba(10, 20, 35, 0.88) 35%, rgba(6, 14, 25, 0.4) 65%, transparent 85%),
-              radial-gradient(circle 850px at 0% 0%, #07232a 0%, #0c3640 32%, transparent 68%),
-              radial-gradient(circle 850px at 100% 0%, #291845 0%, #362059 32%, transparent 68%),
-              radial-gradient(circle 850px at 0% 68%, #361725 0%, #461f31 32%, transparent 68%),
-              radial-gradient(circle 850px at 100% 68%, #0b1a2d 0%, #102641 36%, transparent 72%)
+              radial-gradient(ellipse 65% 50% at 50% 36%, rgba(10, 22, 38, 0.95) 0%, rgba(7, 17, 28, 0.88) 35%, rgba(5, 12, 22, 0.45) 65%, transparent 85%),
+              radial-gradient(circle 850px at 0% 0%, #062329 0%, #0a3640 32%, transparent 68%),
+              radial-gradient(circle 850px at 100% 0%, #23143c 0%, #2e1a50 32%, transparent 68%),
+              radial-gradient(circle 850px at 0% 68%, #2e1420 0%, #3d1b2b 32%, transparent 68%),
+              radial-gradient(circle 850px at 100% 68%, #091728 0%, #0e223d 36%, transparent 72%)
             `
             : `
               radial-gradient(ellipse 65% 52% at 50% 36%, #E6ECEB 0%, #DFE6E5 38%, rgba(220, 228, 229, 0.55) 72%, transparent 100%),
@@ -58,113 +59,158 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
             <div
               className={`w-full h-full max-w-3xl rounded-[3rem] border transition-all duration-500 ${
                 isDark
-                  ? 'border-cyan-500/30 shadow-[0_0_90px_rgba(6,182,212,0.25),inset_0_0_60px_rgba(6,182,212,0.15)] bg-slate-900/30 backdrop-blur-xs'
+                  ? 'border-cyan-500/25 shadow-[0_16px_50px_rgba(0,0,0,0.45),inset_0_1px_1px_rgba(255,255,255,0.08)] backdrop-blur-md'
                   : 'border-white/50 shadow-[0_14px_45px_rgba(10,34,38,0.08),inset_0_1px_2px_rgba(255,255,255,0.7)] backdrop-blur-md'
               }`}
               style={{
-                backgroundColor: isDark ? undefined : 'rgba(255, 255, 255, 0.32)',
+                backgroundColor: isDark ? 'rgba(15, 23, 42, 0.45)' : 'rgba(255, 255, 255, 0.32)',
               }}
             />
 
-            {/* Overlapping Orbital Rings */}
+            {/* Overlapping Orbital Rings with Ambient Counter-Rotation & Subtle Twinkling Stars */}
             <svg
-              className="absolute w-[120%] h-[130%] max-w-5xl"
+              className="absolute w-[120%] h-[130%] max-w-5xl pointer-events-none"
               viewBox="0 0 900 500"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              {/* Outer Orbit 1 (Calm teal hue) */}
-              <ellipse
-                cx="450"
-                cy="250"
-                rx="420"
-                ry="210"
-                stroke={isDark ? "rgba(6, 182, 212, 0.4)" : "rgba(10, 117, 126, 0.22)"}
-                strokeWidth="1.2"
-                strokeDasharray="4 6"
-              />
-              {/* Mid Orbit 2 (slightly tilted, gentle muted lavender) */}
-              <g transform="rotate(-6 450 250)">
+              {/* Outer Orbit 1: Dashed Teal Ring - Rotating Clockwise (65s cycle) */}
+              <g className="animate-orbit-cw">
                 <ellipse
                   cx="450"
                   cy="250"
-                  rx="390"
-                  ry="190"
-                  stroke={isDark ? "rgba(168, 85, 247, 0.45)" : "rgba(126, 108, 150, 0.25)"}
-                  strokeWidth="1.5"
+                  rx="420"
+                  ry="210"
+                  stroke={isDark ? "rgba(6, 182, 212, 0.30)" : "rgba(10, 117, 126, 0.22)"}
+                  strokeWidth="1.2"
+                  strokeDasharray="4 6"
                 />
               </g>
-              {/* Inner Orbit 3 (tilted other way, soft teal accent) */}
+
+              {/* Mid Orbit 2: Solid Purple/Lavender Ring - Counter-Rotating (52s cycle) */}
+              <g className="animate-orbit-ccw">
+                <g transform="rotate(-6 450 250)">
+                  <ellipse
+                    cx="450"
+                    cy="250"
+                    rx="390"
+                    ry="190"
+                    stroke={isDark ? "rgba(168, 85, 247, 0.32)" : "rgba(126, 108, 150, 0.25)"}
+                    strokeWidth="1.5"
+                  />
+                </g>
+              </g>
+
+              {/* Inner Orbit 3: Subtle Guide Ring */}
               <g transform="rotate(8 450 250)">
                 <ellipse
                   cx="450"
                   cy="250"
                   rx="350"
                   ry="170"
-                  stroke={isDark ? "rgba(0, 229, 255, 0.35)" : "rgba(10, 117, 126, 0.18)"}
+                  stroke={isDark ? "rgba(0, 229, 255, 0.24)" : "rgba(10, 117, 126, 0.18)"}
                   strokeWidth="1"
                   strokeDasharray="8 8"
                 />
               </g>
 
-              {/* Lens Flare Glow Sparkle at bottom-right of the orbit ring */}
-              <g transform="translate(730, 370)">
-                <circle
-                  cx="0"
-                  cy="0"
-                  r="20"
-                  fill={isDark ? "rgba(6, 182, 212, 0.18)" : "rgba(10, 117, 126, 0.14)"}
-                />
-                <circle
-                  cx="0"
-                  cy="0"
-                  r="12"
-                  fill={isDark ? "#ffffff" : "#0A757E"}
-                  opacity="0.95"
-                  filter={isDark ? "drop-shadow(0 0 8px #ffffff)" : "drop-shadow(0 0 8px rgba(10, 117, 126, 0.5))"}
-                />
-                <line
-                  x1="-30"
-                  y1="0"
-                  x2="30"
-                  y2="0"
-                  stroke={isDark ? "#ffffff" : "#0A757E"}
-                  strokeWidth="2.2"
-                  opacity={isDark ? 0.85 : 0.9}
-                />
-                <line
-                  x1="0"
-                  y1="-30"
-                  x2="0"
-                  y2="30"
-                  stroke={isDark ? "#ffffff" : "#0A757E"}
-                  strokeWidth="2.2"
-                  opacity={isDark ? 0.85 : 0.9}
-                />
-                <line
-                  x1="-18"
-                  y1="-18"
-                  x2="18"
-                  y2="18"
-                  stroke={isDark ? "rgba(0, 229, 255, 0.7)" : "rgba(10, 117, 126, 0.65)"}
-                  strokeWidth="1.5"
-                />
-                <line
-                  x1="18"
-                  y1="-18"
-                  x2="-18"
-                  y2="18"
-                  stroke={isDark ? "rgba(0, 229, 255, 0.7)" : "rgba(10, 117, 126, 0.65)"}
-                  strokeWidth="1.5"
-                />
+              {/* 5-6 Subtle Twinkling Micro-Stars along outer orbital paths (far from central text) */}
+              {/* Micro-Star 1: Upper-left outer orbit */}
+              <g className="animate-star-1" transform="translate(130, 150)">
+                <circle cx="0" cy="0" r="2.2" fill={isDark ? "#00e5ff" : "#0A757E"} />
+                <circle cx="0" cy="0" r="5" fill={isDark ? "rgba(6,182,212,0.2)" : "rgba(10,117,126,0.15)"} />
+              </g>
+
+              {/* Micro-Star 2: Upper-right outer orbit */}
+              <g className="animate-star-2" transform="translate(770, 135)">
+                <circle cx="0" cy="0" r="2.4" fill={isDark ? "#c084fc" : "#8b5cf6"} />
+                <circle cx="0" cy="0" r="5.5" fill={isDark ? "rgba(192,132,252,0.2)" : "rgba(139,92,246,0.15)"} />
+              </g>
+
+              {/* Micro-Star 3: Far-right mid orbit */}
+              <g className="animate-star-3" transform="translate(830, 260)">
+                <circle cx="0" cy="0" r="2" fill={isDark ? "#38bdf8" : "#0A757E"} />
+                <circle cx="0" cy="0" r="4.5" fill={isDark ? "rgba(56,189,248,0.2)" : "rgba(10,117,126,0.15)"} />
+              </g>
+
+              {/* Micro-Star 4: Far-left lower orbit */}
+              <g className="animate-star-4" transform="translate(80, 310)">
+                <circle cx="0" cy="0" r="2.2" fill={isDark ? "#00e5ff" : "#0A757E"} />
+                <circle cx="0" cy="0" r="5" fill={isDark ? "rgba(6,182,212,0.2)" : "rgba(10,117,126,0.15)"} />
+              </g>
+
+              {/* Micro-Star 5: Top-center outer arch */}
+              <g className="animate-star-5" transform="translate(280, 75)">
+                <circle cx="0" cy="0" r="1.8" fill={isDark ? "#c084fc" : "#7e6c96"} />
+                <circle cx="0" cy="0" r="4" fill={isDark ? "rgba(192,132,252,0.2)" : "rgba(126,108,150,0.15)"} />
+              </g>
+
+              {/* Micro-Star 6: Lower-right outer edge */}
+              <g className="animate-star-6" transform="translate(630, 425)">
+                <circle cx="0" cy="0" r="2" fill={isDark ? "#22d3ee" : "#0A757E"} />
+                <circle cx="0" cy="0" r="4.5" fill={isDark ? "rgba(34,211,238,0.2)" : "rgba(10,117,126,0.15)"} />
+              </g>
+
+              {/* Breathing & Rotating Multi-Ray Accent Sparkle */}
+              <g className="animate-sparkle-breathing">
+                <g transform="translate(730, 370)">
+                  <circle
+                    cx="0"
+                    cy="0"
+                    r="20"
+                    fill={isDark ? "rgba(6, 182, 212, 0.16)" : "rgba(10, 117, 126, 0.14)"}
+                  />
+                  <circle
+                    cx="0"
+                    cy="0"
+                    r="12"
+                    fill={isDark ? "#ffffff" : "#0A757E"}
+                    opacity="0.95"
+                    filter={isDark ? "drop-shadow(0 0 8px rgba(6, 182, 212, 0.65))" : "drop-shadow(0 0 8px rgba(10, 117, 126, 0.5))"}
+                  />
+                  <line
+                    x1="-30"
+                    y1="0"
+                    x2="30"
+                    y2="0"
+                    stroke={isDark ? "#ffffff" : "#0A757E"}
+                    strokeWidth="2.2"
+                    opacity={isDark ? 0.85 : 0.9}
+                  />
+                  <line
+                    x1="0"
+                    y1="-30"
+                    x2="0"
+                    y2="30"
+                    stroke={isDark ? "#ffffff" : "#0A757E"}
+                    strokeWidth="2.2"
+                    opacity={isDark ? 0.85 : 0.9}
+                  />
+                  <line
+                    x1="-18"
+                    y1="-18"
+                    x2="18"
+                    y2="18"
+                    stroke={isDark ? "rgba(0, 229, 255, 0.65)" : "rgba(10, 117, 126, 0.65)"}
+                    strokeWidth="1.5"
+                  />
+                  <line
+                    x1="18"
+                    y1="-18"
+                    x2="-18"
+                    y2="18"
+                    stroke={isDark ? "rgba(0, 229, 255, 0.65)" : "rgba(10, 117, 126, 0.65)"}
+                    strokeWidth="1.5"
+                  />
+                </g>
               </g>
             </svg>
           </div>
 
-          {/* Foreground Hero Content */}
+          {/* Foreground Hero Content (Completely static and crisp) */}
           <div className="relative z-10 space-y-6">
             {/* Top Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/75 dark:bg-slate-900/90 border border-[#0A757E]/25 dark:border-slate-700/80 shadow-xs text-xs sm:text-sm font-extrabold text-[#092226] dark:text-cyan-300 transition-colors backdrop-blur-md">
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/75 dark:bg-slate-900/85 border border-[#0A757E]/25 dark:border-cyan-500/25 shadow-xs text-xs sm:text-sm font-extrabold text-[#092226] dark:text-cyan-300 transition-colors backdrop-blur-md">
               <span className="text-[#0A757E] dark:text-cyan-400">✳️</span>
               <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
             </div>
@@ -174,13 +220,13 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#092226] dark:text-white leading-tight transition-colors">
                 لا تعش في جانب واحد..
               </h1>
-              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0A757E] dark:text-cyan-400 dark:drop-shadow-[0_0_35px_rgba(6,182,212,0.5)] leading-tight transition-colors">
+              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0A757E] dark:text-cyan-400 dark:drop-shadow-[0_0_30px_rgba(6,182,212,0.45)] leading-tight transition-colors">
                 وازن حياتك كاملة
               </h2>
             </div>
 
             {/* Legible Paragraph */}
-            <p className="text-base sm:text-lg text-[#253739] dark:text-slate-300 leading-relaxed max-w-2xl mx-auto font-medium pt-1 transition-colors">
+            <p className="text-base sm:text-lg text-[#253739] dark:text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal pt-1 transition-colors">
               منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب
               وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
             </p>
@@ -189,11 +235,69 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
             <div className="pt-3">
               <button
                 onClick={() => onNavigateToAuth('login')}
-                className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-[#0A757E] hover:bg-[#075359] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-sm sm:text-base font-black shadow-xl shadow-teal-950/20 dark:shadow-cyan-900/30 border border-white/40 dark:border-cyan-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-[#0A757E] hover:bg-[#075359] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-sm sm:text-base font-black shadow-xl shadow-teal-950/20 dark:shadow-cyan-900/40 border border-white/30 dark:border-cyan-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <span className="text-cyan-200 dark:text-cyan-300 font-bold">&larr;</span>
                 <span>تسجيل الدخول إلى وزان</span>
               </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Explainer Video Slot (حاوية الفيديو التوضيحي التعريفي لمنصة وازن) */}
+        <div className="relative max-w-4xl mx-auto space-y-5 text-center">
+          <div className="space-y-2">
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/70 dark:bg-slate-900/80 border border-[#eae3d5] dark:border-cyan-500/25 text-xs font-bold text-[#0A757E] dark:text-cyan-300 shadow-xs backdrop-blur-md">
+              <span className="text-amber-500">🎬</span>
+              <span>فيديو تعريفي لمنظومة وازن</span>
+            </div>
+            <h3 className="text-2xl sm:text-3xl font-black text-[#092226] dark:text-white">
+              شاهد كيف تُعيد "وازن" ترتيب بوصلتك الحياتية في دقائق
+            </h3>
+            <p className="text-xs sm:text-sm text-[#536561] dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+              جولة مرئية تستعرض رحلتك من التقييم الأسبوعي مع المستشارين الثمانية إلى لوحة تحكم عجلة الحياة ومصفوفة التركيز اليومي.
+            </p>
+          </div>
+
+          {/* Video Player Frame Container with Design System Rounded Corners and Dark Glass Frame */}
+          <div className="relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border border-[#eae3d5] dark:border-cyan-500/25 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md shadow-2xl transition-all duration-500 group">
+            {/* 16:9 Aspect Ratio Frame */}
+            <div className="relative aspect-video w-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#0c242c] via-[#091823] to-[#1c122e]">
+              {/* Abstract Platform Screen Preview Background / Subtle Visual Grid */}
+              <div
+                className="absolute inset-0 opacity-40 mix-blend-screen pointer-events-none"
+                style={{
+                  backgroundImage: `radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.25) 0%, transparent 60%), radial-gradient(circle at 85% 20%, rgba(168, 85, 247, 0.2) 0%, transparent 50%)`,
+                }}
+              />
+
+              {/* Decorative Concentric Rings in Player Backdrop */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-30">
+                <div className="w-72 h-72 rounded-full border border-cyan-400/30 animate-pulse" />
+                <div className="absolute w-96 h-96 rounded-full border border-purple-500/20" />
+              </div>
+
+              {/* Central Glowing Play Button */}
+              <button
+                type="button"
+                onClick={() => onNavigateToAuth('login')}
+                className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0A757E] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(6,182,212,0.45)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] cursor-pointer"
+                aria-label="تشغيل الفيديو التعريفي"
+              >
+                <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform" />
+              </button>
+
+              {/* Player Bottom Control Bar (Arabic-Ready Presentation) */}
+              <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 bg-gradient-to-t from-black/85 via-black/40 to-transparent flex items-center justify-between text-white text-xs z-10">
+                <div className="flex items-center gap-2 font-bold">
+                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+                  <span className="text-white/95">تجربة وازن: التناغم الحياتي بالذكاء الاصطناعي</span>
+                </div>
+                <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-300">
+                  <span className="px-2 py-0.5 rounded-md bg-white/10 backdrop-blur-xs border border-white/10">03:15 دقيقة</span>
+                  <span className="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-400/20">4K Ultra HD</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

@@ -91,6 +91,134 @@ html.dark ::-webkit-scrollbar-thumb:hover {
   animation: spinSlow 8s linear infinite;
 }
 
+/* Ambient Subtle Motion for Hero Section (Wrapped in prefers-reduced-motion for accessibility) */
+@media (prefers-reduced-motion: no-preference) {
+  /* Counter-Rotating Orbital Rings around center (450, 250) */
+  @keyframes orbitRotateClockwise {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  @keyframes orbitRotateCounter {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(-360deg);
+    }
+  }
+
+  .animate-orbit-cw {
+    transform-origin: 450px 250px;
+    animation: orbitRotateClockwise 65s linear infinite;
+    will-change: transform;
+  }
+
+  .animate-orbit-ccw {
+    transform-origin: 450px 250px;
+    animation: orbitRotateCounter 52s linear infinite;
+    will-change: transform;
+  }
+
+  /* Breathing & Rotating Accent Sparkle around its origin (730, 370) */
+  @keyframes sparklePulseRotate {
+    0% {
+      transform: scale(0.93) rotate(0deg);
+      opacity: 0.85;
+    }
+    50% {
+      transform: scale(1.08) rotate(180deg);
+      opacity: 1;
+    }
+    100% {
+      transform: scale(0.93) rotate(360deg);
+      opacity: 0.85;
+    }
+  }
+
+  .animate-sparkle-breathing {
+    transform-origin: 730px 370px;
+    animation: sparklePulseRotate 28s ease-in-out infinite;
+    will-change: transform, opacity;
+  }
+
+  /* Subtle Twinkling Micro-Stars along outer orbital pathways */
+  @keyframes microStarTwinkle {
+    0%, 100% {
+      opacity: 0.15;
+      transform: scale(0.85);
+    }
+    50% {
+      opacity: 0.65;
+      transform: scale(1.2);
+    }
+  }
+
+  .animate-star-1 {
+    animation: microStarTwinkle 4.2s ease-in-out infinite;
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: opacity, transform;
+  }
+
+  .animate-star-2 {
+    animation: microStarTwinkle 5.3s ease-in-out infinite 1.2s;
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: opacity, transform;
+  }
+
+  .animate-star-3 {
+    animation: microStarTwinkle 3.9s ease-in-out infinite 2.4s;
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: opacity, transform;
+  }
+
+  .animate-star-4 {
+    animation: microStarTwinkle 5.8s ease-in-out infinite 0.8s;
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: opacity, transform;
+  }
+
+  .animate-star-5 {
+    animation: microStarTwinkle 4.6s ease-in-out infinite 3.1s;
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: opacity, transform;
+  }
+
+  .animate-star-6 {
+    animation: microStarTwinkle 4.1s ease-in-out infinite 1.7s;
+    transform-box: fill-box;
+    transform-origin: center;
+    will-change: opacity, transform;
+  }
+
+  /* Gentle Ambient Background Drift (ultra-slow breathing shift) */
+  @keyframes ambientMeshDrift {
+    0% {
+      transform: scale(1) translate(0px, 0px);
+    }
+    50% {
+      transform: scale(1.025) translate(-8px, 6px);
+    }
+    100% {
+      transform: scale(1) translate(0px, 0px);
+    }
+  }
+
+  .animate-ambient-drift {
+    animation: ambientMeshDrift 20s ease-in-out infinite alternate;
+    will-change: transform;
+  }
+}
+
 @media print {
   header, nav, button {
     display: none !important;
