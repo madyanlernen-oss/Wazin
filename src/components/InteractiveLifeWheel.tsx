@@ -1,6 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
-  RotateCcw,
   ChevronRight,
   ChevronLeft,
   Sparkles,
@@ -8,133 +7,92 @@ import {
   Compass,
   CheckCircle2,
 } from 'lucide-react';
-import { LifeAreaId } from '../types/lifeBalance';
-
-export interface InteractiveWheelDomain {
-  id: LifeAreaId;
-  name: string; // Crisp Arabic label for wheel segment
-  title: string; // Full Arabic domain title
-  advisorName: string;
-  advisorRole: string;
-  avatarSvg: string;
-  themeColor: string;
-  gradientColors: [string, string];
-  glowColor: string;
-  description: string;
-  keystoneHabit: string;
-}
-
-export const WHEEL_DOMAINS: InteractiveWheelDomain[] = [
-  {
-    id: 'spiritual',
-    name: 'الجانب الروحي',
-    title: 'الجانب الروحي والسكينة',
-    advisorName: 'د. سفيان الروحي',
-    advisorRole: 'مستشار الصفاء الإيماني والسلام الداخلي',
-    avatarSvg: '🕌',
-    themeColor: '#10b981',
-    gradientColors: ['#34d399', '#059669'],
-    glowColor: 'rgba(16, 185, 129, 0.45)',
-    description: 'يرسخ السلام الداخلي وصفاء القلب ويعيد بوصلتك إلى السكينة وحضور القلب وسط صخب وتحديات الحياة.',
-    keystoneHabit: 'المحافظة على ورد يومي من الصلاة والذكر بتدبر',
-  },
-  {
-    id: 'health',
-    name: 'الجانب الصحي',
-    title: 'الجانب الصحي والبدني',
-    advisorName: 'د. ريان الصحي',
-    advisorRole: 'أخصائي الطاقة الحيوية والطب الوقائي',
-    avatarSvg: '🌿',
-    themeColor: '#22c55e',
-    gradientColors: ['#4ade80', '#16a34a'],
-    glowColor: 'rgba(34, 197, 94, 0.45)',
-    description: 'يمنحك الحيوية اليومية، النوم العميق، والتغذية السليمة لحماية جسدك ليكون قادراً على تحقيق كل طموحاتك.',
-    keystoneHabit: 'نوم منتظم 7-8 ساعات و20 دقيقة حركة يومية',
-  },
-  {
-    id: 'career',
-    name: 'الجانب المهني',
-    title: 'الجانب المهني والوظيفي',
-    advisorName: 'م. طارق المهني',
-    advisorRole: 'مستشار التطور الوظيفي والإنتاجية',
-    avatarSvg: '💼',
-    themeColor: '#8b5cf6',
-    gradientColors: ['#a78bfa', '#7c3aed'],
-    glowColor: 'rgba(139, 92, 246, 0.45)',
-    description: 'يوجه نموك المهني نحو صناعة أثر ملموس وزيادة قيمتك في سوق العمل بإنتاجية نوعية دون احتراق.',
-    keystoneHabit: 'تخصيص ساعتين يومياً للمهام العميقة وتطوير المهارات',
-  },
-  {
-    id: 'financial',
-    name: 'الجانب المالي',
-    title: 'الجانب المالي والاستقلال',
-    advisorName: 'أ. كمال المالي',
-    advisorRole: 'مستشار التخطيط المالي وتنمية الأصول',
-    avatarSvg: '💎',
-    themeColor: '#0ea5e9',
-    gradientColors: ['#38bdf8', '#0284c7'],
-    glowColor: 'rgba(14, 165, 233, 0.45)',
-    description: 'يبني استقلالك المالي وصندوق أمانك، ويحول الإنفاق العشوائي إلى استثمار واعٍ ومستقبل مستقر.',
-    keystoneHabit: 'ادخار 15% من الدخل وضبط النفقات العاطفية',
-  },
-  {
-    id: 'learning',
-    name: 'الجانب التعليمي',
-    title: 'الجانب التعليمي والمعرفي',
-    advisorName: 'بروفيسور زياد المعرفي',
-    advisorRole: 'مستشار التعلم المستمر وإدارة المعرفة',
-    avatarSvg: '📚',
-    themeColor: '#f59e0b',
-    gradientColors: ['#fbbf24', '#d97706'],
-    glowColor: 'rgba(245, 158, 11, 0.45)',
-    description: 'يغذي عقلك بالقراءة واكتساب المهارات الاستراتيجية ليواكب تغيرات العصر بوعي متجدد مستمر.',
-    keystoneHabit: 'قراءة 20 صفحة يومياً من كتاب نوعي ومفيد',
-  },
-  {
-    id: 'family',
-    name: 'الجانب الأسري',
-    title: 'الجانب الأسري والعائلي',
-    advisorName: 'د. مريم الأسرية',
-    advisorRole: 'استشارية الترابط الأسري والذكاء العاطفي',
-    avatarSvg: '🏡',
-    themeColor: '#f97316',
-    gradientColors: ['#fb923c', '#ea580c'],
-    glowColor: 'rgba(249, 115, 22, 0.45)',
-    description: 'يصنع دفء البيت والملاذ الآمن، ويعمق الحوار والإنصات الحقيقي بين أفراد الأسرة دون هواتف.',
-    keystoneHabit: 'جلسة عائلية يومية دافئة بدون شاشات ومشتتات',
-  },
-  {
-    id: 'social',
-    name: 'الجانب الاجتماعي',
-    title: 'الجانب الاجتماعي والعلاقات',
-    advisorName: 'أ. سامي الاجتماعي',
-    advisorRole: 'مستشار الذكاء الاجتماعي وبناء العلاقات',
-    avatarSvg: '🤝',
-    themeColor: '#14b8a6',
-    gradientColors: ['#2dd4bf', '#0d9488'],
-    glowColor: 'rgba(20, 184, 166, 0.45)',
-    description: 'ينتقي لك علاقات داعمة ومحفزة تنمّي إنسانيتك وتبعدك عن العلاقات المستنزفة لطاقتك ووقتك.',
-    keystoneHabit: 'التواصل الأسبوعي مع صديق ملهم وصادق',
-  },
-  {
-    id: 'personal',
-    name: 'الجانب الشخصي',
-    title: 'الجانب الشخصي والوعي بالذات',
-    advisorName: 'د. ليلى الذاتية',
-    advisorRole: 'أخصائية التوازن النفسي وبناء العادات',
-    avatarSvg: '✨',
-    themeColor: '#ec4899',
-    gradientColors: ['#f472b6', '#db2777'],
-    glowColor: 'rgba(236, 72, 153, 0.45)',
-    description: 'يعزز تقديرك لذاتك وفهمك لمشاعرك، ويمنحك مساحة خاصة للاسترخاء وبناء العادات الصغيرة الراسخة.',
-    keystoneHabit: 'خلوة يومية 15 دقيقة للتأمل وتفريغ الذهن',
-  },
-];
+import { WHEEL_DOMAINS, InteractiveWheelDomain } from '../data/wheelDomains';
 
 interface InteractiveLifeWheelProps {
   onNavigateToAuth?: (mode: 'login' | 'signup') => void;
   theme?: 'light' | 'dark';
 }
+
+// C2 & C3: Geometry constants & helpers moved outside component at module level
+const WHEEL_SIZE = 520;
+const WHEEL_CENTER = WHEEL_SIZE / 2;
+const R_INNER = 92;
+const R_OUTER = 236;
+const SEGMENT_GAP = 1.6; // deg
+const TOTAL_DOMAINS = WHEEL_DOMAINS.length;
+const SEGMENT_ANGLE = 360 / TOTAL_DOMAINS;
+const HALF_SEGMENT = SEGMENT_ANGLE / 2;
+
+// Helper to calculate polar coordinates
+const polarToCartesian = (cx: number, cy: number, r: number, angleDeg: number) => {
+  const rad = ((angleDeg - 90) * Math.PI) / 180;
+  return {
+    x: cx + r * Math.cos(rad),
+    y: cy + r * Math.sin(rad),
+  };
+};
+
+// Helper to describe donut segment path
+const describeDonutArc = (
+  cx: number,
+  cy: number,
+  rInner: number,
+  rOuter: number,
+  startAngle: number,
+  endAngle: number
+) => {
+  const p1 = polarToCartesian(cx, cy, rOuter, startAngle);
+  const p2 = polarToCartesian(cx, cy, rOuter, endAngle);
+  const p3 = polarToCartesian(cx, cy, rInner, endAngle);
+  const p4 = polarToCartesian(cx, cy, rInner, startAngle);
+
+  const arcSweep = endAngle - startAngle <= 180 ? '0' : '1';
+
+  return [
+    `M ${p1.x} ${p1.y}`,
+    `A ${rOuter} ${rOuter} 0 ${arcSweep} 1 ${p2.x} ${p2.y}`,
+    `L ${p3.x} ${p3.y}`,
+    `A ${rInner} ${rInner} 0 ${arcSweep} 0 ${p4.x} ${p4.y}`,
+    'Z',
+  ].join(' ');
+};
+
+interface WheelSegmentData {
+  domain: InteractiveWheelDomain;
+  index: number;
+  path: string;
+  iconPos: { x: number; y: number };
+  labelPos: { x: number; y: number };
+  midAngle: number;
+}
+
+// C2: Pre-calculated segments at module level (no useMemo needed)
+const WHEEL_SEGMENTS: WheelSegmentData[] = WHEEL_DOMAINS.map((domain, index) => {
+  const baseAngle = index * SEGMENT_ANGLE;
+  const startAngle = baseAngle - HALF_SEGMENT + SEGMENT_GAP / 2;
+  const endAngle = baseAngle + HALF_SEGMENT - SEGMENT_GAP / 2;
+  const midAngle = baseAngle;
+
+  const path = describeDonutArc(WHEEL_CENTER, WHEEL_CENTER, R_INNER, R_OUTER, startAngle, endAngle);
+  const iconPos = polarToCartesian(WHEEL_CENTER, WHEEL_CENTER, R_OUTER - 38, midAngle);
+  const labelPos = polarToCartesian(WHEEL_CENTER, WHEEL_CENTER, R_INNER + 48, midAngle);
+
+  return {
+    domain,
+    index,
+    path,
+    iconPos,
+    labelPos,
+    midAngle,
+  };
+});
+
+// B2: Read prefers-reduced-motion with SSR guard
+const getPrefersReducedMotion = () => {
+  if (typeof window === 'undefined') return false;
+  return window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches ?? false;
+};
 
 export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
   onNavigateToAuth,
@@ -150,9 +108,19 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
   const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
   const [isCenterFocused, setIsCenterFocused] = useState(false);
 
+  // A7: rotationRef and setRotation helper to avoid stale state in closures
+  const rotationRef = useRef(0);
+  const setRotation = useCallback((deg: number) => {
+    rotationRef.current = deg;
+    setRotationAngle(deg);
+  }, []);
+
+  // A1: isPressedRef ensures wheel moves ONLY on active drag, never on mouse hover
+  const isPressedRef = useRef(false);
+
   const svgRef = useRef<SVGSVGElement | null>(null);
 
-  // Directional gesture intent tracking (preserves native vertical page scroll)
+  // C4: Removed unused velocity and lastTime from gestureRef
   const gestureRef = useRef<{
     startX: number;
     startY: number;
@@ -160,8 +128,6 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     currentRotation: number;
     hasDeterminedIntent: boolean;
     isIntentRotation: boolean;
-    lastTime: number;
-    velocity: number;
   }>({
     startX: 0,
     startY: 0,
@@ -169,105 +135,105 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     currentRotation: 0,
     hasDeterminedIntent: false,
     isIntentRotation: false,
-    lastTime: 0,
-    velocity: 0,
   });
 
   const animFrameRef = useRef<number | null>(null);
 
   const activeDomain = WHEEL_DOMAINS[selectedIndex] || WHEEL_DOMAINS[0];
 
-  // Helper to calculate polar coordinates
-  const polarToCartesian = (cx: number, cy: number, r: number, angleDeg: number) => {
-    const rad = ((angleDeg - 90) * Math.PI) / 180;
-    return {
-      x: cx + r * Math.cos(rad),
-      y: cy + r * Math.sin(rad),
-    };
-  };
-
-  // Helper to describe donut segment path
-  const describeDonutArc = (
-    cx: number,
-    cy: number,
-    rInner: number,
-    rOuter: number,
-    startAngle: number,
-    endAngle: number
-  ) => {
-    const p1 = polarToCartesian(cx, cy, rOuter, startAngle);
-    const p2 = polarToCartesian(cx, cy, rOuter, endAngle);
-    const p3 = polarToCartesian(cx, cy, rInner, endAngle);
-    const p4 = polarToCartesian(cx, cy, rInner, startAngle);
-
-    const arcSweep = endAngle - startAngle <= 180 ? '0' : '1';
-
-    return [
-      `M ${p1.x} ${p1.y}`,
-      `A ${rOuter} ${rOuter} 0 ${arcSweep} 1 ${p2.x} ${p2.y}`,
-      `L ${p3.x} ${p3.y}`,
-      `A ${rInner} ${rInner} 0 ${arcSweep} 0 ${p4.x} ${p4.y}`,
-      'Z',
-    ].join(' ');
-  };
+  // B1: Contrast helper - strongColor on Light, verified themeColor on Dark (WCAG 2.2 AA 4.5:1+)
+  const getAccentColor = useCallback(
+    (domain: InteractiveWheelDomain) => {
+      if (!isDark) return domain.strongColor;
+      if (domain.id === 'career') return '#a78bfa'; // violet-400 achieves >6.1:1 on dark #0c1827
+      return domain.themeColor;
+    },
+    [isDark]
+  );
 
   // Rotate smoothly to target index with shortest-arc settling
-  const rotateToIndex = useCallback((index: number) => {
-    if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
-    setSelectedIndex(index);
+  const rotateToIndex = useCallback(
+    (index: number) => {
+      // A2: Cancel playful spin state immediately so wheel never freezes if clicked during spin
+      setIsSpinning(false);
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+      setSelectedIndex(index);
 
-    const targetAngle = -index * 45;
-    const startAngle = rotationAngle;
+      const targetAngle = -index * SEGMENT_ANGLE;
+      const startAngle = rotationRef.current; // A7: Read rotationRef.current
 
-    // Calculate shortest rotational delta (avoiding sudden jumps or reverse full spins)
-    let diff = (targetAngle - startAngle) % 360;
-    if (diff > 180) diff -= 360;
-    if (diff < -180) diff += 360;
-    const finalTarget = startAngle + diff;
+      // Calculate shortest rotational delta (avoiding sudden jumps or reverse full spins)
+      let diff = (targetAngle - startAngle) % 360;
+      if (diff > 180) diff -= 360;
+      if (diff < -180) diff += 360;
+      const finalTarget = startAngle + diff;
 
-    const startTime = performance.now();
-    const duration = 460; // ms
-
-    const animate = (currentTime: number) => {
-      const elapsed = currentTime - startTime;
-      const progress = Math.min(1, elapsed / duration);
-      // Clean cubic ease-out for calm, smooth settling
-      const ease = 1 - Math.pow(1 - progress, 3);
-      setRotationAngle(startAngle + diff * ease);
-
-      if (progress < 1) {
-        animFrameRef.current = requestAnimationFrame(animate);
-      } else {
-        setRotationAngle(finalTarget);
+      // B2: If reduced motion requested, jump directly without animation
+      if (getPrefersReducedMotion()) {
+        setRotation(finalTarget);
+        return;
       }
-    };
 
-    animFrameRef.current = requestAnimationFrame(animate);
-  }, [rotationAngle]);
+      const startTime = performance.now();
+      const duration = 460; // ms
 
-  // Navigate next / prev
+      const animate = (currentTime: number) => {
+        const elapsed = currentTime - startTime;
+        const progress = Math.min(1, elapsed / duration);
+        // Clean cubic ease-out for calm, smooth settling
+        const ease = 1 - Math.pow(1 - progress, 3);
+        setRotation(startAngle + diff * ease);
+
+        if (progress < 1) {
+          animFrameRef.current = requestAnimationFrame(animate);
+        } else {
+          setRotation(finalTarget);
+        }
+      };
+
+      animFrameRef.current = requestAnimationFrame(animate);
+    },
+    [setRotation]
+  );
+
+  // Navigate next / prev in domain order
   const handlePrev = useCallback(() => {
-    const nextIdx = (selectedIndex - 1 + 8) % 8;
+    const nextIdx = (selectedIndex - 1 + TOTAL_DOMAINS) % TOTAL_DOMAINS;
     rotateToIndex(nextIdx);
   }, [selectedIndex, rotateToIndex]);
 
   const handleNext = useCallback(() => {
-    const nextIdx = (selectedIndex + 1) % 8;
+    const nextIdx = (selectedIndex + 1) % TOTAL_DOMAINS;
     rotateToIndex(nextIdx);
   }, [selectedIndex, rotateToIndex]);
 
-  // Playful Roulette Spin Animation with smooth deceleration
+  // A5: Playful Roulette Spin Animation with smooth forward deceleration
   const handlePlayfulSpin = useCallback(() => {
     if (isSpinning) return;
     setIsSpinning(true);
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
 
-    const randomIndex = Math.floor(Math.random() * 8);
+    const randomIndex = Math.floor(Math.random() * TOTAL_DOMAINS);
     const extraSpins = 2 + Math.floor(Math.random() * 2); // 2 to 3 full rotations
-    const targetAngle = -(extraSpins * 360 + randomIndex * 45);
+    const desiredAngle = -randomIndex * SEGMENT_ANGLE;
 
-    const startAngle = rotationAngle;
-    const diff = targetAngle - startAngle;
+    // Compute relative to current rotation, normalizing forward delta into (-360, 0]
+    const currentAngle = rotationRef.current;
+    let forwardDelta = (desiredAngle - currentAngle) % 360;
+    if (forwardDelta > 0) forwardDelta -= 360;
+    if (forwardDelta <= -360) forwardDelta += 360;
+
+    const targetAngle = currentAngle + forwardDelta - extraSpins * 360;
+    const diff = targetAngle - currentAngle;
+
+    // B2: Jump directly when reduced motion is preferred
+    if (getPrefersReducedMotion()) {
+      setRotation(targetAngle);
+      setSelectedIndex(randomIndex);
+      setIsSpinning(false);
+      return;
+    }
+
     const startTime = performance.now();
     const duration = 1800; // 1.8s playful deceleration
 
@@ -276,24 +242,24 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
       const progress = Math.min(1, elapsed / duration);
       // Quintic ease out for authentic roulette spin feeling
       const ease = 1 - Math.pow(1 - progress, 4);
-      const current = startAngle + diff * ease;
-      setRotationAngle(current);
+      const current = currentAngle + diff * ease;
+      setRotation(current);
 
       // Dynamically update active index during spin
-      const normalized = ((-Math.round(current / 45) % 8) + 8) % 8;
+      const normalized = ((-Math.round(current / SEGMENT_ANGLE) % TOTAL_DOMAINS) + TOTAL_DOMAINS) % TOTAL_DOMAINS;
       setSelectedIndex(normalized);
 
       if (progress < 1) {
         animFrameRef.current = requestAnimationFrame(animate);
       } else {
-        setRotationAngle(targetAngle);
+        setRotation(targetAngle);
         setSelectedIndex(randomIndex);
         setIsSpinning(false);
       }
     };
 
     animFrameRef.current = requestAnimationFrame(animate);
-  }, [isSpinning, rotationAngle]);
+  }, [isSpinning, setRotation]);
 
   // Pointer drag angle calculation
   const getPointerAngle = (clientX: number, clientY: number) => {
@@ -310,23 +276,23 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     if (isSpinning) return;
     if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
 
+    // A1: Mark pressed as active
+    isPressedRef.current = true;
+
     const startAngle = getPointerAngle(e.clientX, e.clientY);
     gestureRef.current = {
       startX: e.clientX,
       startY: e.clientY,
       startAngle,
-      currentRotation: rotationAngle,
+      currentRotation: rotationRef.current, // A7: Use rotationRef.current
       hasDeterminedIntent: false,
       isIntentRotation: false,
-      lastTime: performance.now(),
-      velocity: 0,
     };
-    // Do NOT capture pointer immediately here: allows native vertical scrolling to proceed
-    // without interference if the user's initial touch movement is vertical!
   };
 
   const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
-    if (isSpinning) return;
+    // A1: Stop early if not pressed or already spinning
+    if (!isPressedRef.current || isSpinning) return;
     const g = gestureRef.current;
 
     // 1. Initial intent detection (preserves native vertical page scroll)
@@ -364,22 +330,17 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
       if (delta > 180) delta -= 360;
       if (delta < -180) delta += 360;
 
-      const now = performance.now();
-      const dt = now - g.lastTime;
-      if (dt > 0) {
-        g.velocity = delta / dt;
-      }
-      g.lastTime = now;
-
       const newRot = g.currentRotation + delta;
-      setRotationAngle(newRot);
+      setRotation(newRot); // A7: Use setRotation
 
-      const activeIdx = ((-Math.round(newRot / 45) % 8) + 8) % 8;
+      const activeIdx = ((-Math.round(newRot / SEGMENT_ANGLE) % TOTAL_DOMAINS) + TOTAL_DOMAINS) % TOTAL_DOMAINS;
       setSelectedIndex(activeIdx);
     }
   };
 
   const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    // A1: Reset pressed flag
+    isPressedRef.current = false;
     const g = gestureRef.current;
     const wasRotating = g.isIntentRotation;
 
@@ -394,29 +355,43 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
         // ignore
       }
 
-      // Settle cleanly on the nearest segment
-      const nearestIdx = ((-Math.round(rotationAngle / 45) % 8) + 8) % 8;
+      // A7 & C3: Settle cleanly on the nearest segment using rotationRef.current
+      const currentAngle = rotationRef.current;
+      const nearestIdx = ((-Math.round(currentAngle / SEGMENT_ANGLE) % TOTAL_DOMAINS) + TOTAL_DOMAINS) % TOTAL_DOMAINS;
       rotateToIndex(nearestIdx);
     }
   };
 
-  // Keyboard navigation & accessibility controls
+  // A3 & A4: Keyboard navigation & RTL accessibility controls
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      e.preventDefault();
-      handleNext();
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault();
-      handlePrev();
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      rotateToIndex(0);
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      rotateToIndex(7);
-    } else if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      handlePlayfulSpin();
+    // A3: Ignore bubbled events from inner child buttons
+    if (e.target !== e.currentTarget) return;
+
+    // A4: RTL arrow keys: Left/Down = Next; Right/Up = Prev
+    switch (e.key) {
+      case 'ArrowLeft':
+      case 'ArrowDown':
+        e.preventDefault();
+        handleNext();
+        break;
+      case 'ArrowRight':
+      case 'ArrowUp':
+        e.preventDefault();
+        handlePrev();
+        break;
+      case 'Home':
+        e.preventDefault();
+        rotateToIndex(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        rotateToIndex(TOTAL_DOMAINS - 1);
+        break;
+      case 'Enter':
+      case ' ':
+        e.preventDefault();
+        handlePlayfulSpin();
+        break;
     }
   };
 
@@ -427,58 +402,13 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
     };
   }, []);
 
-  // Geometry constants
-  const size = 520;
-  const center = size / 2;
-  const rInner = 92;
-  const rOuter = 236;
-  const segmentAngle = 45;
-  const halfSegment = segmentAngle / 2;
-  const gap = 1.6; // deg
-
-  // Pre-calculate segments
-  const segments = useMemo(() => {
-    return WHEEL_DOMAINS.map((domain, index) => {
-      // In SVG: 0deg is 12 o'clock (top) in our coordinate system
-      const baseAngle = index * segmentAngle;
-      const startAngle = baseAngle - halfSegment + gap / 2;
-      const endAngle = baseAngle + halfSegment - gap / 2;
-      const midAngle = baseAngle;
-
-      const path = describeDonutArc(center, center, rInner, rOuter, startAngle, endAngle);
-
-      // Icon position (further out)
-      const iconPos = polarToCartesian(center, center, rOuter - 38, midAngle);
-      // Label position (closer in)
-      const labelPos = polarToCartesian(center, center, rInner + 48, midAngle);
-
-      // Text rotation to ensure Arabic is always right-side up and readable
-      let textRot = midAngle;
-      if (textRot > 90 && textRot < 270) {
-        textRot += 180;
-      }
-
-      return {
-        domain,
-        index,
-        path,
-        iconPos,
-        labelPos,
-        textRot,
-        midAngle,
-      };
-    });
-  }, [center, rInner, rOuter]);
-
   return (
     <div
-      className="relative rounded-3xl overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-xl bg-white dark:bg-[#0c1827] transition-all duration-300 select-none p-5 sm:p-8 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0c1827]"
+      className="relative rounded-3xl overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-xl bg-white dark:bg-[#0c1827] transition-all duration-300 select-none p-5 sm:p-8 focus-visible:outline-none"
       role="region"
       aria-label="عجلة أبعاد الحياة التفاعلية"
-      tabIndex={0}
-      onKeyDown={handleKeyDown}
     >
-      {/* Ambient Radial Orbital Glow (Clean Centered Frame, No Side Duplicates) */}
+      {/* Ambient Radial Orbital Glow */}
       <div
         className="absolute inset-0 pointer-events-none opacity-40 dark:opacity-50 transition-opacity duration-700"
         style={{
@@ -490,7 +420,10 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
       <div className="relative z-10 flex flex-col sm:flex-row items-center justify-between gap-4 mb-6 border-b border-slate-100 dark:border-slate-800/80 pb-4">
         <div className="text-right">
           <div className="flex items-center gap-2 mb-1">
-            <span className="w-2.5 h-2.5 rounded-full animate-ping" style={{ backgroundColor: activeDomain.themeColor }} />
+            <span
+              className="w-2.5 h-2.5 rounded-full motion-safe:animate-ping"
+              style={{ backgroundColor: activeDomain.themeColor }}
+            />
             <span className="text-xs font-black tracking-wider text-[#0B6E72] dark:text-cyan-400">
               العجلة التفاعلية المتكاملة (Interactive Life Wheel)
             </span>
@@ -503,14 +436,14 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
           </p>
         </div>
 
-        {/* Playful Controls Bar */}
+        {/* Playful Controls Bar - A4: Button hints match RTL orientation */}
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             type="button"
             onClick={handlePrev}
             className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F8FAFA] dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:border-[#0B6E72] dark:hover:border-cyan-400 hover:text-[#0B6E72] dark:hover:text-cyan-300 transition-all shadow-xs active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0c1827]"
             title="البُعد السابق (سهم يمين)"
-            aria-label="الانتقال إلى البُعد السابق"
+            aria-label="الانتقال إلى البُعد السابق (سهم يمين)"
           >
             <ChevronRight className="w-4 h-4" />
           </button>
@@ -523,7 +456,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
             title="تدوير عشوائي تفاعلي (Spin & Explore)"
             aria-label={isSpinning ? 'جاري دوران عجلة الحياة...' : 'تدوير عشوائي تفاعلي لعجلة الحياة'}
           >
-            <Sparkles className={`w-3.5 h-3.5 ${isSpinning ? 'animate-spin' : ''}`} />
+            <Sparkles className={`w-3.5 h-3.5 ${isSpinning ? 'motion-safe:animate-spin' : ''}`} />
             <span>{isSpinning ? 'جاري الدوران...' : 'استكشف عشوائياً'}</span>
           </button>
 
@@ -532,7 +465,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
             onClick={handleNext}
             className="p-2 sm:p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-[#F8FAFA] dark:bg-slate-800/90 text-slate-700 dark:text-slate-200 hover:border-[#0B6E72] dark:hover:border-cyan-400 hover:text-[#0B6E72] dark:hover:text-cyan-300 transition-all shadow-xs active:scale-95 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0c1827]"
             title="البُعد التالي (سهم يسار)"
-            aria-label="الانتقال إلى البُعد التالي"
+            aria-label="الانتقال إلى البُعد التالي (سهم يسار)"
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
@@ -549,25 +482,24 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
               className="w-3.5 h-3.5 rotate-45 rounded-xs transition-colors duration-300 shadow-md border-2 border-white dark:border-[#0c1827]"
               style={{ backgroundColor: activeDomain.themeColor }}
             />
-            <span className="text-[10px] font-black mt-1 px-2 py-0.5 rounded-full bg-slate-900/90 dark:bg-white text-white dark:text-slate-900 shadow-xs">
+            {/* B3: Raised font size from text-[10px] to text-xs */}
+            <span className="text-xs font-black mt-1 px-2.5 py-0.5 rounded-full bg-slate-900/90 dark:bg-white text-white dark:text-slate-900 shadow-xs">
               البُعد المختار
             </span>
           </div>
 
           {/* SVG Container with touch-action: pan-y to NEVER block vertical page scrolling */}
           <div className="relative w-full max-w-[420px] aspect-square flex items-center justify-center">
-            {/* Concentric Decorative Rings */}
+            {/* Concentric Decorative Rings - B2: motion-safe:animate-spin */}
             <div
-              className="absolute inset-0 rounded-full border border-dashed border-slate-200/80 dark:border-slate-700/60 pointer-events-none animate-spin"
+              className="absolute inset-0 rounded-full border border-dashed border-slate-200/80 dark:border-slate-700/60 pointer-events-none motion-safe:animate-spin"
               style={{ animationDuration: '90s' }}
             />
-            <div
-              className="absolute inset-4 rounded-full border border-slate-200/50 dark:border-slate-800/60 pointer-events-none"
-            />
+            <div className="absolute inset-4 rounded-full border border-slate-200/50 dark:border-slate-800/60 pointer-events-none" />
 
             <svg
               ref={svgRef}
-              viewBox={`0 0 ${size} ${size}`}
+              viewBox={`0 0 ${WHEEL_SIZE} ${WHEEL_SIZE}`}
               className="w-full h-full cursor-grab active:cursor-grabbing touch-pan-y select-none"
               style={{
                 touchAction: 'pan-y', // Scroll-safe guarantee on mobile & touch displays
@@ -578,7 +510,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
               onPointerCancel={handlePointerUp}
             >
               <defs>
-                {/* Dynamic Gradients for all 8 segments */}
+                {/* Dynamic Gradients with WCAG 2.2 AA compliant contrast */}
                 {WHEEL_DOMAINS.map((domain) => (
                   <linearGradient
                     key={`grad_${domain.id}`}
@@ -600,47 +532,58 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                 </filter>
               </defs>
 
-              {/* Rotatable Group containing all 8 segments and labels */}
+              {/* B3: Wheel group as single roving tabindex radiogroup */}
               <g
-                transform={`rotate(${rotationAngle} ${center} ${center})`}
-                style={{
-                  transition: isDragging ? 'none' : 'transform 0.05s ease-out',
+                role="radiogroup"
+                aria-label="أبعاد عجلة الحياة الثمانية"
+                aria-activedescendant={`wheel-segment-${activeDomain.id}`}
+                tabIndex={0}
+                onKeyDown={handleKeyDown}
+                onFocus={() => {
+                  if (focusedIndex === null) setFocusedIndex(selectedIndex);
                 }}
+                onBlur={() => setFocusedIndex(null)}
+                transform={`rotate(${rotationAngle} ${WHEEL_CENTER} ${WHEEL_CENTER})`}
+                className="outline-none focus-visible:outline-none"
               >
-                {segments.map(({ domain, index, path, iconPos, labelPos, textRot, midAngle }) => {
+                {WHEEL_SEGMENTS.map(({ domain, index, path, iconPos, labelPos }) => {
                   const isSelected = index === selectedIndex;
                   const isFocused = index === focusedIndex;
 
                   return (
                     <g
                       key={domain.id}
+                      id={`wheel-segment-${domain.id}`}
+                      role="radio"
+                      aria-checked={isSelected}
+                      aria-label={`${domain.title} (${domain.advisorName})`}
+                      tabIndex={-1}
                       onClick={() => rotateToIndex(index)}
-                      className="cursor-pointer transition-transform duration-300 group outline-none focus:outline-none"
-                      tabIndex={0}
-                      role="button"
-                      aria-pressed={isSelected}
-                      aria-label={`${domain.title} (${domain.advisorName}) - اضغط للتحديد والتدوير`}
-                      onFocus={() => setFocusedIndex(index)}
-                      onBlur={() => setFocusedIndex(null)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          rotateToIndex(index);
-                        }
-                      }}
+                      className="cursor-pointer transition-transform duration-300 group outline-none"
                     >
-                      {/* Segment Arc Wedge */}
+                      {/* Segment Arc Wedge - B1: Full opacity, distinct stroke & glow */}
                       <path
                         d={path}
                         fill={`url(#grad_${domain.id})`}
-                        stroke={isFocused ? (isDark ? '#22D3EE' : '#0B6E72') : (isDark ? '#0c1827' : '#FFFFFF')}
-                        strokeWidth={isFocused ? '4.5' : (isSelected ? '4' : '2')}
-                        opacity={isSelected ? 1 : (isFocused ? 0.95 : 0.82)}
+                        stroke={
+                          isFocused
+                            ? isDark
+                              ? '#22D3EE'
+                              : '#0B6E72'
+                            : isSelected
+                            ? isDark
+                              ? '#38BDF8'
+                              : '#FFFFFF'
+                            : isDark
+                            ? '#0c1827'
+                            : '#FFFFFF'
+                        }
+                        strokeWidth={isSelected ? '4.5' : isFocused ? '3.5' : '2'}
                         filter={isSelected ? 'url(#activeGlow)' : undefined}
-                        className="transition-all duration-300 hover:opacity-100 hover:brightness-105"
+                        className="transition-all duration-300 hover:brightness-110"
                       />
 
-                      {/* Segment Emoji / Icon */}
+                      {/* Segment Emoji / Icon - A6: Counter-rotate around own position so it stays upright */}
                       <text
                         x={iconPos.x}
                         y={iconPos.y}
@@ -648,21 +591,24 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                         dominantBaseline="central"
                         fontSize={isSelected ? '24' : '20'}
                         className="select-none pointer-events-none transition-all duration-300"
-                        transform={`rotate(${isSelected ? 0 : 0} ${iconPos.x} ${iconPos.y})`}
+                        transform={`rotate(${-rotationAngle} ${iconPos.x} ${iconPos.y})`}
+                        aria-hidden="true"
                       >
                         {domain.avatarSvg}
                       </text>
 
-                      {/* Pure Arabic Domain Label */}
+                      {/* Pure Arabic Domain Label - A6: Counter-rotate around own position so it stays horizontal */}
                       <g
-                        transform={`translate(${labelPos.x}, ${labelPos.y}) rotate(${textRot - midAngle})`}
+                        transform={`translate(${labelPos.x}, ${labelPos.y}) rotate(${-rotationAngle})`}
                         className="pointer-events-none"
                       >
                         <text
+                          x={0}
+                          y={0}
                           textAnchor="middle"
                           dominantBaseline="central"
                           fill="#FFFFFF"
-                          className="font-['Tajawal',sans-serif] font-black select-none text-[12px] sm:text-[13px] drop-shadow-md"
+                          className="font-['Tajawal',sans-serif] font-black select-none text-xs sm:text-[13px] drop-shadow-md"
                           style={{
                             fontWeight: 900,
                             letterSpacing: '0.01em',
@@ -692,41 +638,42 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                   }
                 }}
               >
-                {/* Center Outer Border Ring */}
+                {/* Center Outer Border Ring - C4: removed shadow-lg */}
                 <circle
-                  cx={center}
-                  cy={center}
-                  r={rInner - 2}
+                  cx={WHEEL_CENTER}
+                  cy={WHEEL_CENTER}
+                  r={R_INNER - 2}
                   fill={isDark ? '#0c1827' : '#FFFFFF'}
-                  stroke={isCenterFocused ? (isDark ? '#22D3EE' : '#0B6E72') : activeDomain.themeColor}
+                  stroke={isCenterFocused ? (isDark ? '#22D3EE' : '#0B6E72') : getAccentColor(activeDomain)}
                   strokeWidth={isCenterFocused ? '5' : '3.5'}
-                  className="transition-all duration-300 shadow-lg"
+                  className="transition-all duration-300"
                 />
 
                 {/* Inner Subtle Radial Glow */}
                 <circle
-                  cx={center}
-                  cy={center}
-                  r={rInner - 12}
+                  cx={WHEEL_CENTER}
+                  cy={WHEEL_CENTER}
+                  r={R_INNER - 12}
                   fill={isDark ? '#11202f' : '#F4F8F7'}
                   className="transition-colors duration-300"
                 />
 
                 {/* Center Arabic Text Hierarchy */}
                 <text
-                  x={center}
-                  y={center - 18}
+                  x={WHEEL_CENTER}
+                  y={WHEEL_CENTER - 18}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fontSize="22"
                   className="select-none"
+                  aria-hidden="true"
                 >
                   ⚖️
                 </text>
 
                 <text
-                  x={center}
-                  y={center + 6}
+                  x={WHEEL_CENTER}
+                  y={WHEEL_CENTER + 6}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fill={isDark ? '#F8FAFC' : '#0F172A'}
@@ -736,13 +683,15 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                   عجلة الحياة
                 </text>
 
+                {/* B1 & B3: strongColor in Light mode, fontSize="12" (text-xs) */}
                 <text
-                  x={center}
-                  y={center + 24}
+                  x={WHEEL_CENTER}
+                  y={WHEEL_CENTER + 24}
                   textAnchor="middle"
                   dominantBaseline="central"
-                  fill={activeDomain.themeColor}
-                  className="font-['Tajawal',sans-serif] font-bold text-[11px] select-none"
+                  fill={getAccentColor(activeDomain)}
+                  className="font-['Tajawal',sans-serif] font-bold select-none"
+                  fontSize="12"
                   style={{ fontWeight: 800 }}
                 >
                   توازن متناغم
@@ -751,18 +700,19 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
             </svg>
           </div>
 
-          <span className="text-[11px] text-[#475569] dark:text-[#94A3B8] mt-3 font-semibold flex items-center gap-1.5">
+          {/* B3: Raised font size from text-[11px] to text-xs */}
+          <span className="text-xs text-[#475569] dark:text-[#94A3B8] mt-3 font-semibold flex items-center gap-1.5">
             <Compass className="w-3.5 h-3.5 text-[#0B6E72] dark:text-cyan-400" />
             <span>يمكنك سحب العجلة دائرياً للتنقل، أو النقر على أي بُعد لتحديده</span>
           </span>
         </div>
 
-        {/* Selected Domain Showcase Card (5 Cols on desktop) */}
-        <div className="lg:col-span-5 space-y-4">
+        {/* Selected Domain Showcase Card - B3: aria-live="polite" */}
+        <div className="lg:col-span-5 space-y-4" aria-live="polite" aria-atomic="true">
           <div
             className="rounded-3xl p-6 border transition-all duration-300 shadow-sm relative overflow-hidden bg-white dark:bg-[#0c1827]"
             style={{
-              borderColor: `${activeDomain.themeColor}40`,
+              borderColor: `${getAccentColor(activeDomain)}40`,
               boxShadow: `0 10px 30px -10px ${activeDomain.glowColor}`,
             }}
           >
@@ -771,20 +721,22 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
               <div className="flex items-center gap-2">
                 <div
                   className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5 dark:border-white/10"
-                  style={{ backgroundColor: `${activeDomain.themeColor}15` }}
+                  style={{ backgroundColor: `${getAccentColor(activeDomain)}15` }}
+                  aria-hidden="true"
                 >
                   {activeDomain.avatarSvg}
                 </div>
                 <div>
+                  {/* B1 & B3: strongColor in Light mode, text-xs */}
                   <span
-                    className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border"
+                    className="text-xs font-extrabold px-2.5 py-0.5 rounded-full border inline-block"
                     style={{
-                      color: activeDomain.themeColor,
-                      borderColor: `${activeDomain.themeColor}35`,
-                      backgroundColor: `${activeDomain.themeColor}10`,
+                      color: getAccentColor(activeDomain),
+                      borderColor: `${getAccentColor(activeDomain)}35`,
+                      backgroundColor: `${getAccentColor(activeDomain)}10`,
                     }}
                   >
-                    البُعد {selectedIndex + 1} من 8
+                    البُعد {selectedIndex + 1} من {TOTAL_DOMAINS}
                   </span>
                   <h4 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white mt-0.5">
                     {activeDomain.title}
@@ -792,26 +744,34 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                 </div>
               </div>
 
+              {/* B2: motion-safe:animate-pulse */}
               <div
-                className="w-3 h-3 rounded-full animate-pulse"
-                style={{ backgroundColor: activeDomain.themeColor }}
+                className="w-3 h-3 rounded-full motion-safe:animate-pulse"
+                style={{ backgroundColor: getAccentColor(activeDomain) }}
+                aria-hidden="true"
               />
             </div>
 
-            {/* Advisor Role */}
+            {/* Advisor Role - B3: text-xs */}
             <div className="p-3 rounded-2xl bg-[#F8FAFA] dark:bg-slate-900/80 border border-slate-100 dark:border-slate-800 text-xs mb-3 space-y-0.5">
-              <span className="text-[10px] font-extrabold text-[#475569] dark:text-[#94A3B8] block">المستشار المخصص:</span>
+              <span className="text-xs font-extrabold text-[#475569] dark:text-[#94A3B8] block">المستشار المخصص:</span>
               <p className="font-black text-[#0F172A] dark:text-slate-200">
                 {activeDomain.advisorName}
               </p>
-              <p className="text-[11px] text-[#0B6E72] dark:text-cyan-400 font-semibold">
+              <p
+                className="text-xs font-semibold"
+                style={{ color: getAccentColor(activeDomain) }}
+              >
                 {activeDomain.advisorRole}
               </p>
             </div>
 
-            {/* Core Contribution to Holistic Balance */}
+            {/* Core Contribution to Holistic Balance - B3: text-xs */}
             <div className="space-y-1.5 mb-4 text-right">
-              <span className="text-[11px] font-extrabold text-[#0B6E72] dark:text-cyan-400 block">
+              <span
+                className="text-xs font-extrabold block"
+                style={{ color: getAccentColor(activeDomain) }}
+              >
                 أثره في التوازن الشامل:
               </span>
               <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-300 leading-relaxed font-normal">
@@ -819,38 +779,38 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
               </p>
             </div>
 
-            {/* Keystone Habit */}
+            {/* Keystone Habit - B3: text-xs */}
             <div className="p-3 rounded-2xl border border-emerald-200/80 dark:border-emerald-900/40 bg-emerald-50/70 dark:bg-emerald-950/30 text-xs text-emerald-950 dark:text-emerald-200 flex items-start gap-2 mb-5">
               <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
               <div>
-                <strong className="block text-[11px] font-black text-emerald-800 dark:text-emerald-300 mb-0.5">
+                <strong className="block text-xs font-black text-emerald-800 dark:text-emerald-300 mb-0.5">
                   العادة المحورية المقترحة:
                 </strong>
-                <span className="text-[11.5px] leading-relaxed font-medium">
+                <span className="text-xs leading-relaxed font-medium">
                   {activeDomain.keystoneHabit}
                 </span>
               </div>
             </div>
 
-            {/* Action CTA: Enter Login / Evaluation */}
+            {/* Action CTA: Enter Login / Evaluation - B1: strongColor with white text */}
             {onNavigateToAuth ? (
               <button
                 type="button"
                 onClick={() => onNavigateToAuth('login')}
                 className="w-full py-3 px-4 rounded-2xl text-white text-xs font-black transition-all shadow-md flex items-center justify-center gap-2 hover:opacity-95 active:scale-[0.99] cursor-pointer"
-                style={{ backgroundColor: activeDomain.themeColor }}
+                style={{ backgroundColor: activeDomain.strongColor }}
               >
                 <span>ابدأ تشخيص وتقييم هذا البُعد</span>
                 <ArrowLeft className="w-4 h-4" />
               </button>
             ) : (
-              <div className="text-center text-[11px] text-[#475569] dark:text-[#94A3B8] font-bold">
+              <div className="text-center text-xs text-[#475569] dark:text-[#94A3B8] font-bold">
                 تكامل هذا البُعد مع الأبعاد السبعة الأخرى يصنع عجلة حياة تدور بثقة وسلام
               </div>
             )}
           </div>
 
-          {/* Quick Domain Indicator Pills */}
+          {/* Quick Domain Indicator Pills - B3: text-xs, B1: getAccentColor */}
           <div className="grid grid-cols-4 gap-1.5" role="group" aria-label="أبعاد عجلة الحياة الثمانية">
             {WHEEL_DOMAINS.map((domain, idx) => {
               const isItemActive = idx === selectedIndex;
@@ -864,13 +824,13 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
                   className={`p-2 rounded-xl text-center border transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0c1827] ${
                     isItemActive
                       ? 'border-[#0B6E72] dark:border-cyan-400 bg-white dark:bg-slate-800 shadow-xs'
-                      : 'border-slate-200/70 dark:border-slate-800 bg-[#F8FAFA] dark:bg-slate-900/60 opacity-75 hover:opacity-100'
+                      : 'border-slate-200/70 dark:border-slate-800 bg-[#F8FAFA] dark:bg-slate-900/60 opacity-85 hover:opacity-100'
                   }`}
                 >
-                  <span className="text-base block">{domain.avatarSvg}</span>
+                  <span className="text-base block" aria-hidden="true">{domain.avatarSvg}</span>
                   <span
-                    className="text-[9.5px] font-black truncate block mt-0.5"
-                    style={{ color: isItemActive ? domain.themeColor : undefined }}
+                    className="text-xs font-black truncate block mt-0.5"
+                    style={{ color: isItemActive ? getAccentColor(domain) : undefined }}
                   >
                     {domain.name.replace('الجانب ', '')}
                   </span>
