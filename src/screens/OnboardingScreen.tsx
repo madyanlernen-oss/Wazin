@@ -45,6 +45,7 @@ interface OnboardingScreenProps {
   completedDates?: Record<string, number>;
   onNavigateToDashboard: () => void;
   onNavigateToAdvisorChat?: (advisorId: LifeAreaId) => void;
+  theme?: 'light' | 'dark';
 }
 
 // Helper: Local client intelligence engine for all advisors (for offline, static hosting, or API fallback)
@@ -285,6 +286,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   completedDates,
   onNavigateToDashboard,
   onNavigateToAdvisorChat,
+  theme: _theme = 'light',
 }) => {
   const [currentAdvisorIndex, setCurrentAdvisorIndex] = useState(() => {
     const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
@@ -661,10 +663,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   }, [currentAdvisor]);
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-5 bg-[#FAF7F2]">
+    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-5 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
       {/* All 8 Domains Completed Milestone Banner */}
       {isAllCompleted && (
-        <div className="bg-gradient-to-r from-emerald-900 to-[#1b605b] text-white rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-300 border border-emerald-400/20">
+        <div className="bg-gradient-to-r from-[#0F6E6E] to-[#0A4B4B] dark:from-[#0E1D24] dark:to-[#16333F] text-white rounded-3xl p-5 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-4 animate-in fade-in duration-300 border border-teal-500/30 dark:border-[#1E343F] transition-colors">
           <div className="flex items-center gap-3 text-right">
             <div className="w-12 h-12 rounded-2xl bg-white/10 flex items-center justify-center text-2xl flex-shrink-0">
               🌟
@@ -684,7 +686,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           <button
             type="button"
             onClick={onNavigateToDashboard}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-white hover:bg-emerald-50 text-[#1b605b] font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 flex-shrink-0 cursor-pointer"
+            className="w-full sm:w-auto px-5 py-2.5 rounded-2xl bg-white hover:bg-slate-50 text-[#0F6E6E] dark:bg-[#22D3EE] dark:hover:bg-cyan-300 dark:text-[#071318] font-black text-xs transition-all shadow-md flex items-center justify-center gap-2 flex-shrink-0 cursor-pointer"
           >
             <span>استعراض خريطتي ولوحة التحكم</span>
             <ArrowLeft className="w-4 h-4" />
@@ -693,19 +695,19 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       )}
 
       {/* Top Advisor Selector Tabs */}
-      <div className="bg-white border border-[#eae3d5] rounded-2xl p-4 shadow-xs">
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-4 shadow-xs transition-colors">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-[#536561]">جلسات التقييم الأسبوعي:</span>
-            <span className="text-xs font-black text-[#1b605b]">
+            <span className="text-xs font-bold text-[#475569] dark:text-[#94A3B8]">جلسات التقييم الأسبوعي:</span>
+            <span className="text-xs font-black text-[#0F6E6E] dark:text-[#22D3EE]">
               {currentAdvisor.title}
             </span>
           </div>
-          <div className="flex items-center gap-2 text-[11px] font-semibold text-[#7a8c88]">
+          <div className="flex items-center gap-2 text-[11px] font-semibold text-[#475569] dark:text-[#94A3B8]">
             <span>المكتمل: {completedAdvisors.length} من 8</span>
-            <div className="w-20 h-2 bg-[#eae3d5] rounded-full overflow-hidden">
+            <div className="w-20 h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
               <div
-                className="h-full bg-emerald-600 transition-all duration-300"
+                className="h-full bg-[#0F6E6E] dark:bg-[#22D3EE] transition-all duration-300"
                 style={{ width: `${(completedAdvisors.length / 8) * 100}%` }}
               />
             </div>
@@ -727,16 +729,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 }}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition-all border ${
                   isCurrent
-                    ? 'bg-[#1b605b] text-white shadow-xs'
+                    ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-[#0F6E6E] dark:border-[#0891B2] shadow-xs'
                     : isAdvCompleted
-                    ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
-                    : 'bg-[#FAF7F2] text-[#536561] border-[#eae3d5] hover:text-[#1d2e2b]'
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/60'
+                    : 'bg-[#F7F6F2] dark:bg-[#0B161C] text-[#475569] dark:text-[#94A3B8] border-[#E2E8F0] dark:border-[#1E343F] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
                 }`}
-                style={isCurrent ? { borderColor: '#1b605b' } : {}}
               >
                 <span>{advisor.avatarSvg}</span>
                 <span>{advisor.title}</span>
-                {isAdvCompleted && <Check className="w-3.5 h-3.5 text-emerald-600" />}
+                {isAdvCompleted && <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />}
               </button>
             );
           })}
@@ -744,9 +745,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       </div>
 
       {/* Main Chat Interface (Clean AI Clinic Window) */}
-      <div className="bg-white border border-[#eae3d5] rounded-3xl overflow-hidden shadow-xs flex flex-col h-[680px]">
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl overflow-hidden shadow-xs flex flex-col h-[680px] transition-colors">
         {/* Advisor Header Bar */}
-        <div className="px-6 py-4 border-b border-[#f0eae0] flex items-center justify-between bg-white flex-shrink-0">
+        <div className="px-6 py-4 border-b border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between bg-white dark:bg-[#0E1D24] flex-shrink-0 transition-colors">
           <div className="flex items-center gap-3">
             <div
               className="w-11 h-11 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5 relative"
@@ -754,13 +755,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             >
               {currentAdvisor.avatarSvg}
               <span
-                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white"
+                className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white dark:border-[#0E1D24]"
                 style={{ backgroundColor: currentAdvisor.themeColor }}
               />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base font-black text-[#1d2e2b]">
+                <h2 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">
                   {currentAdvisor.name}
                 </h2>
                 <span
@@ -774,26 +775,26 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   {currentAdvisor.badge}
                 </span>
                 {isCompleted && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-200">
-                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700" />
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-700 dark:text-emerald-400" />
                     تم التقييم بنجاح
                   </span>
                 )}
               </div>
-              <p className="text-xs text-[#536561] mt-0.5">{currentAdvisor.role}</p>
+              <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">{currentAdvisor.role}</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             {/* Clinic Mode Toggle (Evaluation 8 Stations vs Free Direct Consultation) */}
-            <div className="flex items-center gap-1 p-0.5 bg-[#f0eae0] rounded-xl border border-[#ded7c8]">
+            <div className="flex items-center gap-1 p-0.5 bg-[#F7F6F2] dark:bg-[#071318] rounded-xl border border-[#E2E8F0] dark:border-[#1E343F]">
               <button
                 type="button"
                 onClick={() => setClinicMode('evaluation')}
                 className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                   clinicMode === 'evaluation'
-                    ? 'bg-white text-[#1b605b] shadow-xs'
-                    : 'text-[#697c77] hover:text-[#1d2e2b]'
+                    ? 'bg-white dark:bg-[#0E1D24] text-[#0F6E6E] dark:text-[#22D3EE] shadow-xs border border-slate-200/80 dark:border-[#1E343F]'
+                    : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
                 }`}
                 title="تقييم إكلينيكي منظم عبر 8 محطات"
               >
@@ -804,8 +805,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 onClick={() => setClinicMode('free_chat')}
                 className={`px-2 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                   clinicMode === 'free_chat'
-                    ? 'bg-[#1b605b] text-white shadow-xs'
-                    : 'text-[#697c77] hover:text-[#1d2e2b]'
+                    ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs'
+                    : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
                 }`}
                 title="حوار حر واستشارة مباشرة بدون قيود"
               >
@@ -835,10 +836,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               {showModeDropdown && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowModeDropdown(false)} />
-                  <div className="absolute left-0 mt-2 w-72 bg-white rounded-2xl border border-[#ded7c8] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                    <div className="px-3 py-1.5 border-b border-[#f0eae0] mb-1">
-                      <span className="text-[11px] font-black text-[#1d2e2b] block">مستوى تفكير الذكاء الاصطناعي</span>
-                      <span className="text-[9px] text-[#7a8c88]">اختر سرعة وعمق التحليل أثناء الحوار</span>
+                  <div className="absolute left-0 mt-2 w-72 bg-white dark:bg-[#0E1D24] rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="px-3 py-1.5 border-b border-[#E2E8F0] dark:border-[#1E343F] mb-1">
+                      <span className="text-[11px] font-black text-[#0F172A] dark:text-[#F1F5F9] block">مستوى تفكير الذكاء الاصطناعي</span>
+                      <span className="text-[9px] text-[#475569] dark:text-[#94A3B8]">اختر سرعة وعمق التحليل أثناء الحوار</span>
                     </div>
 
                     <div className="space-y-1">
@@ -855,8 +856,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                             }}
                             className={`w-full text-right p-2 rounded-xl transition-all flex items-start gap-2 border ${
                               isSelected
-                                ? 'border-[#1b605b] shadow-xs'
-                                : 'border-transparent hover:bg-[#FAF7F2]'
+                                ? 'border-[#0F6E6E] dark:border-[#22D3EE] shadow-xs'
+                                : 'border-transparent hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
                             }`}
                             style={isSelected ? { backgroundColor: mode.bgColor } : {}}
                           >
@@ -868,7 +869,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                             </div>
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
-                                <span className="text-xs font-black text-[#1d2e2b]">{mode.title}</span>
+                                <span className="text-xs font-black text-[#0F172A] dark:text-[#F1F5F9]">{mode.title}</span>
                                 <span
                                   className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
                                   style={{ backgroundColor: `${mode.color}20`, color: mode.color }}
@@ -876,9 +877,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                                   {mode.badge}
                                 </span>
                               </div>
-                              <p className="text-[10px] text-[#536561] leading-tight mt-0.5">{mode.desc}</p>
+                              <p className="text-[10px] text-[#475569] dark:text-[#94A3B8] leading-tight mt-0.5">{mode.desc}</p>
                             </div>
-                            {isSelected && <Check className="w-4 h-4 text-[#1b605b] flex-shrink-0 mt-1" />}
+                            {isSelected && <Check className="w-4 h-4 text-[#0F6E6E] dark:text-[#22D3EE] flex-shrink-0 mt-1" />}
                           </button>
                         );
                       })}
@@ -893,7 +894,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               <button
                 type="button"
                 onClick={handleFinishCurrentAdvisor}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
                 title="اعتماد النتيجة الفورية وإقفال الجلسة"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
@@ -905,42 +906,42 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         {/* Assessment Progress Bar OR Free Consultation Bar */}
         {clinicMode === 'evaluation' ? (
-          <div className="px-6 py-2 bg-[#FAF7F2] border-b border-[#f0eae0] flex items-center justify-between gap-4 text-xs flex-shrink-0">
+          <div className="px-6 py-2 bg-[#F7F6F2] dark:bg-[#0B161C] border-b border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between gap-4 text-xs flex-shrink-0 transition-colors">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="font-black text-[#1b605b] text-[11px] sm:text-xs flex-shrink-0">
+              <span className="font-black text-[#0F6E6E] dark:text-[#22D3EE] text-[11px] sm:text-xs flex-shrink-0">
                 {currentStep < totalQuestions ? `المحطة (${currentStep + 1} من ${totalQuestions})` : 'اكتملت الأسئلة الـ 8 بنجاح ✨'}
               </span>
-              <span className="text-[11px] text-[#536561] hidden sm:inline truncate">
+              <span className="text-[11px] text-[#475569] dark:text-[#94A3B8] hidden sm:inline truncate">
                 {currentStep < totalQuestions ? currentQuestion?.title : 'تم رصد واعتماد النتيجة الموثقة'}
               </span>
             </div>
             <div className="flex items-center gap-2 flex-shrink-0">
-              <div className="w-24 sm:w-36 bg-[#eae3d5] h-2 rounded-full overflow-hidden">
+              <div className="w-24 sm:w-36 bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                 <div
-                  className="bg-[#1b605b] h-full rounded-full transition-all duration-300"
+                  className="bg-[#0F6E6E] dark:bg-[#22D3EE] h-full rounded-full transition-all duration-300"
                   style={{ width: `${Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%` }}
                 />
               </div>
-              <span className="text-[10px] font-bold text-[#536561]">
+              <span className="text-[10px] font-bold text-[#475569] dark:text-[#94A3B8]">
                 {Math.min(100, Math.round(((isCompleted ? totalQuestions : currentStep) / totalQuestions) * 100))}%
               </span>
             </div>
           </div>
         ) : (
-          <div className="px-6 py-2 bg-emerald-50/80 border-b border-emerald-100 flex items-center justify-between gap-4 text-xs flex-shrink-0">
+          <div className="px-6 py-2 bg-emerald-50/80 dark:bg-emerald-950/30 border-b border-emerald-100 dark:border-emerald-900/40 flex items-center justify-between gap-4 text-xs flex-shrink-0 transition-colors">
             <div className="flex items-center gap-2 min-w-0">
-              <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse flex-shrink-0" />
-              <span className="font-bold text-emerald-950 text-xs flex-shrink-0">
+              <span className="w-2 h-2 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse flex-shrink-0" />
+              <span className="font-bold text-emerald-950 dark:text-emerald-300 text-xs flex-shrink-0">
                 وضع الحوار والاستشارة الحرة مع {currentAdvisor.name} 🌿
               </span>
-              <span className="text-[11px] text-emerald-800 hidden sm:inline truncate">
+              <span className="text-[11px] text-emerald-800 dark:text-emerald-400 hidden sm:inline truncate">
                 تفاعل مباشر وإنساني يجيب على أي سؤال أو مشاعر تشاركها دون قيود
               </span>
             </div>
             <button
               type="button"
               onClick={() => setClinicMode('evaluation')}
-              className="text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline flex-shrink-0 cursor-pointer"
+              className="text-[11px] font-bold text-emerald-800 dark:text-emerald-300 hover:text-emerald-950 dark:hover:text-emerald-200 underline flex-shrink-0 cursor-pointer"
             >
               العودة للتقييم الأسبوعي
             </button>
@@ -948,7 +949,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         )}
 
         {/* Messages Stream */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#fcfbfa]">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#F7F6F2]/60 dark:bg-[#071318]/90 transition-colors">
           {activeConversation.map((msg) => {
             const isAdvisor = msg.sender === 'advisor';
             return (
@@ -958,7 +959,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               >
                 <div
                   className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 border shadow-xs ${
-                    isAdvisor ? 'border-black/5' : 'bg-[#1b605b] text-white border-transparent'
+                    isAdvisor ? 'border-black/5 dark:border-white/10' : 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-transparent'
                   }`}
                   style={isAdvisor ? { backgroundColor: `${currentAdvisor.themeColor}20` } : {}}
                 >
@@ -974,14 +975,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <div
                     className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed shadow-xs whitespace-pre-line border ${
                       isAdvisor
-                        ? 'bg-white border-[#eae3d5] text-[#1d2e2b] rounded-tr-xs'
-                        : 'bg-[#1b605b] border-transparent text-white rounded-tl-xs'
+                        ? 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] text-[#0F172A] dark:text-[#F1F5F9] rounded-tr-xs'
+                        : 'bg-[#0F6E6E] dark:bg-[#0891B2] border-transparent text-white rounded-tl-xs'
                     }`}
                   >
                     <p>{msg.text}</p>
                     <span
                       className={`block text-[10px] mt-1.5 font-medium ${
-                        isAdvisor ? 'text-[#8a9995]' : 'text-emerald-100/75'
+                        isAdvisor ? 'text-[#64748B] dark:text-[#94A3B8]' : 'text-emerald-100/75'
                       }`}
                     >
                       {msg.timestamp}
@@ -1000,8 +1001,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               >
                 {currentAdvisor.avatarSvg}
               </div>
-              <div className="p-3 rounded-2xl bg-white border border-[#eae3d5] text-xs text-[#536561] flex items-center gap-2">
-                <Sparkles className="w-3.5 h-3.5 text-[#bd9240] animate-spin" />
+              <div className="p-3 rounded-2xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#475569] dark:text-[#94A3B8] flex items-center gap-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE] animate-spin" />
                 <span>{currentAdvisor.name} يستمع إليك ويصيغ توجيهه الطبي بعناية...</span>
               </div>
             </div>
@@ -1012,13 +1013,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         {/* Completion Status Bar when evaluated (Open Mode enabled) */}
         {isCompleted && (
-          <div className="px-4 py-2.5 bg-emerald-50/90 border-t border-emerald-200/90 flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+          <div className="px-4 py-2.5 bg-emerald-50/90 dark:bg-emerald-950/40 border-t border-emerald-200/90 dark:border-emerald-900/50 flex flex-wrap items-center justify-between gap-2 flex-shrink-0 transition-colors">
             <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-pulse" />
-              <span className="text-xs font-black text-emerald-950">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" />
+              <span className="text-xs font-black text-emerald-950 dark:text-emerald-300">
                 تم رصد تقييم هذا الجانب ({currentAdvisorScore > 0 ? currentAdvisorScore : 7}/10)
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 text-emerald-900">
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200">
                 الوضع المفتوح مفعل 🔓
               </span>
             </div>
@@ -1026,7 +1027,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               <button
                 type="button"
                 onClick={handleResetCurrentAdvisor}
-                className="px-2.5 py-1 rounded-xl bg-white border border-emerald-300 hover:bg-emerald-100 text-emerald-900 text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                className="px-2.5 py-1 rounded-xl bg-white dark:bg-[#0E1D24] border border-emerald-300 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-[#162734] text-emerald-900 dark:text-emerald-300 text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
                 title="إعادة بدء التقييم الإكلينيكي لهذا المستشار"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
@@ -1036,7 +1037,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 <button
                   type="button"
                   onClick={() => onNavigateToAdvisorChat(currentAdvisor.id)}
-                  className="px-2.5 py-1 rounded-xl bg-[#1b605b] hover:bg-[#164e4a] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                  className="px-2.5 py-1 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span>غرفة الاستشارة</span>
@@ -1045,7 +1046,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               <button
                 type="button"
                 onClick={handleGoToNextAdvisor}
-                className="px-3 py-1 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1 cursor-pointer"
               >
                 <span>الجانب التالي</span>
                 <ArrowLeft className="w-3.5 h-3.5" />
@@ -1057,10 +1058,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* ACTIVE CLINIC INPUT BAR (Always Open for Testing and Continuous Conversation) */}
         <>
           {/* Quick Choices bar dynamically adapting to current question type */}
-          <div className="px-4 py-2.5 bg-[#FAF7F2] border-t border-[#f0eae0] flex-shrink-0">
+          <div className="px-4 py-2.5 bg-[#F7F6F2] dark:bg-[#0B161C] border-t border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
             <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
-              <span className="text-[10px] font-black text-[#536561] flex items-center gap-1 flex-shrink-0">
-                <Sparkles className="w-3 h-3 text-[#bd9240]" />
+              <span className="text-[10px] font-black text-[#475569] dark:text-[#94A3B8] flex items-center gap-1 flex-shrink-0">
+                <Sparkles className="w-3 h-3 text-[#0F6E6E] dark:text-[#22D3EE]" />
                 {clinicMode === 'free_chat'
                   ? 'محاور واستفسارات مقترحة:'
                   : currentStep < totalQuestions && currentQuestion
@@ -1080,28 +1081,28 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSendAnswer('كيف أتغلب على الحزن والضيق الداخلي؟')}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                   >
                     كيف أتغلب على الحزن والضيق؟ 🌿
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSendAnswer('ما هي الخطوة الأولى لتحقيق التوازن في هذا الجانب؟')}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                   >
                     أول خطوة للتوازن 🎯
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSendAnswer('كيف أحمي طاقتي من التشتت والضغوط اليومية؟')}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                   >
                     حماية طاقتي من الضغوط 🛡️
                   </button>
                   <button
                     type="button"
                     onClick={() => handleSendAnswer('كيف حالك يا دكتور؟')}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                   >
                     كيف حالك يا دكتور؟ 👋
                   </button>
@@ -1116,7 +1117,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                       key={num}
                       type="button"
                       onClick={() => handleSendAnswer(`تقييمي: ${num} من 10`)}
-                      className="px-2.5 py-1 rounded-lg bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#1d2e2b] hover:text-[#1b605b] text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      className="px-2.5 py-1 rounded-lg bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-xs font-bold transition-all shadow-xs cursor-pointer"
                     >
                       {num}
                     </button>
@@ -1132,7 +1133,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                       key={opt.id}
                       type="button"
                       onClick={() => handleSendAnswer(opt.label)}
-                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                     >
                       {opt.label}
                     </button>
@@ -1148,7 +1149,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                       key={opt.id}
                       type="button"
                       onClick={() => handleSendAnswer(opt.label)}
-                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                     >
                       {opt.label}
                     </button>
@@ -1164,7 +1165,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                       key={idx}
                       type="button"
                       onClick={() => handleSendAnswer(ch)}
-                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                      className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                     >
                       {ch}
                     </button>
@@ -1172,7 +1173,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <button
                     type="button"
                     onClick={() => handleSendAnswer('الحمد لله، الأمور تسير بهدوء ودون عوائق كبيرة')}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white border border-[#ded7c8] hover:border-[#1b605b] text-[#2c3d39] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#FAF7F2] cursor-pointer"
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
                   >
                     الأمور مستقرة وهادئة 🌿
                   </button>
@@ -1182,7 +1183,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           </div>
 
           {/* Input Bar: Text + Mic + Send */}
-          <div className="p-3 sm:p-4 bg-white border-t border-[#f0eae0] flex-shrink-0">
+          <div className="p-3 sm:p-4 bg-white dark:bg-[#0E1D24] border-t border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -1212,7 +1213,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                         ? 'اكتب تقييمك (مثال: 8 من 10) أو اسأل المستشار أي سؤال...'
                         : 'اكتب إجابتك أو تحدث بصوتك، أو اسأل المستشار بحرية...')
                 }
-                className="flex-1 bg-[#FAF7F2] border border-[#ded7c8] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#1d2e2b] placeholder-[#8a9995] focus:outline-none focus:border-[#1b605b] focus:ring-1 focus:ring-[#1b605b] transition-all"
+                className="flex-1 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
                 dir="rtl"
               />
 
@@ -1220,22 +1221,22 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 <button
                   type="submit"
                   disabled={!inputText.trim() || isAdvisorReplying}
-                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95"
-                  style={{ backgroundColor: currentAdvisor.themeColor }}
+                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
+                  style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
                 >
                   <Send className="w-5 h-5 -rotate-90" />
                 </button>
               </form>
 
-              <div className="mt-2 flex items-center justify-between text-[11px] text-[#7a8c88] px-1">
+              <div className="mt-2 flex items-center justify-between text-[11px] text-[#475569] dark:text-[#94A3B8] px-1">
                 <span className="flex items-center gap-1">
-                  <Lightbulb className="w-3.5 h-3.5 text-[#bd9240]" />
+                  <Lightbulb className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
                   جلسة أسبوعية مركزة من خطوتين: التقييم ثم التحدي لإصدار العادة وإقفال الجانب للأسبوع.
                 </span>
                 <button
                   type="button"
                   onClick={handleFinishCurrentAdvisor}
-                  className="text-[#1b605b] hover:underline font-bold cursor-pointer"
+                  className="text-[#0F6E6E] dark:text-[#22D3EE] hover:underline font-bold cursor-pointer"
                 >
                   اعتماد وإنهاء الجلسة فوراً ✓
                 </button>
@@ -1246,43 +1247,43 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
       {/* Celebration Modal when an Advisor's evaluation completes */}
       {showCelebration && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-xs animate-fadeIn">
-          <div className="bg-white border border-[#eae3d5] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative text-center space-y-6">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative text-center space-y-6 transition-colors">
             <div
-              className="w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-4xl shadow-xs border border-black/5"
+              className="w-20 h-20 mx-auto rounded-3xl flex items-center justify-center text-4xl shadow-xs border border-black/5 dark:border-white/10"
               style={{ backgroundColor: `${currentAdvisor.themeColor}20` }}
             >
               {currentAdvisor.avatarSvg}
             </div>
 
             <div>
-              <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 text-emerald-800 border border-emerald-200">
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+              <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 اكتمل تقييم هذا الجانب بنجاح
               </div>
-              <h3 className="text-2xl font-black text-[#1d2e2b]">
+              <h3 className="text-2xl font-black text-[#0F172A] dark:text-[#F1F5F9]">
                 أحسنت! أنهيت جولة {currentAdvisor.name}
               </h3>
-              <p className="text-xs text-[#536561] mt-1">
+              <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
                 تم اعتماد نتيجتك التقديرية في {currentAdvisor.title} وحفظ توصيتك الذهبية للأسبوع
               </p>
             </div>
 
             {/* Score Showcase */}
-            <div className="bg-[#FAF7F2] border border-[#eae3d5] rounded-2xl p-4 flex items-center justify-around">
+            <div className="bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-4 flex items-center justify-around">
               <div>
-                <span className="text-[11px] text-[#7a8c88] block">درجة الجانب</span>
+                <span className="text-[11px] text-[#475569] dark:text-[#94A3B8] block">درجة الجانب</span>
                 <span
                   className="text-3xl font-black"
                   style={{ color: currentAdvisor.themeColor }}
                 >
-                  {currentAdvisorScore > 0 ? currentAdvisorScore : 7} <span className="text-base text-[#7a8c88]">/ 10</span>
+                  {currentAdvisorScore > 0 ? currentAdvisorScore : 7} <span className="text-base text-[#475569] dark:text-[#94A3B8]">/ 10</span>
                 </span>
               </div>
-              <div className="h-10 w-px bg-[#ded7c8]" />
+              <div className="h-10 w-px bg-[#E2E8F0] dark:bg-[#1E343F]" />
               <div>
-                <span className="text-[11px] text-[#7a8c88] block">المستوى التقديري</span>
-                <span className="text-sm font-extrabold text-[#1d2e2b]">
+                <span className="text-[11px] text-[#475569] dark:text-[#94A3B8] block">المستوى التقديري</span>
+                <span className="text-sm font-extrabold text-[#0F172A] dark:text-[#F1F5F9]">
                   {currentAdvisorScore >= 8
                     ? 'ممتاز ومتألق 🌟'
                     : currentAdvisorScore >= 6
@@ -1293,13 +1294,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             </div>
 
             {/* Quick Strengths and Challenges bullets */}
-            <div className="text-right space-y-3 bg-[#FAF7F2] p-4 rounded-xl border border-[#eae3d5] text-xs">
+            <div className="text-right space-y-3 bg-[#F7F6F2] dark:bg-[#071318] p-4 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] text-xs">
               <div>
-                <span className="font-bold text-emerald-700 flex items-center gap-1 mb-1">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-1 mb-1">
+                  <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   أبرز مواطن القوة:
                 </span>
-                <ul className="list-disc list-inside text-[#2c3d39] space-y-0.5">
+                <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-0.5">
                   {(insights?.strengths || []).slice(0, 2).map((str, i) => (
                     <li key={i}>{str}</li>
                   ))}
@@ -1307,11 +1308,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
 
               <div>
-                <span className="font-bold text-amber-800 flex items-center gap-1 mb-1">
-                  <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                <span className="font-bold text-amber-700 dark:text-amber-400 flex items-center gap-1 mb-1">
+                  <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                   فرص التحسين:
                 </span>
-                <ul className="list-disc list-inside text-[#2c3d39] space-y-0.5">
+                <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-0.5">
                   {(insights?.challenges || []).slice(0, 2).map((ch, i) => (
                     <li key={i}>{ch}</li>
                   ))}
@@ -1328,7 +1329,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                     setShowCelebration(false);
                     onNavigateToAdvisorChat(currentAdvisor.id);
                   }}
-                  className="flex-1 py-3 px-4 rounded-xl bg-white hover:bg-[#FAF7F2] text-[#2c3d39] border border-[#ded7c8] text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5"
+                  className="flex-1 py-3 px-4 rounded-xl bg-white dark:bg-[#0E1D24] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] text-xs font-bold transition-all shadow-xs flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <MessageSquare className="w-3.5 h-3.5" />
                   <span>حوار مفتوح مع المستشار</span>
@@ -1337,7 +1338,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               <button
                 type="button"
                 onClick={handleGoToNextAdvisor}
-                className="flex-1 py-3 px-4 rounded-xl text-white text-xs font-black shadow-xs transition-all hover:opacity-95 flex items-center justify-center gap-1.5"
+                className="flex-1 py-3 px-4 rounded-xl text-white text-xs font-black shadow-xs transition-all hover:opacity-95 flex items-center justify-center gap-1.5 cursor-pointer"
                 style={{
                   backgroundColor: currentAdvisor.themeColor,
                 }}

@@ -391,6 +391,7 @@ export default function App() {
                 setSelectedAdvisorId(advisorId);
                 setActiveScreen('advisor_chat');
               }}
+              theme={theme}
             />
           )}
 
