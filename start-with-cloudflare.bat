@@ -1,12 +1,12 @@
 @echo off
 chcp 65001 > nul
-title تشغيل منصة تدبير - Tadbeer Cloudflare Launcher
+title تشغيل منصة وازن - Wazan Cloudflare Launcher
 echo ================================================================
-echo           🌟 منصة تدبير - تشغيل الخادم مع نفق Cloudflare 🌟
+echo           🌟 منصة وازن - تشغيل الخادم مع نفق Cloudflare 🌟
 echo ================================================================
 echo.
-echo [1/2] جاري تشغيل خادم التطبيق المحلي (Tadbeer Server) على المنفذ 3000...
-start "Tadbeer Local Server" cmd /k "bun run server.ts"
+echo [1/2] جاري تشغيل خادم التطبيق المحلي (Wazan Server) على المنفذ 3000...
+start "Wazan Local Server" cmd /k "bun run server.ts"
 
 echo [2/2] جاري تشغيل نفق Cloudflare Tunnel للربط الخارجي...
 echo انتظر بضع ثوانٍ حتى يظهر لك رابط https://*.trycloudflare.com في النافذة.
