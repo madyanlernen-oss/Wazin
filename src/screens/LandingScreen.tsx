@@ -26,7 +26,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
 
   return (
     <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-[#FAF7F2] dark:bg-[#07111c] transition-colors duration-300">
-      {/* 4-Corner Exact Ambient Mesh Gradient matching user specification */}
+      {/* 4-Corner Exact Ambient Mesh Gradient with Refined Crisp Light Mode */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-500"
         style={{
@@ -39,11 +39,11 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               radial-gradient(circle 850px at 100% 68%, #0b1a2d 0%, #102641 36%, transparent 72%)
             `
             : `
-              radial-gradient(ellipse 65% 50% at 50% 36%, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.92) 35%, rgba(255, 255, 255, 0.4) 65%, transparent 85%),
-              radial-gradient(circle 850px at 0% 0%, #10363d 0%, #16464e 32%, transparent 68%),
-              radial-gradient(circle 850px at 100% 0%, #8e7ea9 0%, #a293bc 32%, transparent 68%),
-              radial-gradient(circle 850px at 0% 68%, #d59f97 0%, #dfaea6 32%, transparent 68%),
-              radial-gradient(circle 850px at 100% 68%, #f6eee4 0%, #ebe0d2 36%, transparent 72%)
+              radial-gradient(ellipse 70% 55% at 50% 35%, #FFFFFF 0%, rgba(255, 255, 255, 0.96) 42%, rgba(250, 247, 242, 0.65) 75%, transparent 100%),
+              radial-gradient(circle 800px at 0% 0%, rgba(188, 226, 224, 0.55) 0%, rgba(212, 238, 236, 0.28) 38%, transparent 68%),
+              radial-gradient(circle 800px at 100% 0%, rgba(224, 216, 238, 0.55) 0%, rgba(238, 233, 247, 0.28) 38%, transparent 68%),
+              radial-gradient(circle 800px at 0% 75%, rgba(246, 226, 218, 0.45) 0%, rgba(251, 240, 235, 0.22) 38%, transparent 68%),
+              radial-gradient(circle 800px at 100% 75%, rgba(244, 237, 226, 0.55) 0%, rgba(250, 246, 239, 0.25) 38%, transparent 70%)
             `,
         }}
       />
@@ -54,12 +54,14 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         <div className="relative max-w-4xl mx-auto pt-6 pb-12 px-6 sm:px-12 text-center">
           {/* Luminous Oval Halo & Delicate Concentric Orbital Wireframes (SVG) */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-            {/* Luminous White Oval Frame */}
-            <div className={`w-full h-full max-w-3xl rounded-[3rem] border ${
-              isDark
-                ? 'border-cyan-500/30 shadow-[0_0_90px_rgba(6,182,212,0.25),inset_0_0_60px_rgba(6,182,212,0.15)] bg-slate-900/30'
-                : 'border-white/60 shadow-[0_0_100px_rgba(255,255,255,0.95),inset_0_0_80px_rgba(255,255,255,0.7)] bg-white/20'
-            } backdrop-blur-xs transition-all duration-500`} />
+            {/* Luminous Central Glassmorphic Frame */}
+            <div
+              className={`w-full h-full max-w-3xl rounded-[3rem] border transition-all duration-500 ${
+                isDark
+                  ? 'border-cyan-500/30 shadow-[0_0_90px_rgba(6,182,212,0.25),inset_0_0_60px_rgba(6,182,212,0.15)] bg-slate-900/30 backdrop-blur-xs'
+                  : 'border-[#0E7C86]/20 shadow-[0_12px_45px_rgba(14,124,134,0.07),inset_0_1px_2px_rgba(255,255,255,0.9)] bg-white/72 backdrop-blur-[16px]'
+              }`}
+            />
 
             {/* Overlapping Orbital Rings */}
             <svg
@@ -68,35 +70,35 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
             >
-              {/* Outer Orbit 1 */}
+              {/* Outer Orbit 1 (Calm teal hue at subtle opacity) */}
               <ellipse
                 cx="450"
                 cy="250"
                 rx="420"
                 ry="210"
-                stroke={isDark ? "rgba(6, 182, 212, 0.4)" : "rgba(255, 255, 255, 0.55)"}
+                stroke={isDark ? "rgba(6, 182, 212, 0.4)" : "rgba(13, 122, 130, 0.18)"}
                 strokeWidth="1.2"
                 strokeDasharray="4 6"
               />
-              {/* Mid Orbit 2 (slightly tilted) */}
+              {/* Mid Orbit 2 (slightly tilted, gentle lavender hue at subtle opacity) */}
               <g transform="rotate(-6 450 250)">
                 <ellipse
                   cx="450"
                   cy="250"
                   rx="390"
                   ry="190"
-                  stroke={isDark ? "rgba(168, 85, 247, 0.45)" : "rgba(255, 255, 255, 0.65)"}
+                  stroke={isDark ? "rgba(168, 85, 247, 0.45)" : "rgba(124, 98, 170, 0.20)"}
                   strokeWidth="1.5"
                 />
               </g>
-              {/* Inner Orbit 3 (tilted other way) */}
+              {/* Inner Orbit 3 (tilted other way, soft teal accent) */}
               <g transform="rotate(8 450 250)">
                 <ellipse
                   cx="450"
                   cy="250"
                   rx="350"
                   ry="170"
-                  stroke={isDark ? "rgba(0, 229, 255, 0.35)" : "rgba(255, 255, 255, 0.5)"}
+                  stroke={isDark ? "rgba(0, 229, 255, 0.35)" : "rgba(14, 124, 134, 0.16)"}
                   strokeWidth="1"
                   strokeDasharray="8 8"
                 />
@@ -104,11 +106,54 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
 
               {/* Lens Flare Glow Sparkle at bottom-right of the orbit ring */}
               <g transform="translate(730, 370)">
-                <circle cx="0" cy="0" r="14" fill="white" opacity="0.9" filter="drop-shadow(0 0 8px #ffffff)" />
-                <line x1="-30" y1="0" x2="30" y2="0" stroke="white" strokeWidth="2.5" opacity="0.85" />
-                <line x1="0" y1="-30" x2="0" y2="30" stroke="white" strokeWidth="2.5" opacity="0.85" />
-                <line x1="-18" y1="-18" x2="18" y2="18" stroke="rgba(0, 229, 255, 0.7)" strokeWidth="1.5" />
-                <line x1="18" y1="-18" x2="-18" y2="18" stroke="rgba(0, 229, 255, 0.7)" strokeWidth="1.5" />
+                <circle
+                  cx="0"
+                  cy="0"
+                  r="20"
+                  fill={isDark ? "rgba(6, 182, 212, 0.18)" : "rgba(13, 138, 148, 0.12)"}
+                />
+                <circle
+                  cx="0"
+                  cy="0"
+                  r="12"
+                  fill={isDark ? "#ffffff" : "#0D8A94"}
+                  opacity="0.95"
+                  filter={isDark ? "drop-shadow(0 0 8px #ffffff)" : "drop-shadow(0 0 8px rgba(13, 138, 148, 0.55))"}
+                />
+                <line
+                  x1="-30"
+                  y1="0"
+                  x2="30"
+                  y2="0"
+                  stroke={isDark ? "#ffffff" : "#0D8A94"}
+                  strokeWidth="2.2"
+                  opacity={isDark ? 0.85 : 0.9}
+                />
+                <line
+                  x1="0"
+                  y1="-30"
+                  x2="0"
+                  y2="30"
+                  stroke={isDark ? "#ffffff" : "#0D8A94"}
+                  strokeWidth="2.2"
+                  opacity={isDark ? 0.85 : 0.9}
+                />
+                <line
+                  x1="-18"
+                  y1="-18"
+                  x2="18"
+                  y2="18"
+                  stroke={isDark ? "rgba(0, 229, 255, 0.7)" : "rgba(13, 138, 148, 0.65)"}
+                  strokeWidth="1.5"
+                />
+                <line
+                  x1="18"
+                  y1="-18"
+                  x2="-18"
+                  y2="18"
+                  stroke={isDark ? "rgba(0, 229, 255, 0.7)" : "rgba(13, 138, 148, 0.65)"}
+                  strokeWidth="1.5"
+                />
               </g>
             </svg>
           </div>
@@ -116,23 +161,23 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           {/* Foreground Hero Content */}
           <div className="relative z-10 space-y-6">
             {/* Top Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/95 dark:bg-slate-900/90 border border-white/80 dark:border-slate-700/80 shadow-xs text-xs sm:text-sm font-extrabold text-[#10383f] dark:text-cyan-300 transition-colors">
-              <span className="text-emerald-700 dark:text-cyan-400">✳️</span>
+            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/90 dark:bg-slate-900/90 border border-[#0D7A82]/20 dark:border-slate-700/80 shadow-xs text-xs sm:text-sm font-extrabold text-[#0B2528] dark:text-cyan-300 transition-colors backdrop-blur-md">
+              <span className="text-[#0D7A82] dark:text-cyan-400">✳️</span>
               <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
             </div>
 
             {/* Centerpiece Bold Headlines */}
-            <div className="space-y-1 pt-2">
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0f2329] dark:text-white leading-tight transition-colors">
+            <div className="space-y-1.5 pt-2">
+              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0B2528] dark:text-white leading-tight transition-colors">
                 لا تعش في جانب واحد..
               </h1>
-              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0f4b52] dark:text-cyan-400 dark:drop-shadow-[0_0_35px_rgba(6,182,212,0.5)] leading-tight transition-colors">
+              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0D7A82] dark:text-cyan-400 dark:drop-shadow-[0_0_35px_rgba(6,182,212,0.5)] leading-tight transition-colors">
                 وازن حياتك كاملة
               </h2>
             </div>
 
             {/* Legible Paragraph */}
-            <p className="text-base sm:text-lg text-[#23383c] dark:text-slate-300 leading-relaxed max-w-2xl mx-auto font-medium pt-1 transition-colors">
+            <p className="text-base sm:text-lg text-[#2C3E40] dark:text-slate-300 leading-relaxed max-w-2xl mx-auto font-medium pt-1 transition-colors">
               منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب
               وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
             </p>
@@ -141,9 +186,9 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
             <div className="pt-3">
               <button
                 onClick={() => onNavigateToAuth('login')}
-                className="inline-flex items-center gap-2 px-8 py-3.5 rounded-full bg-[#0d2a30] hover:bg-[#133c44] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-sm sm:text-base font-black shadow-xl shadow-teal-950/20 dark:shadow-cyan-900/30 border border-cyan-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                className="inline-flex items-center gap-2.5 px-8 py-3.5 rounded-full bg-[#0E7C86] hover:bg-[#095D65] dark:bg-gradient-to-r dark:from-cyan-600 dark:to-teal-600 dark:hover:from-cyan-500 dark:hover:to-teal-500 text-white text-sm sm:text-base font-black shadow-lg shadow-[#0E7C86]/25 dark:shadow-cyan-900/30 border border-[#0E7C86]/30 dark:border-cyan-400/25 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
-                <span className="text-cyan-300 font-bold">&larr;</span>
+                <span className="text-cyan-200 dark:text-cyan-300 font-bold">&larr;</span>
                 <span>تسجيل الدخول إلى وزان</span>
               </button>
             </div>
