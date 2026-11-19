@@ -41,6 +41,12 @@ interface EvaluationChatMessage {
   advice?: string;
 }
 
+interface StationDynamicInsights {
+  score: number;
+  strengths: string[];
+  challenges: string[];
+}
+
 interface OnboardingScreenProps {
   initialAdvisorId?: LifeAreaId;
   answers: Record<string, any>;
@@ -105,7 +111,17 @@ export function getClientAdvisorResponse(
   stationNumber: number,
   _userScore?: number,
   stationTurnCount: number = 0
-) {
+): {
+  isQuestionOrInquiry?: boolean;
+  station_completed: boolean;
+  score: number;
+  strengths: string[];
+  challenges: string[];
+  reasoning: string;
+  summary: string;
+  advice: string;
+  reply: string;
+} {
   const msg = text.toLowerCase().trim();
   const advTitle = advisor.title;
 
@@ -119,8 +135,11 @@ export function getClientAdvisorResponse(
 
   if (isCrisisOrDeath) {
     return {
-      isCrisis: true,
       isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 5,
+      strengths: [],
+      challenges: ['أزمة نفسية حادة تحتاج تدخلاً إنسانياً ومساندة عاجلة'],
       reasoning: `تدخل إنساني طارئ (Safety & Empathy Override): المستفيد يعبر عن ألم نفسي وإنهاك شديد وتفكير في الموت أو إيذاء النفس ("${text}"). تم فوراً تعليق وتجميد كافة مسارات التقييم، وتكريس كامل الحضور النفسي لاحتواء هذا الألم الوجودي الحاد، والتأكيد القاطع على قيمة حياته.`,
       summary: `تدخل إنساني طارئ واحتواء عاجل لأزمة نفسية حادة تتعلق بأمان المستفيد وحفظ حياته.`,
       advice: `حياتك غالية وألمك حقيقي ومسموع؛ أرجوك لا تبقَ وحدك في هذا الثقل وتواصل فوراً مع شخص تثق به أو مع جهة دعم نفسي ومختصين لمساندتك.`,
@@ -133,6 +152,10 @@ export function getClientAdvisorResponse(
   if (isFinancialDistress && (advisor.id === 'financial' || !coreMsg.includes('صلاة'))) {
     return {
       isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 4,
+      strengths: ['شجاعة وشفافية في كشف الواقع المالي الحقيقي دون إنكار'],
+      challenges: ['إيقاف نزيف المصاريف الاستهلاكية وترتيب أولويات سداد الالتزامات'],
       reasoning: `تحليل أزمة وضائقة مالية حادة لدى المستفيد ("${text}"): التدخل العملي الحكيم يقتضي فك الضغط النفسي فوراً، وتبيان أن الإفلاس المالي عارض إجرائي مؤقت، والبدء بإجراءات الإسعاف المالي الطارئ.`,
       summary: `استجابة فورية لأزمة الإفلاس والضائقة المالية والتركيز على خطة إسعاف مالي وإيقاف النزيف.`,
       advice: `الإفلاس مؤقت إذا تم ضبط البوصلة: أوقف أي صرف استهلاكي فوراً، احمِ أساسيات البقاء، ولا تقترض لسداد مصاريف استهلاكية.`,
@@ -144,6 +167,10 @@ export function getClientAdvisorResponse(
   if (isHealthDistress && advisor.id === 'health') {
     return {
       isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 4.5,
+      strengths: ['استشعار نداءات الجسد وإدراك الحاجة لضبط نمط الحياة'],
+      challenges: ['اضطراب النوم وضعف الطاقة البدنية وحاجة الجسم للحركة والترطيب'],
       reasoning: `تحليل نداء استغاثة صحي وبدني لدى المستفيد ("${text}"): التفكير الطبي الحكيم يقتضي احتواء الجسد برفق والبدء بمثلث الحيوية دون حميات قاسية أو إجهاد مفرط.`,
       summary: `احتواء طبي مباشر لمشكلات النوم أو الوزن أو الخمول وبناء روتين استعادة الطاقة.`,
       advice: `الجسد أمانة لا يتحمل الصدمات القاسية: ابدأ بضبط ساعة النوم ليلاً وشرب الماء ومشي 20 دقيقة خفيفة.`,
@@ -151,34 +178,15 @@ export function getClientAdvisorResponse(
     };
   }
 
-  const isCareerDistress = /(عاطل|عاطلة|بدون وظيفة|ما لقيت وظيفة|مرفوض|رفضوني|خريج جديد|تائه مهنيا|ما ادري ايش اشتغل|ضياع مهني|احتراق وظيفي|مديري ظالم|بيئة عمل سامة|كرهت وظيفتي|دوامي متعب|ضغط العمل|ما في ترقية|راتبي قليل في الدوام|زملاء العمل|مضغوط بالدوام|انتاجيتي ضعيفة|تسويف بالعمل)/i.test(msg);
-  if (isCareerDistress && advisor.id === 'career') {
-    return {
-      isQuestionOrInquiry: true,
-      reasoning: `تحليل تحدي مهني وضغط وظيفي حاد لدى المستفيد ("${text}"): التوجيه يقتضي بناء وضوح استراتيجي وتطوير مهارة فارقة وحماية الطاقة من الاستنزاف.`,
-      summary: `توجيه مهني استراتيجي لتجاوز البطالة أو الاحتراق الوظيفي وبناء مسار مهني قوي.`,
-      advice: `المسار المهني ماراثون طويل: لا تربط قيمتك برفض وظيفي أو بيئة عمل مؤقتة، وابدأ ببناء مهارة ذات قيمة سوقية عالية.`,
-      reply: `أشعر بحجم الضغط أو الإحباط الذي تحمله في صدرك يا صديقنا العزيز. 🌿\n\nسواء كنت تعاني من البحث عن عمل، أو تشعر بالاحتراق في بيئة عمل مستنزفة، فاعلم أن هذه المرحلة الصعبة لا تحدد سقف إمكاناتك ولا ترسم مستقبلك المهني.\n\nكمستشار مهني معك، خطواتنا العملية لإعادة ترتيب مسارك:\n1. **حماية طاقتك النفسية**: افصل بين قيمتك الذاتية وبين ظروف الوظيفة الحالية أو الرفض المؤقت.\n2. **بناء مهارة فارقة (Deep Skill)**: ركز طاقتك على تطوير مهارة واحدة محددة مطلوبة بشدة.\n3. **تنظيم الأولويات بمصفوفة أيزنهاور**: خصص ساعة يومياً في المربع الثاني لتطوير ذاتك.\n\nما هو أكبر عائق مهني تشعر أنه يقف بينك وبين الخطوة التالية؟`,
-    };
-  }
-
-  const isSpiritualDistress = /(ما اصلي|تارك الصلاة|اقصر في الصلاة|قلبي قاسي|قسوة قلب|ما احس بالخشوع|فتور|تراجع روحي|ذنب|ذنوب|معاصي|تأنيب ضمير|ضائع روحيا|تائه روحيا|ما احس بالسلام|ما في سكينة|حيرة وجودية|وسواس|وساوس|ضيق في الصدر|روحي تعبانة|ما اقرا قران|هاجر القران)/i.test(msg);
-  if (isSpiritualDistress && advisor.id === 'spiritual') {
-    return {
-      isQuestionOrInquiry: true,
-      reasoning: `تحليل فتور روحي وحرقة قلبية لدى المستفيد ("${text}"): إدراك أن اعتراف المستفيد بالتقصير هو أصدق علامة على يقظة قلبه ورغبته في السكينة.`,
-      summary: `احتواء روحي عميق لمشاعر التقصير والفتور وتيسير سبل العودة إلى السكينة الإيمانية.`,
-      advice: `الروحانية ليست سباق أرقام: ركعتان بتؤدة وتدبر وسجدة خاشعة خير من أعمال كثيرة يثقلها التشتت والذنب.`,
-      reply: `أسمعك بكل مودة وسلام يا صديقنا العزيز، وسلامة قلبك وروحك من هذا الضيق. 🌿\n\nإحساسك بالتقصير في الصلاة، أو خوفك من قسوة القلب والفتور، هو في ذاته أصدق دليل على أن في قلبك بذرة إيمان حية تبحث عن النور والسكينة.\n\nكمرشد روحي لك، اعلم أن الله أرحم بك من نفسك، والرجوع إلى السكينة لا يبدأ بجلد الذات بل بالرفق بها:\n1. **القليل الدائم**: لا تكلف نفسك ما لا تطيق دفعة واحدة؛ حافظ على الفريضة بهدوء.\n2. **خلوة السكينة**: خصص 5 دقائق صمت ودعاء صادق تبث فيه لربك كل ما في صدرك.\n3. **رفع الذنب بالعمل الصالح**: أتبع السيئة الحسنة تمحها.\n\nما هو الأمر الذي لو فوضته لله اليوم لشعرت بروحك تتنفس بهدوء؟`,
-    };
-  }
-
   // 2. مشاعر التعب الشديد والحزن والضيق
   const isGriefOrExhaustion = /(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)/i.test(msg);
-
   if (isGriefOrExhaustion) {
     return {
       isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 5,
+      strengths: ['القدرة على البوح والتعبير الصادق عن المشاعر'],
+      challenges: ['تفريغ الضغوط النفسية المتراكمة وتخفيف وطأة الإنهاك الداخلي'],
       reasoning: `تحليل مشاعر الإنهاك والحزن والضيق النفسي لدى المستفيد: المشاعر المتألمة تحتاج إلى إنصات واحتواء إنساني دافئ قبل أي نصائح عملية.`,
       summary: `احتواء إنساني دافئ لمشاعر الحزن والتعب والضيق، وتقديم سند معنوي يخفف وطأة المشاعر.`,
       advice: `الحزن والإنهاك رسائل من الجسد والروح بحاجتهما للراحة والتفريغ؛ لا تكابر وامنح نفسك فرصة لالتقاط الأنفاس.`,
@@ -186,112 +194,100 @@ export function getClientAdvisorResponse(
     };
   }
 
-  // 3. مشاعر الغضب والسب
-  if (/(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(msg)) {
-    return {
-      isQuestionOrInquiry: true,
-      reasoning: `تفكيك مشاعر الغضب والألم الوجودي واحتواء الإنسان دون إطلاق أحكام مسبقة.`,
-      summary: `احتواء مباشر لمشاعر الغضب والألم والضغط النفسي الشديد دون أحكام.`,
-      advice: `تفريغ الغضب يكون بالبوح والتنفس واللجوء لمن بيده تدبير الأمر، فالسب واللعن لن يغيّر ما حدث بل يزيد القلب قسوة ومرارة.`,
-      reply: `أشعر بحجم الألم والثقل الذي تحمله في صدرك يا صديقنا العزيز. حين تبلغ بنا الخيبة والتعب مداها، تتولد في دواخلنا رغبة عارمة في الصراخ واللعن كصرخة استغاثة للبحث عن متنفس.\n\nمن حقك تماماً أن تشعر بالألم والغضب، وأنا هنا لست لأحاكمك، بل لأحتويك وأسمعك بصدق. خذ نفساً عميقاً وأفرغ ما في صدرك؛ ما هو الشيء الأكثر إيلاماً الذي يضغط على روحك الآن وتود لو تتخلص منه؟`,
-    };
-  }
-
-  // 4. السؤال المباشر عن حال المستشار
+  // 3. التحيات العامة والسؤال عن حال المستشار
   const isAskingHowAdvisorIs = /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(msg);
   const stationConfig = STATION_ASSESSMENT_CONFIG[advisor.id];
   const questionTitle = stationConfig?.consultation?.title || stationConfig?.initialDiagnostic?.title;
 
-  if (isAskingHowAdvisorIs) {
+  if (isAskingHowAdvisorIs || isBareGreetingOnly) {
     return {
       isQuestionOrInquiry: true,
-      reasoning: `تحليل حواري إنساني: المستفيد يسأل عن حال المستشار ("${text}"). مبادلته التحية والاطمئنان في سطر دافئ، ثم إعادة توجيهه مباشرة إلى سؤال المحطة الاستشاري (${stationNumber} من 8).`,
-      summary: `تفاعل إنساني دافئ واطمئنان متبادل مع المستفيد في ${advTitle}.`,
-      advice: `كامل حضوري معك في المحطة (${stationNumber} من 8)؛ شاركني واقعك لنواصل بناء اتزانك.`,
-      reply: `أهلاً بك يا صديقنا العزيز! أنا بخير وبأحسن حال وسعيد بوجودك وسؤالك اللطيف. 🌿 لنركز معاً على جلستنا الاستشارية في المحطة (${stationNumber} من 8)${questionTitle ? `: "${questionTitle}"` : ''}. كيف تقيّم هذا الجانب (من 1 إلى 10)؟`,
-    };
-  }
-
-  // 5. التحيات العامة العفوية المجردة
-  if (isBareGreetingOnly) {
-    return {
-      isQuestionOrInquiry: true,
-      reasoning: `تحية عفوية من المستفيد ("${text}") أثناء جلسة الاستشارة: الرد بترحيب دافئ وموجز، ثم تركيز الانتباه على سؤال المحطة (${stationNumber} من 8).`,
+      station_completed: false,
+      score: 6,
+      strengths: [],
+      challenges: [],
+      reasoning: `تحليل حواري: المستفيد بدأ بالتحية أو السؤال عن حال المستشار ("${text}"). التجاوب الإنساني الذكي يقتضي مبادلته الترحيب، ثم توجيهه لسؤال المحطة (${stationNumber} من 8) دون اعتماد المحطة مسبقاً.`,
       summary: `الترحيب بالمستفيد واستكشاف واقعه في ${advTitle}.`,
-      advice: `أهلاً بك دائماً؛ كامل الحضور والإصغاء معك لنبدأ بالمحطة (${stationNumber} من 8).`,
-      reply: `أهلاً ومرحباً بك يا صديقنا العزيز! يسعدني حضورك وتواجدك معنا. 🌿 لنبدأ معاً المحطة (${stationNumber} من 8)${questionTitle ? `: "${questionTitle}"` : ''}. كيف ترى واقعك في هذا البعد؟`,
+      advice: `كامل حضوري معك في المحطة (${stationNumber} من 8)؛ شاركني واقعك لنشخص اتزانك بدقة.`,
+      reply: `أهلاً ومرحباً بك يا صديقنا العزيز! أنا بخير وبأحسن حال وسعيد بوجودك معنا. 🌿\n\nكطبيب ومستشارك في ${advTitle}، دعنا نبدأ معاً بتشخيص هذا البعد${questionTitle ? `: "${questionTitle}"` : ''}.\nكيف تصف واقعك وعاداتك الحالية هنا بصراحة؟`,
     };
   }
 
-  // 6. الأسئلة والاستفسارات المباشرة
-  const isDirectQuestion = msg.includes('؟') || msg.includes('?') || /(^|\s)(هل|كيف|لماذا|ليه|ماذا|ايش|وش|ما|من هو|من هي|من هم|من أنت|من انت|مين|من الذي|من التي|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|رد|رد علي|أنا أسألك|انا اسالك|ما رأيك|برأيك|ممكن)(\s|\?|؟|$)/i.test(msg);
-  if (isDirectQuestion) {
-    const stationSuffix = `\n\nولنستكمل جلستنا الاستشارية بدقة، دعنا نركز على المحطة (${stationNumber} من 8)${questionTitle ? `: "${questionTitle}"` : ''}؛ ما تقييمك لها؟`;
-    let specificReply = `سؤال وجيه ومهم جداً يا صديقنا. رداً على استفسارك المباشر بخصوص ${advTitle}:\n\nالاتزان الحقيقي لا يعني ألا نمر بأوقات صعبة، بل يعني أن نملك البصيرة والمرونة للتعامل معها بهدوء. ما طرحته يعكس وعيك ورغبتك في الفهم، والخطوة الأهم هي أن تأخذ الأمور بتدرج ورفق دون جلد للذات.` + stationSuffix;
-    if (advisor.id === 'spiritual') {
-      specificReply = `سؤالك في صميم الروحانية والسكينة يا صديقنا. الإجابة المباشرة: الروحانية ليست قائمة واجبات جافة، بل هي سلام داخلي وحضور قلب وحسن ظن بالله. حين تتشابك عليك الأمور، الجأ إلى السكينة البسيطة: صلاة خاشعة، ودعاء صادق، وتفريغ لشتات الذهن.` + stationSuffix;
-    } else if (advisor.id === 'financial') {
-      specificReply = `رداً على استفسارك المالي المباشر: القاعدة الذهبية هي ضبط النفقات العاطفية، وبناء صندوق طوارئ يمنحك الأمان النفسي، والتركيز على العادات المالية التراكمية اليومية قبل البحث عن حلول سريعة.` + stationSuffix;
-    } else if (advisor.id === 'health') {
-      specificReply = `رداً على استفسارك الصحي المباشر: الطاقة والحيوية تنبع من أبسط العادات اليومية: نوم منتظم وعميق (7-8 ساعات)، شرب كميات كافية من الماء، وتخصيص 20 دقيقة حركة يومية.` + stationSuffix;
-    } else if (advisor.id === 'career') {
-      specificReply = `رداً على استفسارك المهني المباشر: النجاح المهني يتطلب وضوح البوصلة، والتركيز على بناء مهارة استثنائية (Deep Work) تمنحك قيمة سوقية حقيقية، مع تنظيم الأولويات وحماية وقتك من المهام الهامشية.` + stationSuffix;
-    }
-
-    return {
-      isQuestionOrInquiry: true,
-      reasoning: `تحليل استفسار المستفيد المباشر في ${advTitle} ("${text}"): تقديم إجابة استشارية شافية وربطها بسؤال المحطة الحالية.`,
-      summary: `إجابة استشارية مباشرة وتفاعل حي مع سؤال المستفيد ثم العودة لسؤال المحطة.`,
-      advice: `الاتزان يبدأ بالوضوح والتركيز على خطوة واحدة قابلة للتطبيق اليوم.`,
-      reply: specificReply,
-    };
-  }
-
-  // 7. التدقيق التكيفي لإجابة المستفيد (Adaptive Doctor-Like Clinical Flow)
+  // 4. التدقيق التكيفي لإجابة المستفيد (Adaptive Doctor-Like Clinical Flow)
   const ratingMatch = msg.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i) || msg.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
 
-  // إذا كانت الإجابة مبهمة أو مقتضبة جداً بدون رقم وفي أول دور للمحطة (stationTurnCount === 0)
-  const isVagueOrInsufficient = !ratingMatch && msg.length < 22 && stationTurnCount < 1;
-  if (isVagueOrInsufficient) {
+  // إذا كانت الإجابة مبهمة أو مقتضبة جداً بدون تفاصيل كافية في أول محاورة (stationTurnCount === 0)
+  // أو إذا أرسل مجرد رقم صامت دون سياق في المحاورة الأولى:
+  // الطبيب الحقيقي لا ينهي المحطة بل يستوضح التفاصيل ويبقى station_completed: false!
+  const isVagueOrShort = (!ratingMatch && msg.length < 25) || (Boolean(ratingMatch) && msg.length < 15);
+  const needsClarification = isVagueOrShort && stationTurnCount < 1;
+
+  if (needsClarification) {
     const config = STATION_ASSESSMENT_CONFIG[advisor.id];
-    const followUp = config?.consultation?.followUpProbe || config?.initialDiagnostic?.followUpProbe || `لنتعمق من زاوية نوعية في ${advTitle}: ما هو أكبر عائق واجهته مؤخراً يؤثر على استقرارك؟ وكيف تقيّم مستواك من 1 إلى 10؟`;
+    const followUp = config?.consultation?.followUpProbe || config?.initialDiagnostic?.followUpProbe || `لنتعمق من زاوية نوعية في ${advTitle}: ما هو أكبر موقف أو عائق واجهته مؤخراً يؤثر على استقرارك؟ وكيف تقيّم رضاك ومستواك الحالي من 1 إلى 10؟`;
     return {
       isQuestionOrInquiry: true,
-      reasoning: `تحليل استشاري تكيفي (المحطة ${stationNumber} من 8: ${advTitle}): إجابة المستفيد الأولية مقتضبة أو غير محددة ("${text}"). يقتضي الأسلوب الطبي الاستشاري التجاوب بإنصات ودفء، ثم طرح سؤال استيضاحي من زاوية نوعية جديدة لفهم التحدي بدقة وطلب تحديد الدرجة (من 1 إلى 10) قبل الاعتماد.`,
+      station_completed: false,
+      score: ratingMatch ? Math.min(10, Math.max(1, parseFloat(ratingMatch[1] || '6'))) : 6,
+      strengths: [],
+      challenges: [],
+      reasoning: `تحليل استشاري تكيفي (المحطة ${stationNumber} من 8: ${advTitle}): إجابة المستفيد الأولية مقتضبة أو مجرد تقييم صامت دون سياق ("${text}"). يقتضي الأسلوب الطبي الاستشاري التجاوب بإنصات ودفء، ثم طرح سؤال استيضاحي من زاوية نوعية جديدة لفهم عاداته وواقعه الفعلي قبل الاعتماد.`,
       summary: `متابعة استيضاحية تكيفية لجانب ${advTitle}.`,
-      advice: `التشخيص الاستشاري الدقيق من زاوية ملموسة هو نصف العلاج.`,
-      reply: `أسمعك وأقدّر ما أشرت إليه يا صديقنا العزيز. 🌿\n\n${followUp}`,
+      advice: `التشخيص الاستشاري الدقيق لواقعك وعاداتك هو نصف العلاج.`,
+      reply: `أهلاً بك وأسمعك باهتمام يا صديقنا العزيز. 🌿\n\nكطبيب ومستشارك في ${advTitle}، لا أريد أن أعتمد تقييماً سريعاً دون أن أفهم واقعك وعاداتك الحقيقية.\n${followUp}`,
     };
   }
 
-  // إذا كانت الإجابة كافية، مفصلة، تضمنت درجة صريحة، أو بعد سؤال المتابعة
+  // إذا كانت الإجابة كافية ومفصلة أو بعد سؤال المتابعة (stationTurnCount >= 1):
+  // هنا فقط يعتمد الطبيب المحطة ويستخلص نقاط القوة والتحديات ويعيد station_completed: true!
   const scoreNum = ratingMatch
     ? Math.min(10, Math.max(1, parseFloat(ratingMatch[1] || '7.5')))
     : (_userScore || 7.5);
 
+  const dynamicStrengths = [
+    `وضوح وشفافية في تشخيص واقع وعادات ${advTitle}`,
+    `استشعار أهمية التوازن والرغبة الصادقة في التطوير المستمر`
+  ];
+  const dynamicChallenges = [
+    `تثبيت عادة يومية ميسرة في المربع الثاني لحماية ${advTitle}`,
+    `تجنب الانشغال بالمهام الطارئة على حساب الأولويات الاستراتيجية`
+  ];
+
   if (scoreNum <= 4) {
     return {
       isQuestionOrInquiry: false,
-      reasoning: `تحليل تقييم مرحلي منخفض (${scoreNum}/10) في المحطة (${stationNumber} من 8) بـ ${advTitle}: رصد معطيات الضغط أو الفتور، وتقديم احتواء نفسي دافئ يؤكد أن الصراحة في التقييم هي نقطة الانطلاق الأساسية لإعادة التوازن.`,
-      summary: `تسجيل تقييم (${scoreNum}/10) في المحطة ${stationNumber} واحتواء التحدي بمرونة واهتمام.`,
+      station_completed: true,
+      score: scoreNum,
+      strengths: dynamicStrengths,
+      challenges: dynamicChallenges,
+      reasoning: `تشخيص سريري متكامل لمحطة (${stationNumber} من 8: ${advTitle}) بدرجة (${scoreNum}/10): المستفيد يمر بضغط أو فتور. تقديم احتواء دافئ وتوجيه استراتيجي لإعادة التوازن.`,
+      summary: `اعتماد تشخيص محطة (${advTitle}) بدرجة ${scoreNum}/10 وتحديد خطوات التوازن.`,
       advice: `الاعتراف بالضغط الحالي هو أولى خطوات التعافي؛ خطوة يومية صغيرة تكفي لاستعادة التوازن.`,
-      reply: `أحيّيك على صدقك وشفافيتك في مشاركة هذا التقييم (${scoreNum} من 10) يا صديقنا العزيز. مرورك بفترة تراجع أو ضغط في ${advTitle} هو أمر يمر به الكثيرون وسط تسارع الحياة وصعوباتها. هدفنا هنا تفكيك هذا الثقل معاً وبناء سكينتك واتزانك خطوة بخطوة.`,
+      reply: `أحيّيك من قلبي على صدقك وشفافيتك العالية في تشخيص ${advTitle} يا صديقنا. 🌿\n\nمرورك بفترة تراجع أو ضغط بدرجة (${scoreNum} من 10) هو أمر طبيعي وسط تسارع متطلبات الحياة. هدفنا هنا ليس المحاكمة، بل تفكيك هذا الثقل معاً وبناء سكينتك واتزانك خطوة بخطوة.`,
     };
   } else if (scoreNum <= 7) {
     return {
       isQuestionOrInquiry: false,
-      reasoning: `تحليل تقييم مرحلي متزن (${scoreNum}/10) في المحطة (${stationNumber} من 8) بـ ${advTitle}: رصد وجود قاعدة استقرار جيدة مع وجود مساحة تطوير ملموسة لتعميق الأثر وتحقيق الاستدامة.`,
-      summary: `تسجيل تقييم متزن (${scoreNum}/10) في المحطة ${stationNumber} وتحديد فرص التطوير.`,
+      station_completed: true,
+      score: scoreNum,
+      strengths: dynamicStrengths,
+      challenges: dynamicChallenges,
+      reasoning: `تشخيص سريري متزن لمحطة (${stationNumber} من 8: ${advTitle}) بدرجة (${scoreNum}/10): رصد قاعدة استقرار طيبة مع وجود مساحة تطوير ملموسة.`,
+      summary: `اعتماد تشخيص محطة (${advTitle}) بدرجة ${scoreNum}/10 وتحديد فرص التطوير.`,
       advice: `البناء على نقاط القوة الحالية وحماية وقتك وطاقتك من المشتتات العابرة.`,
-      reply: `تقييمك المتزن (${scoreNum} من 10) يعكس وعياً طيباً بقاعدتك الحالية في ${advTitle}. لديك أساس جيد يمكنك البناء عليه لتعميق الأثر والوصول إلى مستويات أعلى من الرضا والاستقرار.`,
+      reply: `تشخيصك المتزن لواقعك بدرجة (${scoreNum} من 10) يعكس وعياً طيباً بقاعدتك الحالية في ${advTitle}. 🌿\n\nلديك أساس متين يمكنك البناء عليه لتعميق الأثر والوصول إلى مستويات أعلى من الرضا والاستقرار المستدام.`,
     };
   } else {
     return {
       isQuestionOrInquiry: false,
-      reasoning: `تحليل تقييم مرحلي متقدم (${scoreNum}/10) في المحطة (${stationNumber} من 8) بـ ${advTitle}: رصد نضج وانسجام متميز في هذا البعد، والتركيز على تعزيز الاستدامة وتجنب الانتكاس.`,
-      summary: `تسجيل تقييم متقدم (${scoreNum}/10) في المحطة ${stationNumber} يبرز القوة والانسجام.`,
+      station_completed: true,
+      score: scoreNum,
+      strengths: dynamicStrengths,
+      challenges: dynamicChallenges,
+      reasoning: `تشخيص سريري متقدم لمحطة (${stationNumber} من 8: ${advTitle}) بدرجة (${scoreNum}/10): رصد نضج وانسجام متميز في هذا البعد.`,
+      summary: `اعتماد تشخيص محطة (${advTitle}) بدرجة ${scoreNum}/10 يبرز القوة والانسجام.`,
       advice: `الاستمرار على العادات الراسخة والبيئة المحفزة التي أوصلتك لهذا المستوى الممتاز.`,
-      reply: `ما شاء الله، نتيجة ملهمة ومبهجة (${scoreNum} من 10) تعكس صفاءً حقيقياً وعملاً متواصلاً في ${advTitle}. هذا الاستقرار هو مكسب كبير لحياتك يستحق الحفاظ عليه ودعمه.`,
+      reply: `ما شاء الله، نتيجة ملهمة ومبهجة بدرجة (${scoreNum} من 10) تعكس صفاءً حقيقياً وعملاً متواصلاً في ${advTitle}! 🌟\n\nهذا الاستقرار والانسجام مكسب كبير لحياتك يستحق الحفاظ عليه ودعمه بعاداتك الجميلة.`,
     };
   }
 }
@@ -315,6 +311,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // Track turn count per advisor station for the adaptive clinical flow
   const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>({});
+
+  // Dynamic insights per station extracted from live AI conversation (score, strengths, challenges)
+  const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>({});
 
   const [inputText, setInputText] = useState('');
   const [expandedReasoningMap, setExpandedReasoningMap] = useState<Record<string, boolean>>({});
@@ -422,10 +421,24 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, currentAdvisorIndex]);
 
-  // Finish and approve current advisor assessment immediately
+  // Finish and approve current advisor assessment manually
   const handleFinishCurrentAdvisor = () => {
     const calculatedScore = calculateScoreForAdvisor(currentAdvisor, answers);
     const scoreToSave = calculatedScore > 0 ? calculatedScore : 7.5;
+    
+    // Save dynamic insights if not already set
+    if (!stationInsights[currentAdvisor.id]) {
+      const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, scoreToSave, answers);
+      setStationInsights((prev) => ({
+        ...prev,
+        [currentAdvisor.id]: {
+          score: scoreToSave,
+          strengths: fallbackInsights?.strengths || ['رغبة حقيقية في تطوير هذا الجانب وتثبيت التوازن'],
+          challenges: fallbackInsights?.challenges || ['حماية وقتك والتركيز على العادات اليومية في المربع الثاني'],
+        },
+      }));
+    }
+    
     onFinishAdvisor(currentAdvisor.id, scoreToSave);
     confetti({
       particleCount: 60,
@@ -463,7 +476,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  // Handle user answer with adaptive clinical doctor questioning logic
+  // Handle user answer: Only completes when AI advisor explicitly returns station_completed === true!
   const handleSendAnswer = async (textToSend?: string) => {
     const text = (textToSend || inputText).trim();
     if (!text || isAdvisorReplying) return;
@@ -480,7 +493,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const currentList = chatMessages[advisorKey] || [];
     const currentTurns = stationTurnCount[advisorKey] || 0;
 
-    // Detect numeric score (1 to 10)
+    // Detect numeric score (1 to 10) if present in user message
     const ratingMatch = text.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i) || text.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
     let detectedScore: number | null = null;
     if (ratingMatch) {
@@ -490,17 +503,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }
     }
 
-    // Adaptive Doctor Consultation Evaluation Flow:
-    // 1. If user provided a numeric score, or gave a detailed response (>= 22 chars),
-    //    or if we already did 1 follow-up turn (currentTurns >= 1):
-    //    => Clear and sufficient! We acknowledge warmly and conclude the station.
-    // 2. If user response is vague, off-point, or insufficient (< 22 chars without rating) and currentTurns === 0:
-    //    => Ask targeted follow-up question from a fresh angle!
-    const isSufficient = detectedScore !== null || text.length >= 22 || currentTurns >= 1;
-    const isFollowUpProbeTurn = !isSufficient;
-    const willCompleteStation = isSufficient;
-
-    // Save answer data
+    // Save answer turn in state
     if (detectedScore !== null) {
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, detectedScore);
     } else {
@@ -528,6 +531,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       let reasoningContent = '';
       let summaryContent = '';
       let adviceContent = '';
+      let isStationCompleted = false;
+      let earnedScore = detectedScore || calculateScoreForAdvisor(currentAdvisor, answers) || 7.5;
+      let dynamicStrengths: string[] = [];
+      let dynamicChallenges: string[] = [];
 
       try {
         const res = await fetch('/api/gemini/advisor-chat', {
@@ -538,7 +545,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             message: text,
             history,
             answers,
-            userScore: detectedScore || calculateScoreForAdvisor(currentAdvisor, answers) || 7.5,
+            userScore: earnedScore,
             aiMode,
             isEvaluationSession: true,
             evaluationStep: stationNumber,
@@ -553,6 +560,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           summaryContent = data.summary || '';
           adviceContent = data.advice || '';
           replyContent = data.reply || adviceContent || summaryContent || '';
+          isStationCompleted = Boolean(data.station_completed);
+          
+          if (data.score !== undefined && !isNaN(Number(data.score))) {
+            const raw = Number(data.score);
+            earnedScore = raw > 10 ? Math.round(raw / 10) : raw;
+          }
+          if (Array.isArray(data.strengths) && data.strengths.length > 0) {
+            dynamicStrengths = data.strengths;
+          }
+          if (Array.isArray(data.challenges) && data.challenges.length > 0) {
+            dynamicChallenges = data.challenges;
+          }
 
           if (typeof replyContent === 'string' && (replyContent.startsWith('{') || replyContent.includes('"reasoning"'))) {
             try {
@@ -563,6 +582,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 summaryContent = inner.summary || summaryContent;
                 adviceContent = inner.advice || adviceContent;
                 replyContent = inner.reply || inner.advice || inner.summary || '';
+                if (inner.station_completed !== undefined) {
+                  isStationCompleted = Boolean(inner.station_completed);
+                }
+                if (inner.score !== undefined && !isNaN(Number(inner.score))) {
+                  const raw = Number(inner.score);
+                  earnedScore = raw > 10 ? Math.round(raw / 10) : raw;
+                }
+                if (Array.isArray(inner.strengths) && inner.strengths.length > 0) dynamicStrengths = inner.strengths;
+                if (Array.isArray(inner.challenges) && inner.challenges.length > 0) dynamicChallenges = inner.challenges;
               }
             } catch {
               // keep
@@ -578,26 +606,25 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           currentAdvisor,
           text,
           stationNumber,
-          detectedScore || calculateScoreForAdvisor(currentAdvisor, answers),
+          earnedScore,
           currentTurns
         );
         reasoningContent = local.reasoning;
         summaryContent = local.summary;
         adviceContent = local.advice;
         replyContent = local.reply;
+        isStationCompleted = Boolean(local.station_completed);
+        if (local.score !== undefined) earnedScore = local.score;
+        if (local.strengths && local.strengths.length > 0) dynamicStrengths = local.strengths;
+        if (local.challenges && local.challenges.length > 0) dynamicChallenges = local.challenges;
       }
 
-      // If follow-up probe is needed and reply didn't include a question mark
-      if (isFollowUpProbeTurn && !replyContent.includes('?') && !replyContent.includes('؟')) {
-        const probe = currentStationConfig.consultation?.followUpProbe || currentStationConfig.initialDiagnostic?.followUpProbe;
-        replyContent += `\n\n📌 **استيضاح استشاري (المحطة ${stationNumber} من 8):**\n${probe}`;
-      }
-
-      // If station completes: append confirmation & score
-      if (willCompleteStation) {
-        const finalScore = detectedScore || calculateScoreForAdvisor(currentAdvisor, answers) || 7.5;
+      // If station completed by AI advisor:
+      if (isStationCompleted) {
         const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
-        replyContent += `\n\n✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\nالدرجة المسجلة: (${finalScore.toFixed(1)} من 10).\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
+        if (!replyContent.includes('تم اعتماد تقييم المحطة')) {
+          replyContent += `\n\n✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\nالدرجة المسجلة: (${earnedScore.toFixed(1)} من 10).\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
+        }
       }
 
       const nextAdvisorMsg: EvaluationChatMessage = {
@@ -615,10 +642,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
 
-      // When station completes, record score and trigger celebration
-      if (willCompleteStation) {
-        const finalScore = detectedScore || calculateScoreForAdvisor(currentAdvisor, answers) || 7.5;
-        onFinishAdvisor(currentAdvisor.id, finalScore);
+      // CRITICAL: Only trigger station completion and show modal when AI EXPLICITLY returns station_completed === true!
+      if (isStationCompleted) {
+        // Save the dynamic earned score
+        onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, earnedScore);
+        
+        // Save dynamic insights extracted from the conversation
+        const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, earnedScore, answers);
+        setStationInsights((prev) => ({
+          ...prev,
+          [currentAdvisor.id]: {
+            score: earnedScore,
+            strengths: dynamicStrengths.length > 0 ? dynamicStrengths : (fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب']),
+            challenges: dynamicChallenges.length > 0 ? dynamicChallenges : (fallbackInsights?.challenges || ['بناء عادة يومية مستدامة لحماية اتزانك']),
+          },
+        }));
+
+        onFinishAdvisor(currentAdvisor.id, earnedScore);
         confetti({
           particleCount: 70,
           spread: 70,
@@ -634,8 +674,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const currentAdvisorScore = calculateScoreForAdvisor(currentAdvisor, answers);
-  const insights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
+  const staticFallbackInsights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
   const activeConversation = chatMessages[currentAdvisor.id] || [];
+
+  const currentActiveInsights = stationInsights[currentAdvisor.id] || {
+    score: currentAdvisorScore > 0 ? currentAdvisorScore : 7.5,
+    strengths: (staticFallbackInsights?.strengths || []).slice(0, 2),
+    challenges: (staticFallbackInsights?.challenges || []).slice(0, 2),
+  };
 
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-5 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
@@ -1012,7 +1058,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   ({stationNumber} / 8)
                 </span>
                 <span dir="ltr" className="font-mono font-bold">
-                  ({currentAdvisorScore > 0 ? currentAdvisorScore : 7} / 10)
+                  ({currentActiveInsights.score > 0 ? currentActiveInsights.score : 7} / 10)
                 </span>
               </span>
               <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200">
@@ -1169,7 +1215,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                 <span className="flex items-center gap-1">
                   <span>اكتمل تقييم المحطة</span>
-                  <span dir="ltr" className="font-mono">({stationNumber} / 8)</span>
+                  <span dir="ltr" className="font-mono">{stationNumber} / 8</span>
                   <span>بنجاح</span>
                 </span>
               </div>
@@ -1190,16 +1236,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   style={{ color: currentAdvisor.themeColor }}
                   dir="ltr"
                 >
-                  {currentAdvisorScore > 0 ? currentAdvisorScore : 7} <span className="text-base text-[#64748B] dark:text-[#94A3B8]">/ 10</span>
+                  {currentActiveInsights.score > 0 ? currentActiveInsights.score : 7} <span className="text-base text-[#64748B] dark:text-[#94A3B8]">/ 10</span>
                 </span>
               </div>
               <div className="h-10 w-px bg-[#E2E8F0] dark:bg-[#1E343F]" />
               <div>
                 <span className="text-[11px] text-[#334155] dark:text-[#CBD5E1] block">المستوى التقديري</span>
                 <span className="text-sm font-extrabold text-[#0F172A] dark:text-[#F1F5F9]">
-                  {currentAdvisorScore >= 8
+                  {currentActiveInsights.score >= 8
                     ? 'ممتاز ومتألق 🌟'
-                    : currentAdvisorScore >= 6
+                    : currentActiveInsights.score >= 6
                     ? 'جيد وواعد 🚀'
                     : 'يحتاج عناية وتركيز 💡'}
                 </span>
@@ -1213,9 +1259,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
                   أبرز مواطن القوة:
                 </span>
-                <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-0.5">
-                  {(insights?.strengths || []).slice(0, 2).map((str, i) => (
-                    <li key={i}>{str}</li>
+                <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-1">
+                  {currentActiveInsights.strengths.slice(0, 3).map((str, i) => (
+                    <li key={i}>{str.replace(/\*\*/g, '')}</li>
                   ))}
                 </ul>
               </div>
@@ -1225,9 +1271,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <AlertCircle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                   فرص التحسين:
                 </span>
-                <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-0.5">
-                  {(insights?.challenges || []).slice(0, 2).map((ch, i) => (
-                    <li key={i}>{ch}</li>
+                <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-1">
+                  {currentActiveInsights.challenges.slice(0, 3).map((ch, i) => (
+                    <li key={i}>{ch.replace(/\*\*/g, '')}</li>
                   ))}
                 </ul>
               </div>

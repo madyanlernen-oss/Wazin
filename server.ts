@@ -126,6 +126,9 @@ function generateLocalAgentResponse(
     reply?: string;
     actionSteps?: string[];
     reflectionQuestion?: string;
+    station_completed?: boolean;
+    strengths?: string[];
+    challenges?: string[];
   }) => {
     const finalName = data.agent_name || advName;
     const finalReply = data.reply || data.advice || data.summary || 'أنا معك في كل خطوة نحو الاتزان والنمو.';
@@ -142,7 +145,10 @@ function generateLocalAgentResponse(
       advice: finalAdvice,
       reply: finalReply,
       actionSteps: data.actionSteps || [finalAdvice],
-      reflectionQuestion: data.reflectionQuestion || 'ما هي الخطوة البسيطة التي ستبدأ بها اليوم؟'
+      reflectionQuestion: data.reflectionQuestion || 'ما هي الخطوة البسيطة التي ستبدأ بها اليوم؟',
+      station_completed: data.station_completed ?? false,
+      strengths: data.strengths || [],
+      challenges: data.challenges || [],
     };
   };
 
@@ -652,27 +658,46 @@ function generateLocalAgentResponse(
   if (isEvaluationSession) {
     const ratingMatch = message.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?/i) || message.match(/(\d+(?:\.\d+)?)/);
     const parsedScore = ratingMatch ? Math.min(10, Math.max(1, parseFloat(ratingMatch[1]))) : (score || 7.5);
-    const isShortVague = message.length < 22 && !ratingMatch;
+    const isGreeting = /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(message) && message.length < 25;
+    const isShortVague = (message.length < 25 || isGreeting) && !ratingMatch;
 
-    // إذا كانت إجابة المستفيد مقتضبة، مبهمة، أو غير كافية دون تقييم صريح في أول محاورة (stationTurnCount < 1)
-    if (isShortVague && stationTurnCount < 1) {
+    // إذا كانت الإجابة تحية أو مبهمة أو مقتضبة في أول محاورة، أو مجرد رقم صامت بدون سياق واقعه:
+    // الطبيب لا ينهي المحطة أبداً، بل يطرح سؤالاً استيضاحياً مستهدفاً ويبقى station_completed: false!
+    const needsClarification = (isShortVague || (ratingMatch && message.length < 15)) && stationTurnCount < 1;
+
+    if (needsClarification) {
       return formatAgentOutput({
         agent_name: advName,
         score: parsedScore,
-        reasoning: `تحليل استشاري تكيفي (المحطة ${evaluationStep || 1} من 8: ${advRole}): المستفيد قدم إجابة أولية مقتضبة أو عامة ("${message}"). يقتضي الأسلوب الطبي الاستشاري التجاوب بإنصات ودفء، ثم طرح سؤال استيضاحي من زاوية نوعية جديدة لسبر أغوار التحدي واستيضاح الدرجة (من 1 إلى 10) قبل الاعتماد.`,
+        station_completed: false,
+        strengths: [],
+        challenges: [],
+        reasoning: `تحليل استشاري تكيفي (المحطة ${evaluationStep || 1} من 8: ${advRole}): المستفيد قدم إجابة أولية مقتضبة أو عامة ("${message}"). يقتضي الأسلوب الطبي الاستشاري التجاوب بإنصات ودفء، ثم طرح سؤال استيضاحي من زاوية نوعية جديدة لسبر أغوار التحدي واستيضاح الدرجة دون إنهاء المحطة.`,
         summary: `متابعة استيضاحية تكيفية لتشخيص جانب (${advRole}) من زاوية جديدة دقيقة.`,
-        advice: `التشخيص الاستشاري الدقيق هو نصف العلاج؛ توضيح التحدي يساعدنا على صياغة خطة تلائم واقعك.`,
-        reply: `أسمعك وأقدّر ما أشرت إليه يا ${userName} العزيز. 🌿\n\nلنتعمق من زاوية نوعية في ${advRole}:\nما هو أكبر موقف أو عائق واجهته مؤخراً تشعر أنه يؤثر على استقرارك هنا؟ وكيف تقيّم رضاك ومستواك الحالي من 1 إلى 10؟`,
+        advice: `التشخيص الاستشاري الدقيق لواقعك اليومي هو الخطوة الأولى لتحديد احتياجك الفعلي.`,
+        reply: `أهلاً بك يا ${userName} العزيز وأسمعك باهتمام. 🌿\n\nكطبيب ومستشار متخصص في ${advRole}، لا أريد أن أعتمد تقييماً سريعاً دون أن أفهم واقعك الحقيقي.\nما هو أكبر موقف أو عائق واجهته مؤخراً يؤثر على عاداتك واستقرارك هنا؟ وكيف تقيّم رضاك ومستواك الحالي من 1 إلى 10؟`,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
         reflectionQuestion: 'ما هو التحدي الأبرز في هذا الجانب وما تقييمك له من 1 إلى 10؟'
       });
     }
 
-    // إذا كانت الإجابة كافية ومفصلة أو تضمنت تقييماً أو أجاب على السؤال الاستيضاحي (stationTurnCount >= 1)
+    // إذا قدم المستفيد تفاصيل كافية عن واقعه أو أجاب على سؤال المتابعة الاستيضاحي (stationTurnCount >= 1 أو إجابة مفصلة)
     const goldenHabit = advisor?.defaultGoals?.[0] || 'المحافظة على وتيرتك الطيبة خلال الأسبوع القادم';
+    const dynamicStrengths = [
+      `وعي صريح وشفافية في تشخيص واقع ${advRole}`,
+      `الرغبة الصادقة في بناء نمط متزن واستعادة السيطرة`
+    ];
+    const dynamicChallenges = [
+      `الحاجة لتثبيت عادة يومية مستدامة تحمي ${advRole} من التراجع`,
+      `تنظيم الأولويات في المربع الثاني لتجنب ضغوط الطوارئ`
+    ];
+
     return formatAgentOutput({
       agent_name: advName,
       score: parsedScore,
+      station_completed: true,
+      strengths: dynamicStrengths,
+      challenges: dynamicChallenges,
       reasoning: `اعتماد تشخيص استشاري متزن لمحطة (${evaluationStep || 1} من 8: ${advRole}): تم استيعاب إجابة المستفيد ("${message}")، رصد الدرجة (${parsedScore}/10) بوعي، وتوجيه خطة علاجية ميسرة في المربع الثاني.`,
       summary: `اعتماد تشخيص محطة (${advRole}) بدرجة ${parsedScore}/10 وتحديد التوصية الذهبية.`,
       advice: `المحافظة على قاعدة اتزانك في ${advRole}: ${goldenHabit}`,
@@ -879,21 +904,26 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 المستفيد حالياً يخوض جلسة استشارية تقييمية لمحطة (${evaluationStep || 1} من 8: ${advisorName})${evaluationQuestionTitle ? ` وسؤال المحطة الحالي هو: "${evaluationQuestionTitle}"` : ''}.
 عدد المحاورات الحالية في هذه المحطة (stationTurnCount): ${stationTurnCount}.
 
-قواعد حاسمة ملزمة لجلسة الاستشارة:
-1. الشخصية الطبية/الاستشارية الحكيمة والمنصتة (Empathetic Doctor/Advisor Persona):
+قواعد إلزامية حاسمة لجلسة الاستشارة وإدارة اكتمال المحطة (Station Completion Protocol):
+1. الشخصية الطبية/الاستشارية الحكيمة والمنصتة (Empathetic Doctor Persona):
    - تحدث بنبرة طبيب/مستشار حكيم، رفيق، دافئ، ومباشر في صميم تخصصك (${advisorRole}).
-2. السلوك التكيفي التفاعلي (Adaptive Evaluation Logic):
-   - إذا كانت إجابة المستفيد واضحة، كافية، أو تضمنت تقييماً صريحاً (من 1 إلى 10)، أو كان قد أجاب على سؤال استيضاحي سابق (أو stationTurnCount >= 1):
-     * رحّب بالنتيجة وعزز وعيه بجملة أو جملتين دافئتين وموجزتين.
-     * اعتمد الدرجة التقديرية بدقة وضعها في حقل "score" (من 1 إلى 10).
-     * قدّم توصية علاجية ذهبية واحدة مركزة في "advice" وخطوتين إجرائيتين في "actionSteps".
-     * اختم المحطة بنجاح في "reply" ممهداً للانتقال السلس للمحطة التالية.
-   - إذا كانت إجابة المستفيد مقتضبة، عامة، أو غير كافية (مثل: "تمام", "عادي", "ماشي", "شوية ضغط") دون درجة واضحة وكان عدد المحاورات صفر (stationTurnCount < 1):
-     * لا تعتمد درجة نهائية فوراً وتجنب التخمين العشوائي.
-     * تجاوب أولاً بإنصات ودفء واحتواء إنساني في سطر واحد.
-     * اطرح سؤالاً استيضاحياً واحداً مستهدفاً من زاوية جديدة ومختلفة تماماً عن السؤال الأول لسبر أغوار التحدي (Targeted follow-up from a fresh angle) واطلب منه تحديد درجته من 1 إلى 10.
-     * تجنب تكرار نفس صيغة السؤال السابق وتجنب الخروج عن سياق الجانب.
+   - لا توافق على كل مدخل بشكل أعمى، ولا تعتمد المحطة عشوائياً بعد رسالة واحدة عابرة أو تحية أو كلام مقتضب.
+2. إدارة حالة اكتمال المحطة (Station Completion Control via "station_completed"):
+   - إذا كانت إجابة المستفيد تحية (مثل: "مرحبا", "سلام", "أهلاً"), أو سؤالاً, أو إجابة مقتضبة/مبهمة/غير كافية (مثل: "تمام", "عادي", "ماشي", "شوية ضغط", أو مجرد رقم بدون سياق واقعه وعاداته) في أول محاورة (stationTurnCount < 1):
+     * اجعل "station_completed": false إلزامياً.
+     * تجاوب بإنصات ودفء في سطر واحد.
+     * اطرح سؤالاً استيضاحياً واحداً مستهدفاً من زاوية نوعية جديدة ومختلفة تماماً عن السؤال السابق (Targeted follow-up from a fresh angle) لفهم عاداته وواقعه الفعلي في هذا الجانب، واطلب منه تحديد درجته من 1 إلى 10.
+     * لا تكرر السؤال السابق أبداً.
      * ضع السؤال الاستيضاحي في حقل "reflectionQuestion".
+     * اجعل "strengths" و "challenges" مصفوفات فارغة مؤقتاً [].
+   - إذا قدم المستفيد إجابة واضحة وكافية تشرح واقعه وعاداته الحقيقية في هذا الجانب (أو أجاب على السؤال الاستيضاحي للمتابعة مع تفاصيل كافية أو stationTurnCount >= 1):
+     * اجعل "station_completed": true.
+     * اعتمد درجة واقعية ومستحقة من 1 إلى 10 في حقل "score".
+     * استخلص نقاط قوة حقيقية من كلامه الفعلي في حقل "strengths" (مصفوفة من نقطتين إلى ثلاث نقاط مستخلصة من كلامه).
+     * استخلص تحديات وفرص تحسين حقيقية من كلامه الفعلي في حقل "challenges" (مصفوفة من نقطتين إلى ثلاث نقاط مستخلصة من كلامه).
+     * لخص ما تعلمته من كلامه الفعلي في "summary".
+     * قدم توصية علاجية ذهبية مركزة في "advice" وخطوتين إجرائيتين في "actionSteps".
+     * اختم المحطة بنجاح في "reply" ممهداً للانتقال السلس للمحطة التالية.
 3. السياج الصارم وحفظ السياق (Strict Domain Guardrail):
    - ركّز فقط على بعد (${advisorRole})، وإذا سأل عن حالك أو بادر بالتحية، أجب بلطف في سطر وأعده مباشرة لسؤال التشخيص.
 `;
@@ -932,6 +962,9 @@ ${evaluationSessionGuideline}
   "agent_name": "${advisorName}",
   "reasoning": "محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي...",
   "score": ${effectiveScore},
+  "station_completed": false,
+  "strengths": ["نقطة قوة من كلامه"],
+  "challenges": ["فرصة تطوير من كلامه"],
   "summary": "ملخص الوضع بناءً على البيانات والمحادثة",
   "advice": "نصيحة عملية سريعة وموجهة",
   "reply": "نص الرد الحواري المشخصن والتفاعلي المباشر من المستشار متفاعلاً مع ما قاله المستفيد",
@@ -1041,6 +1074,20 @@ ${evaluationSessionGuideline}
               type: Type.STRING,
               description: 'سؤال تأملي ذكي للمستفيد',
             },
+            station_completed: {
+              type: Type.BOOLEAN,
+              description: 'true only if the user has provided clear, sufficient answers covering their real state and the doctor is ready to finalize this station; false if the user gave a greeting, vague response, or more diagnostic exploration is needed',
+            },
+            strengths: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: '1 to 3 dynamic key strengths extracted from what the user actually said in this session',
+            },
+            challenges: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: '1 to 3 dynamic key challenges/growth areas extracted from what the user actually said in this session',
+            },
           },
           required: ['reasoning', 'advice', 'reply', 'actionSteps'],
         },
@@ -1053,6 +1100,9 @@ ${evaluationSessionGuideline}
     parsed.summary = parsed.summary || '';
     parsed.advice = parsed.advice || '';
     parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
+    parsed.station_completed = Boolean(parsed.station_completed);
+    parsed.strengths = Array.isArray(parsed.strengths) ? parsed.strengths : [];
+    parsed.challenges = Array.isArray(parsed.challenges) ? parsed.challenges : [];
     if (!parsed.reply && (parsed.advice || parsed.summary)) {
       parsed.reply = parsed.advice || parsed.summary;
     }
