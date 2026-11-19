@@ -218,7 +218,7 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
   const handleCopy = () => {
     if (!report) return;
     const text = `
-=== تقرير المنسق العام للتوازن الذكي - منصة وازن ===
+=== تقرير المنسق العام للتوازن الذكي - منصة وزان ===
 المستفيد: ${userProfile?.name || ''}
 التشخيص العام:
 ${report.overallDiagnosis}
@@ -547,7 +547,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </blockquote>
 
             <p className="text-[11px] text-[#475569] dark:text-[#94A3B8] font-medium pt-3 border-t border-[#E2E8F0]/70 dark:border-[#1E343F]/70 max-w-xs mx-auto">
-              بوصلة التوازن اليومي لمنظومة وازن
+              بوصلة التوازن اليومي لمنظومة وزان
             </p>
           </div>
         </div>

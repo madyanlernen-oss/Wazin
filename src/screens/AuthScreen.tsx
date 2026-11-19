@@ -226,7 +226,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     };
 
     saveStoredUser(newProfile);
-    setSuccessMsg(`تم إنشاء حسابك في وازن بنجاح! أهلاً بك يا ${name}.`);
+    setSuccessMsg(`تم إنشاء حسابك في وزان بنجاح! أهلاً بك يا ${name}.`);
 
     setTimeout(() => {
       onLoginSuccess(newProfile);
@@ -269,7 +269,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           </div>
 
           <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white transition-colors">
-            {mode === 'login' ? 'مرحباً بك في وازن' : 'ابدأ رحلة توازنك مع وازن'}
+            {mode === 'login' ? 'مرحباً بك في وزان' : 'ابدأ رحلة توازنك مع وزان'}
           </h1>
           <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-400 leading-relaxed transition-colors">
             {mode === 'login'
@@ -633,7 +633,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
             </div>
 
             <p className="text-xs text-[#334155] dark:text-slate-400 leading-relaxed">
-              اختر حساب Google الخاص بك للمتابعة الفورية إلى منصة وازن:
+              اختر حساب Google الخاص بك للمتابعة الفورية إلى منصة وزان:
             </p>
 
             {/* Google Accounts List */}

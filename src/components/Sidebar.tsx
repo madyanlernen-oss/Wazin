@@ -114,7 +114,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             type="button"
             onClick={() => handleSelectNav('dashboard')}
-            aria-label="وازن، لوحة التحكم"
+            aria-label="وزان، لوحة التحكم"
             className="cursor-pointer transition-transform motion-safe:hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 rounded-xl text-right p-0.5"
           >
             <WazanLogo size="md" />
@@ -196,7 +196,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title={userProfile?.email || undefined}
             >
               <span className="text-xs font-bold text-[#0F172A] dark:text-white block truncate leading-tight">
-                {userProfile?.name || 'مستخدم وازن'}
+                {userProfile?.name || 'مستخدم وزان'}
               </span>
               <span className="text-xs text-slate-600 dark:text-slate-400 block truncate mt-0.5">
                 <span>

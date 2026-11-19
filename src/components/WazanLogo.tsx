@@ -6,9 +6,16 @@ export interface WazanLogoProps {
   className?: string;
 }
 
-export const WazanEmblem: React.FC<{ size?: number; className?: string }> = ({
+export interface WazanEmblemProps {
+  size?: number;
+  className?: string;
+  isDecorative?: boolean;
+}
+
+export const WazanEmblem: React.FC<WazanEmblemProps> = ({
   size = 40,
   className = '',
+  isDecorative = false,
 }) => {
   const [imgError, setImgError] = useState(false);
 
@@ -20,11 +27,12 @@ export const WazanEmblem: React.FC<{ size?: number; className?: string }> = ({
         viewBox="0 0 100 100"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
         className={`select-none flex-shrink-0 ${className}`}
       >
         <circle cx="50" cy="50" r="46" fill="#0d1b2a" stroke="#00e5ff" strokeWidth="3" />
         <circle cx="50" cy="50" r="18" fill="none" stroke="#bd9240" strokeWidth="4" />
-        <circle cx="50" cy="6" fill="#00e5ff" />
+        <circle cx="50" cy="6" r="4" fill="#00e5ff" />
       </svg>
     );
   }
@@ -32,7 +40,7 @@ export const WazanEmblem: React.FC<{ size?: number; className?: string }> = ({
   return (
     <img
       src="/assets/wazan_logo.jpg"
-      alt="شعار وازن"
+      alt={isDecorative ? '' : 'شعار وزان'}
       width={size}
       height={size}
       onError={() => setImgError(true)}
@@ -60,7 +68,7 @@ export const WazanLogo: React.FC<WazanLogoProps> = ({
     <div className={`flex items-center gap-3 select-none ${className}`}>
       {/* Emblem container */}
       <div className="relative flex items-center justify-center p-0.5 rounded-2xl bg-[#0b1726] border border-[#1b605b]/30 dark:border-cyan-500/40 shadow-md shadow-cyan-950/20 overflow-hidden">
-        <WazanEmblem size={currentPx} />
+        <WazanEmblem size={currentPx} isDecorative={showText} />
       </div>
 
       {showText && (
@@ -77,9 +85,9 @@ export const WazanLogo: React.FC<WazanLogoProps> = ({
                   : 'text-4xl'
               }`}
             >
-              وازن
+              وزان
             </span>
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-950/60 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/40">
+            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-950/60 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/40">
               توازن الحياة
             </span>
           </div>

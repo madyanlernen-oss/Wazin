@@ -221,7 +221,7 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-[#0B6E72] dark:text-cyan-400 flex-shrink-0" aria-hidden="true" />
             <span>
-              في منصة <strong className="text-[#0B6E72] dark:text-cyan-300">وازن</strong>، يتم تقييم كل مجال لحساب مستوى توازنك بدقة ورسم عجلتك التفاعلية وتقديم خطة موجهة لتحسين جودة حياتك.
+              في منصة <strong className="text-[#0B6E72] dark:text-cyan-300">وزان</strong>، يتم تقييم كل مجال لحساب مستوى توازنك بدقة ورسم عجلتك التفاعلية وتقديم خطة موجهة لتحسين جودة حياتك.
             </span>
           </div>
         </div>

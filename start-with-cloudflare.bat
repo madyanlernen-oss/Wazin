@@ -1,8 +1,8 @@
 @echo off
 chcp 65001 > nul
-title تشغيل منصة وازن - Wazan Cloudflare Launcher
+title تشغيل منصة وزان - Wazan Cloudflare Launcher
 echo ================================================================
-echo           🌟 منصة وازن - تشغيل الخادم مع نفق Cloudflare 🌟
+echo           🌟 منصة وزان - تشغيل الخادم مع نفق Cloudflare 🌟
 echo ================================================================
 echo.
 echo [1/2] جاري تشغيل خادم التطبيق المحلي (Wazan Server) على المنفذ 3000...

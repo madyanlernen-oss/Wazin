@@ -134,7 +134,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
       const welcomeMsg: ChatMessage = {
         id: `welcome_${currentAdvisor.id}`,
         sender: 'advisor',
-        content: `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في منصة وازن. أنا ${currentAdvisor.name}، ${currentAdvisor.role}.
+        content: `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في منصة وزان. أنا ${currentAdvisor.name}، ${currentAdvisor.role}.
 رصدت تقييمك الحالي في "${currentAdvisor.title}" بدرجة (${currentScore.toFixed(1)} من 10).
 أنا هنا معك لنصنع نقلة نوعية ونحول التحديات إلى خطوات بسيطة يومية. بمَ تحب أن نبدأ استشارتنا اليوم؟`,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),

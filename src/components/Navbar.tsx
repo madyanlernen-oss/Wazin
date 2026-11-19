@@ -63,7 +63,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <button
           type="button"
           onClick={() => onNavigate('landing')}
-          aria-label="وازن، الصفحة الرئيسية"
+          aria-label="وزان، الصفحة الرئيسية"
           className="cursor-pointer transition-transform motion-safe:hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 rounded-xl"
         >
           <WazanLogo size="md" />
@@ -81,7 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
         <button
           type="button"
           onClick={() => onNavigate('landing')}
-          aria-label="وازن، الصفحة الرئيسية"
+          aria-label="وزان، الصفحة الرئيسية"
           className="cursor-pointer transition-transform motion-safe:hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 rounded-xl"
         >
           <WazanLogo size="md" />
@@ -114,7 +114,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <button
         type="button"
         onClick={() => onNavigate('dashboard')}
-        aria-label="وازن، الصفحة الرئيسية"
+        aria-label="وزان، الصفحة الرئيسية"
         className="cursor-pointer transition-transform motion-safe:hover:scale-[1.02] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 rounded-xl flex-shrink-0"
       >
         <WazanLogo size="sm" />

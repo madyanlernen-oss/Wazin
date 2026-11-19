@@ -233,21 +233,21 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 className="inline-flex items-center gap-3 px-9 py-4 rounded-full bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-base font-black shadow-lg shadow-[#0B6E72]/25 dark:shadow-cyan-950/50 border border-teal-600/30 dark:border-cyan-400/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <span className="text-cyan-200 font-bold text-lg">&larr;</span>
-                <span>تسجيل الدخول إلى وازن</span>
+                <span>تسجيل الدخول إلى وزان</span>
               </button>
             </div>
           </div>
         </div>
 
-        {/* Explainer Video Slot (حاوية الفيديو التوضيحي التعريفي لمنصة وازن) */}
+        {/* Explainer Video Slot (حاوية الفيديو التوضيحي التعريفي لمنصة وزان) */}
         <div className="relative max-w-4xl mx-auto space-y-5 text-center">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 dark:bg-slate-900/80 border border-slate-200 dark:border-cyan-500/25 text-xs font-bold text-[#0B6E72] dark:text-cyan-300 shadow-xs backdrop-blur-md">
               <span className="text-[#8A5A00] dark:text-amber-400">🎬</span>
-              <span>فيديو تعريفي لمنظومة وازن</span>
+              <span>فيديو تعريفي لمنظومة وزان</span>
             </div>
             <h3 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white">
-              شاهد كيف تُعيد "وازن" ترتيب بوصلتك الحياتية في دقائق
+              شاهد كيف تُعيد "وزان" ترتيب بوصلتك الحياتية في دقائق
             </h3>
             <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
               جولة مرئية تستعرض رحلتك من التقييم الأسبوعي مع المستشارين الثمانية إلى لوحة تحكم عجلة الحياة ومصفوفة التركيز اليومي.
@@ -286,7 +286,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 bg-gradient-to-t from-black/85 via-black/40 to-transparent flex items-center justify-between text-white text-xs z-10">
                 <div className="flex items-center gap-2 font-bold">
                   <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                  <span className="text-white/95">تجربة وازن: التناغم الحياتي بالذكاء الاصطناعي</span>
+                  <span className="text-white/95">تجربة وزان: التناغم الحياتي بالذكاء الاصطناعي</span>
                 </div>
                 <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-300">
                   <span className="px-2 py-0.5 rounded-md bg-white/10 backdrop-blur-xs border border-white/10">03:15 دقيقة</span>
