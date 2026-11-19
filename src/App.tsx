@@ -442,6 +442,11 @@ export default function App() {
               onUpdateGoals={(updated) =>
                 setAppState((prev) => ({ ...prev, eisenhowerGoals: updated }))
               }
+              directorReport={appState.directorReport}
+              scores={appState.scores}
+              userProfile={appState.userProfile}
+              onNavigateToAssessment={() => setActiveScreen('onboarding')}
+              onNavigateToDirector={() => setActiveScreen('director_summary')}
               theme={theme}
             />
           )}

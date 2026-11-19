@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Target,
   Sparkles,
@@ -15,9 +15,28 @@ import {
   RotateCcw,
   AlertTriangle,
   X,
+  ChevronDown,
+  ChevronUp,
+  Edit3,
+  Lightbulb,
+  ArrowRight,
+  BrainCircuit,
+  RefreshCw,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
-import { EisenhowerGoalItem, EisenhowerQuadrant, GoalTimeframe, LifeAreaId } from '../types/lifeBalance';
+import {
+  DirectorSummaryReport,
+  EisenhowerGoalItem,
+  EisenhowerQuadrant,
+  GoalTimeframe,
+  LifeAreaId,
+  UserProfile,
+} from '../types/lifeBalance';
+import {
+  generateAgent11Suggestions,
+  EisenhowerSuggestionItem,
+  mapDomainNameToAreaId,
+} from '../utils/eisenhowerAgent';
 
 export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
   // 0. أهداف يومية (Daily Goals)
@@ -180,12 +199,22 @@ export const INITIAL_EISENHOWER_GOALS: EisenhowerGoalItem[] = [
 interface EisenhowerMatrixScreenProps {
   goals?: EisenhowerGoalItem[];
   onUpdateGoals?: (goals: EisenhowerGoalItem[]) => void;
+  directorReport?: DirectorSummaryReport | null;
+  scores?: Record<LifeAreaId, number>;
+  userProfile?: UserProfile | null;
+  onNavigateToAssessment?: () => void;
+  onNavigateToDirector?: () => void;
   theme?: 'light' | 'dark';
 }
 
 export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   goals: propGoals,
   onUpdateGoals,
+  directorReport,
+  scores,
+  userProfile,
+  onNavigateToAssessment,
+  onNavigateToDirector: _onNavigateToDirector,
   theme: _theme = 'light',
 }) => {
   const [goals, setGoals] = useState<EisenhowerGoalItem[]>(
@@ -208,6 +237,123 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   const [newTitle, setNewTitle] = useState('');
   const [newQuadrant, setNewQuadrant] = useState<EisenhowerQuadrant>('q2_important_not_urgent');
   const [newAreaId, setNewAreaId] = useState<LifeAreaId>('career');
+
+  // Agent 11 Suggestions state (derived from Agent 9 & Agent 10)
+  const [suggestions, setSuggestions] = useState<EisenhowerSuggestionItem[]>([]);
+  const [isSuggestionsCollapsed, setIsSuggestionsCollapsed] = useState(false);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [editingSuggestion, setEditingSuggestion] = useState<EisenhowerSuggestionItem | null>(null);
+  const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<Set<string>>(new Set());
+  const [notificationToast, setNotificationToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
+
+  const showToast = (message: string, type: 'success' | 'info' = 'success') => {
+    setNotificationToast({ message, type });
+    setTimeout(() => {
+      setNotificationToast(null);
+    }, 3500);
+  };
+
+  // Generate initial suggestions from Agent 9 & Agent 10 via Agent 11
+  useEffect(() => {
+    const generated = generateAgent11Suggestions(directorReport, scores, goals);
+    setSuggestions(generated.filter((s) => !dismissedSuggestionIds.has(s.id)));
+  }, [directorReport, scores]);
+
+  // Direct addition of a suggestion to the matrix
+  const handleAddSuggestionDirectly = (sug: EisenhowerSuggestionItem) => {
+    const newGoal: EisenhowerGoalItem = {
+      id: `goal_sug_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title: sug.title,
+      quadrant: sug.quadrant,
+      timeframe: sug.timeframe,
+      areaId: sug.areaId,
+      completed: false,
+      source: 'advisor',
+      advisorName: sug.sourceAgentName,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [newGoal, ...goals];
+    updateAllGoals(updated);
+    setSuggestions((prev) => prev.filter((item) => item.id !== sug.id));
+    showToast(`تمت إضافة الهدف إلى (${sug.quadrantLabel}) بنجاح!`, 'success');
+  };
+
+  // Manual customization of a suggestion before adding
+  const handleCustomizeSuggestion = (sug: EisenhowerSuggestionItem) => {
+    setNewTitle(sug.title);
+    setNewQuadrant(sug.quadrant);
+    setNewAreaId(sug.areaId);
+    setActiveTimeframe(sug.timeframe);
+    setEditingSuggestion(sug);
+    setShowAddModal(true);
+  };
+
+  // Dismiss a suggestion
+  const handleDismissSuggestion = (id: string) => {
+    setSuggestions((prev) => prev.filter((s) => s.id !== id));
+    setDismissedSuggestionIds((prev) => new Set([...prev, id]));
+    showToast('تم استبعاد الاقتراح من القائمة', 'info');
+  };
+
+  // Refresh suggestions (tries server endpoint then fallback to local generator)
+  const handleRefreshSuggestions = async () => {
+    setIsLoadingSuggestions(true);
+    try {
+      const res = await fetch('/api/gemini/eisenhower-suggestions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          directorReport,
+          scores,
+          userProfile,
+          currentGoals: goals,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.suggestions && Array.isArray(data.suggestions) && data.suggestions.length > 0) {
+          const mapped: EisenhowerSuggestionItem[] = data.suggestions.map((item: any, idx: number) => {
+            const areaId = (item.domain ? mapDomainNameToAreaId(item.domain) : 'personal') as LifeAreaId;
+            const domainObj = ADVISORS_LIST.find((a) => a.id === areaId);
+            return {
+              id: item.id || `sug_remote_${Date.now()}_${idx}`,
+              title: item.title,
+              quadrant: (item.quadrant || 'q2_important_not_urgent') as EisenhowerQuadrant,
+              quadrantLabel: item.quadrant_label || 'المربع 2 (جدول له)',
+              timeframe: (item.timeframe || 'weekly') as GoalTimeframe,
+              areaId,
+              domainName: domainObj?.title || item.domain || 'الجانب الشخصي',
+              sourceAgent: item.sourceAgent || 'agent_9_aggregator',
+              sourceAgentName: item.sourceAgentName || 'م. معتز التكاملي (وكيل 9)',
+              sourceTypeLabel: item.sourceTypeLabel || 'اقتراح ذكي',
+              rationale: item.rationale || 'مستخلص من التحليل التكاملي لمجالات الحياة.',
+            };
+          });
+          setSuggestions(mapped);
+          showToast('تم تحديث الاقتراحات بنجاح من وكيل أهدافي 11', 'success');
+          setIsLoadingSuggestions(false);
+          return;
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    const fresh = generateAgent11Suggestions(directorReport, scores, goals);
+    setSuggestions(fresh);
+    showToast('تم جلب اقتراحات جديدة من تحليلات م. معتز ود. هاني', 'success');
+    setIsLoadingSuggestions(false);
+  };
+
+  // Open clean manual modal
+  const handleOpenAddModalManual = () => {
+    setEditingSuggestion(null);
+    setNewTitle('');
+    setNewQuadrant('q2_important_not_urgent');
+    setNewAreaId('career');
+    setShowAddModal(true);
+  };
 
   // Confirmation state for deleting a single goal
   const [goalToDelete, setGoalToDelete] = useState<EisenhowerGoalItem | null>(null);
@@ -265,7 +411,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
     }
   };
 
-  // Add new goal manually
+  // Add new goal manually (or save customized suggestion)
   const handleAddGoal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
@@ -277,10 +423,19 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
       timeframe: activeTimeframe,
       areaId: newAreaId,
       completed: false,
-      source: 'user',
+      source: editingSuggestion ? 'advisor' : 'user',
+      advisorName: editingSuggestion ? editingSuggestion.sourceAgentName : undefined,
+      createdAt: new Date().toISOString(),
     };
 
     updateAllGoals([newGoal, ...goals]);
+    if (editingSuggestion) {
+      setSuggestions((prev) => prev.filter((item) => item.id !== editingSuggestion.id));
+      setEditingSuggestion(null);
+      showToast('تم تخصيص وحفظ الهدف بنجاح في مصفوفتك!', 'success');
+    } else {
+      showToast('تمت إضافة الهدف يدوياً بنجاح!', 'success');
+    }
     setNewTitle('');
     setShowAddModal(false);
   };
@@ -504,7 +659,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
 
           <button
             type="button"
-            onClick={() => setShowAddModal(true)}
+            onClick={handleOpenAddModalManual}
             className="px-4 py-2.5 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -542,6 +697,214 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           />
         </div>
       </div>
+
+      {/* Agent 11 Smart Goal & Plan Suggestions Section (Powered by Agent 9 & Agent 10) */}
+      <section
+        aria-label="اقتراحات الأهداف والخطط الذكية"
+        className="bg-gradient-to-br from-teal-50/70 via-white to-emerald-50/50 dark:from-[#0B1E26] dark:via-[#112028] dark:to-[#0D242D] border-2 border-[#0B6E72]/20 dark:border-cyan-800/40 rounded-3xl p-5 sm:p-7 shadow-xs transition-all duration-300 space-y-4"
+      >
+        {/* Top Header of Suggestions Box */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-teal-100/80 dark:border-cyan-900/40">
+          <div className="flex items-start sm:items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-[#0B6E72]/15 dark:bg-cyan-950/70 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/25 dark:border-cyan-800/50 flex items-center justify-center flex-shrink-0 shadow-2xs">
+              <Sparkles className="w-5 h-5 text-amber-500 dark:text-amber-400" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-950/80 text-[#0B6E72] dark:text-cyan-300 text-[11px] font-black border border-[#0B6E72]/20 dark:border-cyan-800/60">
+                  <BrainCircuit className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+                  وكيل أهدافي 11 (اقتراح الخطط والأولويات الذكية)
+                </span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 text-[10px] font-bold border border-amber-200/80 dark:border-amber-800/50">
+                  ⚡ مستخلصة من وكيل 9 (م. معتز) ووكيل 10 (د. هاني)
+                </span>
+              </div>
+              <h3 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
+                اقتراحات الأهداف والخطط الذكية
+              </h3>
+              <p className="text-xs text-[#475569] dark:text-slate-300 mt-0.5 leading-relaxed">
+                خطط عملية مستخلصة من تشخيص منظومة حياتك وعلاج عنق الزجاجة (م. معتز) وأولويات المربع الثاني (د. هاني). يمكنك <strong className="text-[#0B6E72] dark:text-cyan-400">طرحها مباشرة في مصفوفتك</strong> أو <strong className="text-[#0B6E72] dark:text-cyan-400">تعديلها وملؤها يدوياً</strong>.
+              </p>
+            </div>
+          </div>
+
+          {/* Action & Toggle Controls */}
+          <div className="flex items-center gap-2 self-end sm:self-auto flex-shrink-0">
+            <span className="text-[11px] font-bold px-2.5 py-1 rounded-xl bg-white/90 dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 text-[#475569] dark:text-slate-300 shadow-2xs">
+              {suggestions.length} {suggestions.length === 1 ? 'اقتراح ذكي' : suggestions.length === 2 ? 'اقتراحان ذكيان' : 'اقتراحات ذكية'}
+            </span>
+
+            <button
+              type="button"
+              onClick={handleRefreshSuggestions}
+              disabled={isLoadingSuggestions}
+              title="تحديث واستدعاء مقترحات جديدة من الوكلاء"
+              className="p-2 rounded-xl bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 text-[#475569] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-cyan-300 hover:border-[#0B6E72]/40 transition-colors cursor-pointer shadow-2xs disabled:opacity-50"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isLoadingSuggestions ? 'animate-spin text-[#0B6E72]' : ''}`} />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsSuggestionsCollapsed(!isSuggestionsCollapsed)}
+              title={isSuggestionsCollapsed ? 'توسيع وإظهار الاقتراحات' : 'طي الاقتراحات مؤقتاً'}
+              className="p-2 rounded-xl bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 text-[#475569] dark:text-slate-300 hover:text-[#0F172A] dark:hover:text-white transition-colors cursor-pointer shadow-2xs flex items-center gap-1"
+            >
+              <span className="text-[11px] font-bold sm:inline hidden">
+                {isSuggestionsCollapsed ? 'عرض' : 'طي'}
+              </span>
+              {isSuggestionsCollapsed ? (
+                <ChevronDown className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronUp className="w-3.5 h-3.5" />
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Suggestions Body: Cards Grid */}
+        {!isSuggestionsCollapsed && (
+          <div className="space-y-4 pt-1">
+            {suggestions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                {suggestions.map((sug) => {
+                  const adv = ADVISORS_LIST.find((a) => a.id === sug.areaId);
+                  const isQ2 = sug.quadrant === 'q2_important_not_urgent';
+                  const isQ1 = sug.quadrant === 'q1_urgent_important';
+
+                  return (
+                    <div
+                      key={sug.id}
+                      className="bg-white dark:bg-[#0F1D24] border border-teal-100 dark:border-cyan-900/40 hover:border-teal-300 dark:hover:border-cyan-700 rounded-2xl p-4 shadow-2xs flex flex-col justify-between gap-3.5 transition-all hover:shadow-xs group"
+                    >
+                      {/* Top Meta: Source Agent Pill & Strategy Badge & Dismiss */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1 text-[10px] font-black px-2 py-0.5 rounded-md bg-[#0B6E72]/10 dark:bg-cyan-950/70 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/50">
+                            <span>{sug.sourceAgentName}</span>
+                          </span>
+                          <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/40">
+                            {sug.sourceTypeLabel}
+                          </span>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDismissSuggestion(sug.id)}
+                          className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800/60 transition-colors cursor-pointer"
+                          title="استبعاد الاقتراح"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Middle: Domain, Title, and Rationale Callout */}
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          {adv && (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#475569] dark:text-slate-300">
+                              <span>{adv.avatarSvg}</span>
+                              <span>{adv.title}</span>
+                            </span>
+                          )}
+
+                          <span
+                            className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md border ${
+                              isQ2
+                                ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800/50'
+                                : isQ1
+                                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800/50'
+                                : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            {sug.quadrantLabel}
+                          </span>
+                        </div>
+
+                        <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white leading-relaxed">
+                          {sug.title}
+                        </h4>
+
+                        <div className="text-[11px] text-[#475569] dark:text-slate-300 bg-slate-50/90 dark:bg-[#071318]/70 border border-slate-200/70 dark:border-slate-800/70 rounded-xl p-2.5 leading-relaxed">
+                          <strong className="text-[#0B6E72] dark:text-cyan-400 font-black">سبب الاقتراح: </strong>
+                          <span>{sug.rationale}</span>
+                        </div>
+                      </div>
+
+                      {/* Bottom Actions: Add Directly (+) OR Edit & Fill Manually */}
+                      <div className="pt-2 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleAddSuggestionDirectly(sug)}
+                          className="flex-1 px-3 py-2 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs hover:shadow-xs"
+                          title="طرح الهدف مباشرة في المربع المقترح بنقرة واحدة"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>طرح في المصفوفة</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleCustomizeSuggestion(sug)}
+                          className="px-3 py-2 rounded-xl bg-white dark:bg-[#112028] hover:bg-slate-50 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-[#334155] dark:text-slate-200 text-xs font-bold transition-colors flex items-center gap-1 cursor-pointer shadow-2xs"
+                          title="تعديل وتخصيص نص الهدف أو المربع قبل الحفظ"
+                        >
+                          <Edit3 className="w-3 h-3 text-slate-500 dark:text-slate-400" />
+                          <span>تعديل يدوي</span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-white/80 dark:bg-[#0F1D24] border border-teal-100 dark:border-cyan-900/30 rounded-2xl p-6 text-center space-y-3">
+                <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800/50 mx-auto flex items-center justify-center">
+                  <CheckCircle2 className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-black text-[#0F172A] dark:text-white">
+                    تم استعراض وطرح كافة المقترحات الحالية!
+                  </h4>
+                  <p className="text-xs text-[#64748B] dark:text-slate-400 mt-1 max-w-md mx-auto">
+                    جميع اقتراحات وكيل أهدافي 11 تمت إضافتها إلى مصفوفتك أو استبعادها. يمكنك طلب اقتراحات إضافية جديدة في أي وقت.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRefreshSuggestions}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] text-white text-xs font-bold shadow-2xs cursor-pointer transition-colors"
+                >
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  <span>جلب اقتراحات إضافية</span>
+                </button>
+              </div>
+            )}
+
+            {/* Hint when directorReport is not yet generated */}
+            {!directorReport && (
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/50 text-amber-900 dark:text-amber-200 text-xs">
+                <div className="flex items-center gap-2">
+                  <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                  <span>
+                    <strong>تلميح ذكي:</strong> للحصول على خطط مخصصة بدقة فائقة من وكيل 9 (م. معتز) ووكيل 10 (د. هاني)، ننصحك بإتمام تقييمك الشامل.
+                  </span>
+                </div>
+                {onNavigateToAssessment && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToAssessment}
+                    className="inline-flex items-center gap-1 font-black text-[#0B6E72] dark:text-cyan-400 hover:underline cursor-pointer flex-shrink-0"
+                  >
+                    <span>قيّم أسبوعك الآن</span>
+                    <ArrowRight className="w-3.5 h-3.5 rotate-180" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </section>
 
       {/* The 4 Eisenhower Quadrants Grid (Strict 2x2 Natural Arabic RTL Flow) */}
       {/* 
@@ -716,19 +1079,33 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
         </div>
       </div>
 
-      {/* Manual Add Goal Modal */}
+      {/* Add / Customize Goal Modal */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fadeIn">
           <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 max-w-lg w-full shadow-2xl relative text-right space-y-5">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
-              <h3 className="text-lg font-black text-[#0F172A] dark:text-white flex items-center gap-2">
-                <Plus className="w-5 h-5 text-[#0B6E72] dark:text-cyan-400" />
-                إضافة هدف جديد لمصفوفة أيزنهاور
-              </h3>
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-[#0B6E72]/15 dark:bg-cyan-950/70 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/50 flex items-center justify-center flex-shrink-0">
+                  {editingSuggestion ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
+                    {editingSuggestion ? 'تخصيص اقتراح وكيل أهدافي 11' : 'إضافة هدف جديد لمصفوفة أيزنهاور'}
+                  </h3>
+                  {editingSuggestion && (
+                    <p className="text-[11px] text-[#0B6E72] dark:text-cyan-300 font-bold mt-0.5">
+                      مستخلص من: {editingSuggestion.sourceAgentName} • {editingSuggestion.sourceTypeLabel}
+                    </p>
+                  )}
+                </div>
+              </div>
               <button
                 type="button"
-                onClick={() => setShowAddModal(false)}
-                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 cursor-pointer"
+                onClick={() => {
+                  setShowAddModal(false);
+                  setEditingSuggestion(null);
+                }}
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -737,14 +1114,14 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <form onSubmit={handleAddGoal} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
-                  نص الهدف أو المهمة:
+                  نص الهدف أو الخطة العملية:
                 </label>
                 <input
                   type="text"
                   required
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
-                  placeholder="مثال: قراءة 20 صفحة يومياً، إنهاء تقرير الميزانية..."
+                  placeholder="مثال: قراءة 20 صفحة يومياً، تثبيت موعد النوم..."
                   className="w-full bg-slate-50 dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-[#64748B] dark:placeholder-slate-400 focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400"
                   dir="rtl"
                   autoFocus
@@ -761,10 +1138,37 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                   className="w-full bg-slate-50 dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer"
                 >
                   <option value="q1_urgent_important">1 - مهم وعاجل (نفّذ الآن)</option>
-                  <option value="q2_important_not_urgent">2 - مهم وغير عاجل (جدول له - بناء المستقبل)</option>
+                  <option value="q2_important_not_urgent">2 - مهم وغير عاجل (جدول له - وقود التوازن)</option>
                   <option value="q3_urgent_not_important">3 - غير مهم وعاجل (فوّضه)</option>
                   <option value="q4_not_urgent_not_important">4 - غير مهم وغير عاجل (احذفه أو قلله)</option>
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
+                  النطاق الزمني:
+                </label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { id: 'daily', label: 'يومية' },
+                    { id: 'weekly', label: 'أسبوعية' },
+                    { id: 'monthly', label: 'شهرية' },
+                    { id: 'yearly', label: 'سنوية' },
+                  ].map((tf) => (
+                    <button
+                      key={tf.id}
+                      type="button"
+                      onClick={() => setActiveTimeframe(tf.id as GoalTimeframe)}
+                      className={`py-2 px-2 text-xs font-bold rounded-xl border transition-all text-center cursor-pointer ${
+                        activeTimeframe === tf.id
+                          ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white border-transparent shadow-2xs'
+                          : 'bg-slate-50 dark:bg-[#102033] border-slate-200 dark:border-slate-700 text-[#475569] dark:text-slate-300 hover:border-[#0B6E72]/40'
+                      }`}
+                    >
+                      {tf.label}
+                    </button>
+                  ))}
+                </div>
               </div>
 
               <div>
@@ -787,7 +1191,10 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               <div className="pt-2 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setEditingSuggestion(null);
+                  }}
                   className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-[#64748B] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                 >
                   إلغاء
@@ -796,7 +1203,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                   type="submit"
                   className="px-5 py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs cursor-pointer transition-colors"
                 >
-                  حفظ الهدف
+                  {editingSuggestion ? 'حفظ وطرح الهدف في المصفوفة' : 'حفظ الهدف'}
                 </button>
               </div>
             </form>
@@ -877,6 +1284,16 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                 نعم، استعد الأهداف الافتراضية
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Floating Action Feedback Toast */}
+      {notificationToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 pointer-events-none animate-fadeIn">
+          <div className="bg-[#0F172A] dark:bg-white text-white dark:text-[#0F172A] px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-black border border-slate-700 dark:border-slate-200">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 dark:text-emerald-600 flex-shrink-0" />
+            <span>{notificationToast.message}</span>
           </div>
         </div>
       )}
