@@ -82,6 +82,10 @@ export const loadStoredState = (): StoredAppState => {
     ) {
       return getDefaultInitialState();
     }
+    // Migrate old demo email ending with .ai to .com
+    if (parsed.userProfile?.email?.toLowerCase() === 'demo@wazan.ai') {
+      parsed.userProfile.email = 'demo@wazan.com';
+    }
     return {
       ...getDefaultInitialState(),
       ...parsed,
@@ -436,7 +440,7 @@ const USERS_STORAGE_KEY = 'lifebalance_users_v1';
 
 export const DEMO_USER: UserProfile = {
   name: 'سعود المنصور',
-  email: 'demo@wazan.ai',
+  email: 'demo@wazan.com',
   password: '123456',
   ageGroup: '30 - 39 سنة',
   currentFocus: 'تحقيق التوازن الشامل والارتقاء بالأداء المهني والصحي',
@@ -449,7 +453,9 @@ export const getStoredUsers = (): UserProfile[] => {
     const parsed: UserProfile[] = raw ? JSON.parse(raw) : [];
     const demoIdx = parsed.findIndex(
       (u) =>
-        u.email?.toLowerCase() === DEMO_USER.email?.toLowerCase() ||
+        u.email?.toLowerCase() === 'demo@wazan.com' ||
+        u.email?.toLowerCase() === 'demo@wazan.ai' ||
+        u.email?.toLowerCase() === 'demo@tadbeer.ai' ||
         u.name === 'demo' ||
         u.name === 'wazan' ||
         u.name === 'سعود المنصور'

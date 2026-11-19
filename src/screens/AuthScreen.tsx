@@ -12,6 +12,7 @@ import {
   UserPlus,
   Check,
   KeyRound,
+  Sparkles,
 } from 'lucide-react';
 import { UserProfile } from '../types/lifeBalance';
 import { getStoredUsers, saveStoredUser } from '../utils/storage';
@@ -78,6 +79,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   const savedUsers = getStoredUsers();
 
+  // Quick 1-click fill for the official Demo account
+  const handleQuickDemoFill = () => {
+    setEmailOrName('demo@wazan.com');
+    setPassword('123456');
+    setError(null);
+  };
+
   // Handle Standard Login
   const handleLoginSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -97,12 +105,33 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
     setIsSubmitting(true);
 
+    const isDemoIdentifier =
+      identifier === 'demo' ||
+      identifier === 'wazan' ||
+      identifier === 'demo@wazan.com' ||
+      identifier === 'demo@wazan.ai' ||
+      identifier === 'سعود المنصور';
+
+    if (isDemoIdentifier) {
+      const demoAccount: UserProfile = {
+        name: 'سعود المنصور',
+        email: 'demo@wazan.com',
+        password: pass || '123456',
+        ageGroup: '30 - 39 سنة',
+        currentFocus: 'تحقيق التوازن الشامل والارتقاء بالأداء المهني والصحي',
+        registeredAt: new Date().toISOString(),
+      };
+      setSuccessMsg('أهلاً بك يا سعود المنصور! جاري الدخول بالحساب التجريبي...');
+      setTimeout(() => {
+        onLoginSuccess(demoAccount);
+      }, 400);
+      return;
+    }
+
     const found = savedUsers.find(
       (u) =>
         (u.email && u.email.toLowerCase() === identifier) ||
-        u.name.toLowerCase() === identifier ||
-        (identifier === 'demo' && (u.email?.toLowerCase() === 'demo@wazan.ai' || u.name === 'demo' || u.name === 'سعود المنصور')) ||
-        (identifier === 'wazan' && (u.email?.toLowerCase() === 'demo@wazan.ai' || u.name === 'demo' || u.name === 'سعود المنصور'))
+        u.name.toLowerCase() === identifier
     );
 
     if (found) {
@@ -119,7 +148,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       // Create new profile seamlessly
       const newProfile: UserProfile = {
         name: emailOrName.trim(),
-        email: emailOrName.includes('@') ? emailOrName.trim() : `${emailOrName.trim()}@wazan.ai`,
+        email: emailOrName.includes('@') ? emailOrName.trim() : `${emailOrName.trim()}@wazan.com`,
         password: pass,
         ageGroup: '25 - 34 سنة',
         currentFocus: 'تحقيق التوازن الشامل',
@@ -289,6 +318,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           {/* Focused Form: LOGIN */}
           {mode === 'login' ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
+              {/* Quick Demo Fill Helper Banner */}
+              <div className="p-3.5 rounded-2xl bg-teal-50/80 dark:bg-[#112028] border border-teal-200/90 dark:border-teal-900/60 flex items-center justify-between gap-3 text-xs transition-colors">
+                <div className="text-right">
+                  <div className="flex items-center gap-1.5 font-black text-[#0B6E72] dark:text-cyan-300">
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>حساب التجربة الجاهز:</span>
+                  </div>
+                  <div className="text-[11px] text-[#475569] dark:text-slate-300 mt-1 flex flex-wrap items-center gap-2" dir="ltr">
+                    <span className="font-mono font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-teal-200/50 dark:border-slate-700">demo@wazan.com</span>
+                    <span className="text-slate-400">|</span>
+                    <span>كلمة المرور: <span className="font-mono font-bold bg-white dark:bg-slate-900 px-1.5 py-0.5 rounded-md border border-teal-200/50 dark:border-slate-700">123456</span></span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleQuickDemoFill}
+                  className="px-3 py-1.5 rounded-xl bg-[#0B6E72] hover:bg-[#085255] dark:bg-[#0891B2] text-white text-[11px] font-black transition-all shadow-xs flex-shrink-0 cursor-pointer hover:scale-[1.02] active:scale-95"
+                  title="تعبئة بيانات الحساب التجريبي بنقرة واحدة"
+                >
+                  تعبئة تلقائية ⚡
+                </button>
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1.5 transition-colors">
                   البريد الإلكتروني أو اسم المستخدم

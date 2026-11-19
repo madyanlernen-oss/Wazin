@@ -109,8 +109,13 @@ export default function App() {
 
   // Handler: Login Success (loads realistic sample state for demo user سعود المنصور, or clean state for new users)
   const handleLoginSuccess = (profile: UserProfile) => {
+    // Normalize demo email if ending with .ai to .com
+    if (profile.email?.toLowerCase() === 'demo@wazan.ai') {
+      profile.email = 'demo@wazan.com';
+    }
     saveStoredUser(profile);
     const isDemo =
+      profile.email?.toLowerCase() === 'demo@wazan.com' ||
       profile.email?.toLowerCase() === 'demo@wazan.ai' ||
       profile.email?.toLowerCase() === 'demo@tadbeer.ai' ||
       profile.name?.toLowerCase() === 'demo' ||
