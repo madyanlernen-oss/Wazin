@@ -43,47 +43,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
+  // Clean, concise menu items without stacked noisy badges
   const navItems = [
     {
       id: 'dashboard' as const,
       label: 'لوحة التحكم وعجلة الحياة',
       icon: LayoutDashboard,
-      badge: null,
     },
     {
       id: 'goals_matrix' as const,
       label: 'أهدافي (مصفوفة أيزنهاور)',
       icon: Target,
-      badge: 'التركيز اليومي',
-      badgeColor: 'bg-amber-100/80 text-amber-900 dark:bg-amber-950/40 dark:text-[#FBBF24] border border-amber-200/80 dark:border-amber-800/40',
     },
     {
       id: 'onboarding' as const,
       label: 'قيّم أسبوعك الآن',
       icon: ClipboardList,
-      badge: 'مفتوح للتقييم 🌿',
-      badgeColor: 'bg-emerald-100/80 text-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/80 dark:border-emerald-800/40',
     },
     {
       id: 'advisor_chat' as const,
       label: 'استشارة المستشارين',
       icon: MessageSquare,
-      badge: 'حوار مفتوح 💬',
-      badgeColor: 'bg-[#0B6E72]/10 text-[#0B6E72] dark:bg-cyan-950/40 dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/40',
     },
     {
       id: 'director_summary' as const,
       label: 'رؤية المنسق العام',
       icon: Compass,
-      badge: 'تكامل الذكاء',
-      badgeColor: 'bg-amber-100/80 text-amber-900 dark:bg-amber-950/40 dark:text-[#FBBF24] border border-amber-200/80 dark:border-amber-800/40',
     },
     {
       id: 'comparison' as const,
       label: 'المقارنة والتحليلات',
       icon: GitCompare,
-      badge: 'تراكمي',
-      badgeColor: 'bg-[#0B6E72]/10 text-[#0B6E72] dark:bg-cyan-950/40 dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/40',
     },
   ];
 
@@ -109,7 +99,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 type="button"
                 onClick={onToggleTheme}
-                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#112028] text-[#0B6E72] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
+                className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#112028] text-[#0F6E6E] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center"
                 title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
                 aria-label="تبديل الوضع الليلي والنهاري"
               >
@@ -135,8 +125,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Navigation Links */}
-        <div className="mt-6 space-y-1.5">
-          <span className="text-[11px] font-extrabold text-slate-400 dark:text-slate-400 px-3 block mb-2 tracking-wider">
+        <div className="mt-6 space-y-1">
+          <span className="text-[11px] font-extrabold text-slate-400 dark:text-slate-500 px-3 block mb-2 tracking-wider">
             القائمة الرئيسية
           </span>
 
@@ -149,26 +139,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 key={item.id}
                 type="button"
                 onClick={() => handleSelectNav(item.id)}
-                className={`w-full flex items-center justify-between p-3 rounded-2xl text-xs font-bold transition-all cursor-pointer ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group ${
                   isActive
-                    ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-sm shadow-[#0B6E72]/20 font-black'
-                    : 'text-[#334155] dark:text-slate-300 hover:text-[#0B6E72] dark:hover:text-white hover:bg-slate-100/80 dark:hover:bg-[#112028]'
+                    ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs font-black'
+                    : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028]'
                 }`}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400 dark:text-slate-400'}`} />
-                  <span>{item.label}</span>
-                </div>
-
-                {item.badge && (
-                  <span
-                    className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                      isActive ? 'bg-white/20 text-white' : item.badgeColor
-                    }`}
-                  >
-                    {item.badge}
-                  </span>
-                )}
+                <Icon
+                  className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 group-hover:scale-105 ${
+                    isActive
+                      ? 'text-white'
+                      : 'text-slate-400 dark:text-slate-400 group-hover:text-[#0F6E6E] dark:group-hover:text-cyan-300'
+                  }`}
+                />
+                <span className="truncate">{item.label}</span>
               </button>
             );
           })}
@@ -177,45 +161,47 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Bottom: User Card & Account Actions */}
       <div className="pt-4 border-t border-slate-200/90 dark:border-slate-800/80 space-y-3">
-        {/* User Profile Card */}
-        <div className="flex items-center gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-[#112028] border border-slate-200/80 dark:border-slate-800">
-          <div className="w-10 h-10 rounded-xl bg-white dark:bg-[#0B161C] border border-[#0B6E72]/20 dark:border-cyan-500/30 text-[#0B6E72] dark:text-cyan-300 font-black text-sm flex items-center justify-center shadow-xs">
-            {userProfile?.name?.charAt(0) || 'و'}
-          </div>
-          <div className="flex-1 min-w-0 text-right">
-            <span className="text-xs font-black text-[#0F172A] dark:text-white block truncate">
-              {userProfile?.name || 'مستخدم وازن'}
-            </span>
-            <div className="flex items-center gap-1.5 mt-0.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-[10px] text-slate-500 dark:text-slate-400 font-bold">
-                {completedCount === 0 ? 'مستخدم جديد' : 'نشط الآن'}
+        {/* Compact User Account Card with Integrated Calm Logout Button */}
+        <div className="p-2.5 rounded-2xl bg-slate-50/90 dark:bg-[#112028] border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-2.5 shadow-2xs transition-colors">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {/* User Avatar */}
+            <div className="w-8 h-8 rounded-xl bg-white dark:bg-[#0B161C] border border-[#0F6E6E]/20 dark:border-cyan-500/30 text-[#0F6E6E] dark:text-cyan-300 font-black text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
+              {userProfile?.name?.charAt(0) || 'و'}
+            </div>
+
+            {/* User Name & Status */}
+            <div className="min-w-0 text-right">
+              <span className="text-xs font-bold text-[#0F172A] dark:text-white block truncate leading-tight">
+                {userProfile?.name || 'مستخدم وازن'}
+              </span>
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block truncate mt-0.5">
+                {userProfile?.email || (completedCount > 0 ? `${completedCount} مجالات مكتملة` : 'حساب نشط')}
               </span>
             </div>
           </div>
-        </div>
 
-        {/* Action Buttons: Sign Out (Primary) & De-emphasized Reset */}
-        <div className="space-y-2 pt-1">
+          {/* Calm, polite Logout Button */}
           <button
             type="button"
             onClick={onSignOut}
             title="تسجيل الخروج من الحساب"
-            className="w-full flex items-center justify-center gap-2 py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-rose-50 dark:bg-[#112028] dark:hover:bg-rose-950/40 text-[#334155] dark:text-slate-300 hover:text-rose-600 dark:hover:text-rose-400 border border-slate-200/80 dark:border-slate-700/70 hover:border-rose-200 dark:hover:border-rose-800/50 text-xs font-bold transition-all shadow-xs cursor-pointer"
+            aria-label="تسجيل الخروج"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-[#0B161C] border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700/60 transition-all cursor-pointer flex-shrink-0"
           >
-            <LogOut className="w-4 h-4 text-rose-500" />
-            <span>تسجيل الخروج</span>
+            <LogOut className="w-4 h-4" />
           </button>
+        </div>
 
-          {/* De-emphasized Safe Reset Action */}
-          <div className="text-center pt-0.5">
+        {/* Guarded, Visually Separated Reset Action */}
+        <div className="pt-1 border-t border-slate-100 dark:border-slate-800/50">
+          <div className="text-center">
             <button
               type="button"
               onClick={() => setShowResetConfirm(true)}
-              title="إعادة تعيين تقييمات المنظومة"
-              className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-slate-400 hover:text-amber-700 dark:text-slate-500 dark:hover:text-[#FBBF24] transition-colors py-1 px-2 rounded-lg hover:bg-amber-50/60 dark:hover:bg-amber-950/30 cursor-pointer"
+              title="إعادة تعيين تقييمات المنظومة وبياناتها"
+              className="inline-flex items-center gap-1.5 py-1 px-2.5 rounded-lg text-[11px] font-medium text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group"
             >
-              <RotateCcw className="w-3 h-3" />
+              <RotateCcw className="w-3 h-3 text-slate-400 group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors" />
               <span>إعادة ضبط التقييم والبيانات</span>
             </button>
           </div>
@@ -267,6 +253,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="flex items-center gap-2.5 pt-2">
               <button
                 type="button"
+                onClick={() => setShowResetConfirm(false)}
+                className="flex-1 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B161C] hover:bg-slate-100 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white font-bold text-xs transition-colors cursor-pointer"
+              >
+                إلغاء والاحتفاظ بالبيانات
+              </button>
+              <button
+                type="button"
                 onClick={() => {
                   setShowResetConfirm(false);
                   onReset();
@@ -274,13 +267,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="flex-1 py-2.5 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
               >
                 نعم، إعادة الضبط
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowResetConfirm(false)}
-                className="flex-1 py-2.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-[#0B161C] hover:bg-slate-100 dark:hover:bg-slate-800 text-[#0F172A] dark:text-white font-bold text-xs transition-colors cursor-pointer"
-              >
-                إلغاء التراجع
               </button>
             </div>
           </div>
