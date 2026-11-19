@@ -245,7 +245,7 @@ export const LifeDimensionsGuide: React.FC = () => {
           <div className="flex items-center gap-2">
             <CheckCircle2 className="w-4 h-4 text-[#1b605b] flex-shrink-0" />
             <span>
-              في منصة <strong className="text-[#1b605b]">تدبير</strong>، يتم تقييم كل مجال لحساب مستوى توازنك بدقة ورسم عجلتك التفاعلية وتقديم خطة موجهة لتحسين جودة حياتك.
+              في منصة <strong className="text-[#1b605b]">وازن</strong>، يتم تقييم كل مجال لحساب مستوى توازنك بدقة ورسم عجلتك التفاعلية وتقديم خطة موجهة لتحسين جودة حياتك.
             </span>
           </div>
         </div>

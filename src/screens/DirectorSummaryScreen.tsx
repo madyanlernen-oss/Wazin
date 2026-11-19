@@ -197,7 +197,7 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
   const handleCopy = () => {
     if (!report) return;
     const text = `
-=== تقرير المنسق العام للتوازن الذكي - منصة تدبير ===
+=== تقرير المنسق العام للتوازن الذكي - منصة وازن ===
 المستفيد: ${userProfile?.name || ''}
 التشخيص العام:
 ${report.overallDiagnosis}
@@ -236,7 +236,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
           <div className="h-4 w-px bg-[#ded7c8]" />
           <span className="text-xs font-extrabold text-[#1b605b] flex items-center gap-1.5">
             <Sparkles className="w-4 h-4 text-[#bd9240]" />
-            تقرير المنسق العام للتوازن الذكي (منصة تدبير)
+            تقرير المنسق العام للتوازن الذكي (منصة وازن)
           </span>
         </div>
 

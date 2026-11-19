@@ -29,10 +29,21 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-16">
         {/* Hero Section */}
-        <div className="text-center max-w-3xl mx-auto space-y-6 pt-4">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white border border-[#eae3d5] text-xs font-bold text-[#1b605b] shadow-xs">
-            <TadbeerEmblem size={18} className="animate-spin-slow" />
-            <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
+        <div className="text-center max-w-3xl mx-auto space-y-6 pt-2">
+          {/* Brand Logo Showcase */}
+          <div className="flex flex-col items-center justify-center gap-3">
+            <div className="relative group">
+              <div className="absolute -inset-1.5 bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 rounded-3xl blur-lg opacity-40 group-hover:opacity-75 transition duration-500"></div>
+              <img
+                src="/assets/wazan_logo.jpg"
+                alt="شعار منصة وازن"
+                className="relative w-28 h-28 sm:w-36 sm:h-36 rounded-2xl object-cover shadow-2xl border-2 border-white/30 ring-4 ring-[#1b605b]/10 hover:scale-105 transition-all duration-300"
+              />
+            </div>
+            <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-[#eae3d5] text-xs font-bold text-[#1b605b] shadow-xs mt-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-500 animate-pulse" />
+              <span>منصة وازن | نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
+            </div>
           </div>
 
           <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black tracking-tight text-[#1d2e2b] leading-tight">
@@ -43,19 +54,19 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           </h1>
 
           <p className="text-base sm:text-lg text-[#536561] leading-relaxed max-w-2xl mx-auto">
-            منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب
-            وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
+            منصة <strong className="text-[#1b605b] font-bold">وازن</strong> الذكية تعيد رسم بوصلتك الحياتية بوعي وإتقان. يرافقك المستشارون الذكيون في كل جانب
+            وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين الإنجاز والسكينة.
           </p>
 
           {/* Login CTA */}
           <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
             <button
               onClick={() => onNavigateToAuth('login')}
-              className="inline-flex items-center gap-2 px-7 py-3.5 rounded-xl bg-[#1b605b] hover:bg-[#16504c] text-white text-sm font-extrabold shadow-md shadow-[#1b605b]/20 hover:shadow-lg transition-all hover:scale-105"
+              className="inline-flex items-center gap-2 px-8 py-4 rounded-xl bg-[#1b605b] hover:bg-[#16504c] text-white text-base font-extrabold shadow-md shadow-[#1b605b]/20 hover:shadow-xl transition-all hover:scale-105 cursor-pointer"
             >
-              <LogIn className="w-4 h-4" />
-              <span>تسجيل الدخول إلى تدبير</span>
-              <ArrowLeft className="w-4 h-4" />
+              <LogIn className="w-5 h-5" />
+              <span>تسجيل الدخول إلى وازن</span>
+              <ArrowLeft className="w-5 h-5" />
             </button>
           </div>
         </div>

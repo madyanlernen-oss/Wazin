@@ -2,7 +2,7 @@
   "name": "tadbeer",
   "private": true,
   "version": "1.0.0",
-  "description": "منصة تدبير - حوكمة توازن الحياة والذكاء الاستشاري المتكامل",
+  "description": "منصة وازن - حوكمة توازن الحياة والذكاء الاستشاري المتكامل",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

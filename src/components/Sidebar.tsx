@@ -154,11 +154,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* User Profile Card */}
         <div className="flex items-center gap-3 p-3 rounded-2xl bg-[#FAF7F2] border border-[#ded7c8]">
           <div className="w-10 h-10 rounded-xl bg-white border border-[#1b605b]/20 text-[#1b605b] font-black text-sm flex items-center justify-center shadow-xs">
-            {userProfile?.name?.charAt(0) || 'ت'}
+            {userProfile?.name?.charAt(0) || 'و'}
           </div>
           <div className="flex-1 min-w-0 text-right">
             <span className="text-xs font-black text-[#1d2e2b] block truncate">
-              {userProfile?.name || 'مستخدم تدبير'}
+              {userProfile?.name || 'مستخدم وازن'}
             </span>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />

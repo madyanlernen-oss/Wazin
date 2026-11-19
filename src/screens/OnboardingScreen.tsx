@@ -346,7 +346,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {
           id: 'welcome',
           sender: 'advisor',
-          text: `مرحباً بك يا ضيف تدبير في عيادة التقييم الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nسنخوض معاً تقييماً شاملاً يتكون من 8 محطات رئيسية لتشخيص هذا الجانب بعناية وبناء خطوات عملية متزنة.\n\n📌 **السؤال (1 من 8):**\n${q1.title}${q1.description ? `\n💡 ${q1.description}` : ''}`,
+          text: `مرحباً بك يا ضيف وازن في عيادة التقييم الخاصة بـ "${currentAdvisor.title}" 🌿\n\nأنا ${currentAdvisor.name}، ${currentAdvisor.role}.\nسنخوض معاً تقييماً شاملاً يتكون من 8 محطات رئيسية لتشخيص هذا الجانب بعناية وبناء خطوات عملية متزنة.\n\n📌 **السؤال (1 من 8):**\n${q1.title}${q1.description ? `\n💡 ${q1.description}` : ''}`,
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ];

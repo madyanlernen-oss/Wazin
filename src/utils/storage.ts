@@ -372,8 +372,8 @@ export const extractInsightsFromAnswers = (
 const USERS_STORAGE_KEY = 'lifebalance_users_v1';
 
 export const DEMO_USER: UserProfile = {
-  name: 'ضيف تدبير',
-  email: 'demo@tadbeer.ai',
+  name: 'ضيف وازن',
+  email: 'demo@wazan.ai',
   password: '123456',
   ageGroup: '25 - 34 سنة',
   currentFocus: 'تحقيق التوازن الشامل وتحديد الأولويات',

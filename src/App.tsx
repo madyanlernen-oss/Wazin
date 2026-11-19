@@ -304,7 +304,7 @@ export default function App() {
               <Menu className="w-5 h-5" />
             </button>
             <span className="text-xs sm:text-sm font-black text-[#1d2e2b]">
-              {screenTitles[activeScreen] || 'تدبير'}
+              {screenTitles[activeScreen] || 'وازن'}
             </span>
           </div>
 
