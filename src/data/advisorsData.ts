@@ -138,7 +138,7 @@ export const ADVISORS_LIST: AdvisorConfig[] = [
         type: 'rating',
         title: 'ما مدى رضاك عن مستوى استقرارك المالي وقدرتك على الوفاء بالتزاماتك؟',
         description: 'قيم شعورك بالراحة عند استحقاق الفواتير والالتزامات المعيشية.',
-        ratingLabels: { low: 'عجز وضغط خانق', mid: 'أتدبر أمري بصعوبة', high: 'وفرة وراحة واضحة' },
+        ratingLabels: { low: 'عجز وضغط خانق', mid: 'أدير نفقاتي بصعوبة', high: 'وفرة وراحة واضحة' },
         minRating: 1,
         maxRating: 10,
       },

@@ -29,6 +29,40 @@ const STORAGE_KEY = PRIMARY_STORAGE_KEY;
 const ONE_WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 /**
+ * One-time migration on app start:
+ * If an old tadbeer_* key exists in localStorage and the new wazan_* key does not,
+ * copies the value to the new key, then removes the old key.
+ */
+export function migrateLegacyStorage(): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const prefixOld = 'tadbeer_';
+    const prefixNew = 'wazan_';
+
+    const keysToMigrate: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith(prefixOld)) {
+        keysToMigrate.push(key);
+      }
+    }
+
+    for (const oldKey of keysToMigrate) {
+      const newKey = prefixNew + oldKey.slice(prefixOld.length);
+      const existingNewVal = localStorage.getItem(newKey);
+      const oldVal = localStorage.getItem(oldKey);
+
+      if (existingNewVal === null && oldVal !== null) {
+        localStorage.setItem(newKey, oldVal);
+      }
+      localStorage.removeItem(oldKey);
+    }
+  } catch (err) {
+    console.warn('Storage migration skipped or failed:', err);
+  }
+}
+
+/**
  * Checks if an advisor is locked for the current week (7 days lock)
  */
 export const isAdvisorWeeklyLocked = (
@@ -75,6 +109,7 @@ export const getDefaultInitialState = (): StoredAppState => {
 
 export const loadStoredState = (): StoredAppState => {
   try {
+    migrateLegacyStorage();
     let raw: string | null = null;
     let sourceKey = STORAGE_KEY;
 
@@ -322,7 +357,7 @@ export const loadSampleState = (): StoredAppState => {
             'مضاعفة طاقة الصباح بنسبة 40% وإزالة الصداع وتحسين التفاعل الصباحي مع العائلة.',
         },
         {
-          name: 'المشي الصباحي 20 دقيقة مع تدبر واستماع لبودكاست',
+          name: 'المشي الصباحي 20 دقيقة مع تأمل واستماع لبودكاست',
           triggerTime: '6:30 صباحاً',
           targetDomains: ['الصحي', 'التعليمي', 'الروحي'],
           expectedImpact:
@@ -496,6 +531,7 @@ export const DEMO_USER: UserProfile = {
 
 export const getStoredUsers = (): UserProfile[] => {
   try {
+    migrateLegacyStorage();
     let raw: string | null = null;
     let sourceKey = USERS_STORAGE_KEY;
 

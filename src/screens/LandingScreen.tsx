@@ -233,7 +233,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 className="inline-flex items-center gap-3 px-9 py-4 rounded-full bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-base font-black shadow-lg shadow-[#0B6E72]/25 dark:shadow-cyan-950/50 border border-teal-600/30 dark:border-cyan-400/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
               >
                 <span className="text-cyan-200 font-bold text-lg">&larr;</span>
-                <span>تسجيل الدخول إلى وزان</span>
+                <span>تسجيل الدخول إلى وازن</span>
               </button>
             </div>
           </div>

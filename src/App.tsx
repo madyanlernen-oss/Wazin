@@ -28,6 +28,7 @@ import {
   loadStoredState,
   saveStoredState,
   saveStoredUser,
+  migrateLegacyStorage,
   resetStoredState,
   StoredAppState,
 } from './utils/storage';
@@ -82,6 +83,11 @@ export default function App() {
       // ignore
     }
   }, [theme]);
+
+  // One-time legacy storage migration on startup
+  useEffect(() => {
+    migrateLegacyStorage();
+  }, []);
 
   const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));
 

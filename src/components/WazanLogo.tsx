@@ -6,8 +6,6 @@ export interface WazanLogoProps {
   className?: string;
 }
 
-export type TadbeerLogoProps = WazanLogoProps;
-
 export const WazanEmblem: React.FC<{ size?: number; className?: string }> = ({
   size = 40,
   className = '',
@@ -44,8 +42,6 @@ export const WazanEmblem: React.FC<{ size?: number; className?: string }> = ({
   );
 };
 
-export const TadbeerEmblem = WazanEmblem;
-
 export const WazanLogo: React.FC<WazanLogoProps> = ({
   size = 'md',
   showText = true,
@@ -81,13 +77,13 @@ export const WazanLogo: React.FC<WazanLogoProps> = ({
                   : 'text-4xl'
               }`}
             >
-              وزان
+              وازن
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-950/60 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/40">
               توازن الحياة
             </span>
           </div>
-          <span className="text-[11px] font-bold text-[#8A5A00] dark:text-amber-300 tracking-wide">
+          <span className="text-xs font-bold text-[#8A5A00] dark:text-amber-300 tracking-wide">
             توازن حياتك بوعي
           </span>
         </div>
@@ -95,5 +91,3 @@ export const WazanLogo: React.FC<WazanLogoProps> = ({
     </div>
   );
 };
-
-export const TadbeerLogo = WazanLogo;
