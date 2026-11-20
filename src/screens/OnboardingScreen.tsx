@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { VoiceInput } from '../components/VoiceInput';
-import { ReasoningBox } from '../components/ReasoningBox';
 import {
   Send,
   Sparkles,
@@ -15,7 +14,6 @@ import {
   MessageSquare,
   ArrowLeft,
   RotateCcw,
-  Brain,
   Stethoscope,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
@@ -316,7 +314,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>({});
 
   const [inputText, setInputText] = useState('');
-  const [expandedReasoningMap, setExpandedReasoningMap] = useState<Record<string, boolean>>({});
   const [showCelebration, setShowCelebration] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
@@ -332,13 +329,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   };
 
   const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
-
-  const toggleReasoning = (messageId: string) => {
-    setExpandedReasoningMap((prev) => ({
-      ...prev,
-      [messageId]: !prev[messageId],
-    }));
-  };
 
   // Chat conversation state per advisor
   const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
@@ -981,30 +971,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 </div>
 
                 <div className="max-w-[85%] sm:max-w-[75%] space-y-2">
-                  {/* Internal Reasoning Box - Hidden by default */}
-                  {isAdvisor && msg.reasoning && (
-                    <div className="space-y-1.5">
-                      {expandedReasoningMap[msg.id] && (
-                        <div className="animate-fadeIn">
-                          <ReasoningBox reasoning={msg.reasoning} defaultExpanded={true} />
-                        </div>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => toggleReasoning(msg.id)}
-                        className="inline-flex items-center gap-1.5 text-[10.5px] font-medium text-amber-800/80 dark:text-amber-400/80 hover:text-amber-900 dark:hover:text-amber-300 transition-colors py-0.5 px-2 rounded-lg hover:bg-amber-500/10 cursor-pointer select-none"
-                        title={expandedReasoningMap[msg.id] ? 'طي مسار التحليل العميق' : 'عرض مسار التفكير والتحليل الداخلي'}
-                      >
-                        <Brain className="w-3 h-3 text-amber-600 dark:text-amber-400" />
-                        <span>
-                          {expandedReasoningMap[msg.id]
-                            ? 'طي مسار التحليل العميق'
-                            : 'مسار التفكير والتحليل العميق (مخفي)'}
-                        </span>
-                      </button>
-                    </div>
-                  )}
-
                   <div
                     className={`p-4 rounded-2xl shadow-xs border ${
                       isAdvisor

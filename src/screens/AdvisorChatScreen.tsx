@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VoiceInput } from '../components/VoiceInput';
-import { ReasoningBox } from '../components/ReasoningBox';
 import {
   Send,
   Sparkles,
@@ -546,11 +545,6 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
                   {/* Bubble */}
                   <div className={`max-w-[85%] sm:max-w-[75%] space-y-3`}>
-                    {/* Dedicated Reasoning Box (التفكير والتحليل العميق) */}
-                    {!isUser && msg.reasoning && (
-                      <ReasoningBox reasoning={msg.reasoning} />
-                    )}
-
                     <div
                       className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
                         isUser
