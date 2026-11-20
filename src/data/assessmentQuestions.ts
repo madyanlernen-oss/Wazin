@@ -1,4 +1,5 @@
 import { LifeAreaId } from '../types/lifeBalance';
+import { ADVISORS_LIST } from './advisorsData';
 
 export type AssessmentMode = 'doctor_consultation' | 'initial_assessment' | 'weekly_checkin';
 
@@ -30,15 +31,23 @@ export interface StationAssessmentConfig {
   };
 }
 
-export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConfig> = {
+// Station questions specific data without duplicated advisor metadata
+const STATION_QUESTIONS: Record<
+  LifeAreaId,
+  {
+    stationNumber: number;
+    consultation: DoctorStationQuestion;
+    initialDiagnostic: DoctorStationQuestion;
+    weeklyCheckin: {
+      title: string;
+      description: string;
+      placeholder: string;
+      suggestedResponses: string[];
+    };
+  }
+> = {
   spiritual: {
-    areaId: 'spiritual',
     stationNumber: 1,
-    advisorName: 'د. سفيان الروحي',
-    advisorRole: 'مستشار الصفاء الإيماني والسلام الداخلي',
-    avatarSvg: '🕌',
-    themeColor: '#10b981',
-    badge: 'صفاء وسكينة',
     consultation: {
       title: 'ما مدى شعورك بالسلام الداخلي والسكينة، ووضوح المعنى والغاية في حياتك ووردك اليومي في هذه الأيام؟',
       description: 'صف لي علاقتك بصلاتك، تأملك الروحي، وهل تشعر بالطمأنينة أم أن شتات الحياة يسرق حضور قلبك؟',
@@ -73,13 +82,7 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
   financial: {
-    areaId: 'financial',
     stationNumber: 2,
-    advisorName: 'أ. كمال المالي',
-    advisorRole: 'مستشار التخطيط المالي وتنمية الأصول',
-    avatarSvg: '💎',
-    themeColor: '#0ea5e9',
-    badge: 'وعي مالي',
     consultation: {
       title: 'كيف تصف استقرارك المالي حالياً، وإدارتك للدخل والمصاريف والادخار والالتزامات؟',
       description: 'هل تشعر بالأمان والوفرة المالية، أم تواجه ضغوط ديون، التزامات متراكمة، أو تسرباً نقدياً غير محسوب؟',
@@ -114,13 +117,7 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
   career: {
-    areaId: 'career',
     stationNumber: 3,
-    advisorName: 'م. طارق المهني',
-    advisorRole: 'مستشار التطور الوظيفي والإنتاجية',
-    avatarSvg: '💼',
-    themeColor: '#8b5cf6',
-    badge: 'ريادة مهنية',
     consultation: {
       title: 'ما مدى رضاك وشغفك بمسارك المهني والوظيفي الحالي، ومعدل إنتاجيتك ونموك في أعمالك؟',
       description: 'هل تعمل بوضوح واستمتاع وتشعر أنك تبني قيمة سوقية، أم تعاني من ركود، تسويف، أو بيئة عمل مستنزفة واحتراق؟',
@@ -155,13 +152,7 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
   personal: {
-    areaId: 'personal',
     stationNumber: 4,
-    advisorName: 'د. ليلى الذاتية',
-    advisorRole: 'أخصائية التوازن النفسي وبناء العادات',
-    avatarSvg: '✨',
-    themeColor: '#ec4899',
-    badge: 'وعي بالذات',
     consultation: {
       title: 'إلى أي مدى تشعر بالوعي بذاتك، وإدارتك لمشاعرك ووقتك، وتقديرك لنفسك دون جلد للذات؟',
       description: 'هل تملك مساحة خاصة للهدوء وبناء العادات الإيجابية، أم تجد نفسك في دوامة جلد الذات والتوتر وتأجيل أولوياتك؟',
@@ -196,13 +187,7 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
   learning: {
-    areaId: 'learning',
     stationNumber: 5,
-    advisorName: 'بروفيسور زياد المعرفي',
-    advisorRole: 'مستشار التعلم المستمر وإدارة المعرفة',
-    avatarSvg: '📚',
-    themeColor: '#f59e0b',
-    badge: 'نمو معرفي',
     consultation: {
       title: 'كيف تقيّم وتيرة تعلمك المستمر، ومعدل قراءتك وتغذيتك الفكرية واكتسابك للمهارات في هذه الفترة؟',
       description: 'هل تملك خطة واضحة للقراءة وبناء مهارات ذات قيمة، أم تشعر بركود فكري وتشتت بين الشاشات ومواقع التواصل؟',
@@ -237,13 +222,7 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
   family: {
-    areaId: 'family',
     stationNumber: 6,
-    advisorName: 'د. مريم الأسرية',
-    advisorRole: 'استشارية الترابط الأسري والذكاء العاطفي',
-    avatarSvg: '🏡',
-    themeColor: '#f97316',
-    badge: 'ترابط أسري',
     consultation: {
       title: 'ما مدى دفء وتماسك علاقاتك الأسرية، وجودة حضورك وتواصلك الإيجابي مع أهلك ومن تحب؟',
       description: 'هل تجد في بيتك ملاذاً آمناً واحتواءً نفسياً، أم أن ضغوط الحياة تخلق فجوات صامتة ونزاعات متكررة؟',
@@ -278,13 +257,7 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
   social: {
-    areaId: 'social',
     stationNumber: 7,
-    advisorName: 'أ. سامي الاجتماعي',
-    advisorRole: 'مستشار العلاقات والتواصل الإنساني',
-    avatarSvg: '🤝',
-    themeColor: '#14b8a6',
-    badge: 'تواصل إنساني',
     consultation: {
       title: 'كيف تصف جودة علاقاتك الاجتماعية وصداقاتك، ومستوى اندماجك وشعورك بالانتماء لمن حولك؟',
       description: 'هل تحيطك دائرة ملهمة من الصداقات الصادقة والداعمة، أم تعاني من شعور بالوحدة أو استنزاف في علاقات سطحية؟',
@@ -319,13 +292,7 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
   health: {
-    areaId: 'health',
     stationNumber: 8,
-    advisorName: 'د. ريان الصحي',
-    advisorRole: 'مستشار الصحة البدنية والطاقة الحيوية',
-    avatarSvg: '🍏',
-    themeColor: '#22c55e',
-    badge: 'طاقة وحيوية',
     consultation: {
       title: 'كيف تقيّم طاقتك الجسدية وحيويتك، وجودة نومك، ونشاطك البدني ونظامك الغذائي هذه الأيام؟',
       description: 'هل تنام نوماً عميقاً وتصحو مفعماً بالنشاط وتتحرك يومياً، أم يلازمك الخمول والإرهاق والأكل غير الصحي؟',
@@ -360,3 +327,25 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
     },
   },
 };
+
+const advisorMap = new Map(ADVISORS_LIST.map((adv) => [adv.id, adv]));
+
+export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConfig> = (
+  Object.keys(STATION_QUESTIONS) as LifeAreaId[]
+).reduce((acc, areaId) => {
+  const q = STATION_QUESTIONS[areaId];
+  const adv = advisorMap.get(areaId);
+  acc[areaId] = {
+    areaId,
+    stationNumber: q.stationNumber,
+    advisorName: adv?.name || '',
+    advisorRole: adv?.role || '',
+    avatarSvg: adv?.avatarSvg || '',
+    themeColor: adv?.themeColor || '#10b981',
+    badge: adv?.badge || '',
+    consultation: q.consultation,
+    initialDiagnostic: q.initialDiagnostic,
+    weeklyCheckin: q.weeklyCheckin,
+  };
+  return acc;
+}, {} as Record<LifeAreaId, StationAssessmentConfig>);

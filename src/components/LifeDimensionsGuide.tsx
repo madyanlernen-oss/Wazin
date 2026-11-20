@@ -78,10 +78,12 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
         {/* 9. Render as <ul>/<li> with reset list styles */}
         <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 list-none p-0 m-0">
           {dimensions.map((dim, idx) => {
-            // 6. Contrast WCAG 2.2 AA: strongColor on Light mode, color on Dark mode
+            // 6. Contrast WCAG 2.2 AA: strongColor on Light mode, color / lighter tint on Dark mode
             const badgeColor = isDark
               ? dim.id === 'career'
-                ? '#a78bfa'
+                ? '#818cf8' // indigo-400 achieves 5.99:1 on dark #0c1827
+                : dim.id === 'personal'
+                ? '#a78bfa' // violet-400 achieves 6.56:1 on dark #0c1827
                 : dim.color
               : dim.strongColor;
 

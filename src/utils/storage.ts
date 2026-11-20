@@ -59,6 +59,71 @@ export function migrateLegacyStorage(): void {
     }
   } catch (err) {
     console.warn('Storage migration skipped or failed:', err);
+  } finally {
+    cleanupStoredUserPasswords();
+  }
+}
+
+/**
+ * One-time cleanup on app start:
+ * Removes any plaintext `password` fields from stored user accounts and saved state
+ * in localStorage, replacing them with a safe `hasPassword: true` boolean indicator.
+ */
+export function cleanupStoredUserPasswords(): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+
+    // 1. Clean user collections across all legacy and current keys
+    for (const key of LEGACY_USERS_KEYS) {
+      const raw = localStorage.getItem(key);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (Array.isArray(parsed)) {
+            let modified = false;
+            const sanitized = parsed.map((item: any) => {
+              if (item && typeof item === 'object' && 'password' in item) {
+                modified = true;
+                const hasPassword = Boolean(
+                  item.hasPassword || (item.password && String(item.password).trim().length > 0)
+                );
+                const { password: _p, ...clean } = item;
+                return { ...clean, hasPassword };
+              }
+              return item;
+            });
+            if (modified) {
+              localStorage.setItem(key, JSON.stringify(sanitized));
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 2. Clean app state user profile if password was persisted
+    for (const stateKey of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
+      const raw = localStorage.getItem(stateKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && parsed.userProfile && 'password' in parsed.userProfile) {
+            const hasPassword = Boolean(
+              parsed.userProfile.hasPassword ||
+              (parsed.userProfile.password && String(parsed.userProfile.password).trim().length > 0)
+            );
+            const { password: _p, ...cleanProfile } = parsed.userProfile;
+            parsed.userProfile = { ...cleanProfile, hasPassword };
+            localStorage.setItem(stateKey, JSON.stringify(parsed));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+  } catch (err) {
+    console.warn('Password cleanup skipped or failed:', err);
   }
 }
 
@@ -163,7 +228,21 @@ export const loadStoredState = (): StoredAppState => {
 
 export const saveStoredState = (state: StoredAppState): void => {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    let stateToSave = state;
+    if (state.userProfile && 'password' in state.userProfile) {
+      const { password, ...cleanProfile } = state.userProfile;
+      stateToSave = {
+        ...state,
+        userProfile: {
+          ...cleanProfile,
+          hasPassword: Boolean(
+            state.userProfile.hasPassword ||
+              (password && String(password).trim().length > 0)
+          ),
+        },
+      };
+    }
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToSave));
   } catch (e) {
     console.error('Failed to save state to localStorage:', e);
   }
@@ -545,7 +624,17 @@ export const getStoredUsers = (): UserProfile[] => {
     }
 
     const parsed: UserProfile[] = raw ? JSON.parse(raw) : [];
-    const demoIdx = parsed.findIndex(
+
+    // Strip password from parsed users and set hasPassword
+    const sanitizedList: UserProfile[] = parsed.map((u) => {
+      const hasPassword = Boolean(
+        u.hasPassword || (u.password && String(u.password).trim().length > 0)
+      );
+      const { password: _p, ...clean } = u;
+      return { ...clean, hasPassword };
+    });
+
+    const demoIdx = sanitizedList.findIndex(
       (u) =>
         u.email?.toLowerCase() === 'demo@wazan.com' ||
         u.email?.toLowerCase() === 'demo@wazan.ai' ||
@@ -554,24 +643,43 @@ export const getStoredUsers = (): UserProfile[] => {
         u.name === 'wazan' ||
         u.name === 'سعود المنصور'
     );
+
+    // DEMO_USER has password in code constant, but never written to localStorage
+    const safeDemoUser: UserProfile = {
+      name: DEMO_USER.name,
+      email: DEMO_USER.email,
+      hasPassword: true,
+      ageGroup: DEMO_USER.ageGroup,
+      currentFocus: DEMO_USER.currentFocus,
+      registeredAt: DEMO_USER.registeredAt,
+    };
+
     if (demoIdx >= 0) {
-      parsed[demoIdx] = DEMO_USER;
+      sanitizedList[demoIdx] = { ...sanitizedList[demoIdx], ...safeDemoUser };
     } else {
-      parsed.push(DEMO_USER);
+      sanitizedList.push(safeDemoUser);
     }
 
-    // Standardize saved users under primary wazan key
-    if (sourceKey !== USERS_STORAGE_KEY) {
+    // Standardize saved users under primary wazan key without plaintext passwords
+    if (sourceKey !== USERS_STORAGE_KEY || raw?.includes('"password"')) {
       try {
-        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(parsed));
+        localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(sanitizedList));
       } catch {
         // ignore
       }
     }
 
-    return parsed;
+    return sanitizedList;
   } catch (e) {
-    return [DEMO_USER];
+    const safeDemoUser: UserProfile = {
+      name: DEMO_USER.name,
+      email: DEMO_USER.email,
+      hasPassword: true,
+      ageGroup: DEMO_USER.ageGroup,
+      currentFocus: DEMO_USER.currentFocus,
+      registeredAt: DEMO_USER.registeredAt,
+    };
+    return [safeDemoUser];
   }
 };
 
@@ -585,18 +693,37 @@ export const saveStoredUser = (user: UserProfile): void => {
       user.email = 'demo@wazan.com';
     }
 
+    const hasPassword = Boolean(
+      user.hasPassword ||
+        (typeof user.password === 'string' && user.password.trim().length > 0)
+    );
+
+    const { password: _p, ...cleanUser } = user;
+    const safeUser: UserProfile = {
+      ...cleanUser,
+      hasPassword,
+      password: undefined,
+    };
+
     const users = getStoredUsers();
     const existingIndex = users.findIndex(
       (u) =>
-        (user.email && u.email?.toLowerCase() === user.email.toLowerCase()) ||
-        u.name.toLowerCase() === user.name.toLowerCase()
+        (safeUser.email && u.email?.toLowerCase() === safeUser.email.toLowerCase()) ||
+        u.name.toLowerCase() === safeUser.name.toLowerCase()
     );
     if (existingIndex >= 0) {
-      users[existingIndex] = { ...users[existingIndex], ...user };
+      users[existingIndex] = { ...users[existingIndex], ...safeUser };
     } else {
-      users.push(user);
+      users.push(safeUser);
     }
-    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(users));
+
+    // Ensure absolutely NO user in array has plaintext password when saved
+    const safeUsersToSave = users.map((u) => {
+      const { password: _pwd, ...sanitized } = u;
+      return sanitized;
+    });
+
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(safeUsersToSave));
   } catch (e) {
     console.error('Failed to save user account:', e);
   }

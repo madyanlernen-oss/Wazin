@@ -127,10 +127,11 @@ export const RadarCore: React.FC<RadarCoreProps> = ({
       ? latestSeries.averageScore.toFixed(1)
       : '—';
 
-  // Contrast helper for scores: strongColor in light mode, high-contrast color in dark mode
+  // Contrast helper for scores: strongColor in light mode, high-contrast color / lighter tint in dark mode
   const getScoreTextColor = (domain: LifeDomainItem) => {
     if (!isDark) return domain.strongColor;
-    if (domain.id === 'career') return '#a78bfa'; // WCAG 2.2 AA compliant (>6.1:1 on #0E1D24)
+    if (domain.id === 'career') return '#818cf8'; // indigo-400 (>5.9:1 on dark)
+    if (domain.id === 'personal') return '#a78bfa'; // violet-400 (>6.5:1 on dark)
     return domain.color;
   };
 

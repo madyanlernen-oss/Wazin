@@ -29,6 +29,7 @@ import {
   saveStoredState,
   saveStoredUser,
   migrateLegacyStorage,
+  cleanupStoredUserPasswords,
   resetStoredState,
   StoredAppState,
 } from './utils/storage';
@@ -84,9 +85,10 @@ export default function App() {
     }
   }, [theme]);
 
-  // One-time legacy storage migration on startup
+  // One-time legacy storage migration and password cleanup on startup
   useEffect(() => {
     migrateLegacyStorage();
+    cleanupStoredUserPasswords();
   }, []);
 
   const toggleTheme = () => setTheme((prev) => (prev === 'dark' ? 'light' : 'dark'));

@@ -141,11 +141,12 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
 
   const activeDomain = WHEEL_DOMAINS[selectedIndex] || WHEEL_DOMAINS[0];
 
-  // B1: Contrast helper - strongColor on Light, verified themeColor on Dark (WCAG 2.2 AA 4.5:1+)
+  // B1: Contrast helper - strongColor on Light, verified themeColor / lighter tint on Dark (WCAG 2.2 AA 4.5:1+)
   const getAccentColor = useCallback(
     (domain: InteractiveWheelDomain) => {
       if (!isDark) return domain.strongColor;
-      if (domain.id === 'career') return '#a78bfa'; // violet-400 achieves >6.1:1 on dark #0c1827
+      if (domain.id === 'career') return '#818cf8'; // indigo-400 achieves 5.99:1 on dark #0c1827 / 6.37:1 on #07111c
+      if (domain.id === 'personal') return '#a78bfa'; // violet-400 achieves 6.56:1 on dark #0c1827 / 6.98:1 on #07111c
       return domain.themeColor;
     },
     [isDark]

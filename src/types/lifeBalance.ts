@@ -55,6 +55,7 @@ export interface AdvisorConfig {
   tagline: string;
   badge: string;
   themeColor: string; // e.g. '#10b981'
+  strongColor?: string; // e.g. '#047857' - Tailwind-700 / WCAG 2.2 AA compliant
   tailwindColor: string; // 'emerald'
   gradient: string;
   avatarSvg: string;
@@ -87,6 +88,7 @@ export interface UserProfile {
   name: string;
   email?: string;
   password?: string;
+  hasPassword?: boolean;
   ageGroup: string;
   currentFocus: string;
   registeredAt: string;
