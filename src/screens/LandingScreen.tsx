@@ -1,9 +1,16 @@
-import React from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Sparkles,
   Users,
   BarChart3,
   Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  RotateCcw,
+  Maximize,
+  AlertCircle,
+  Loader2,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LifeDimensionsGuide } from '../components/LifeDimensionsGuide';
@@ -20,6 +27,75 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   theme = 'light',
 }) => {
   const isDark = theme === 'dark';
+
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
+  const [isVideoLoading, setIsVideoLoading] = useState(false);
+  const [videoError, setVideoError] = useState(false);
+  const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+
+  const handleTogglePlay = () => {
+    if (!videoRef.current) return;
+    if (videoRef.current.paused || videoRef.current.ended) {
+      setVideoError(false);
+      videoRef.current
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          setHasStartedPlaying(true);
+        })
+        .catch((err) => {
+          console.warn('Video play interrupted:', err);
+          setIsPlaying(false);
+        });
+    } else {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    }
+  };
+
+  const handleToggleMute = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    const nextMuted = !videoRef.current.muted;
+    videoRef.current.muted = nextMuted;
+    setIsMuted(nextMuted);
+  };
+
+  const handleToggleFullscreen = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!videoRef.current) return;
+    const container = videoRef.current.parentElement;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else if (container && container.requestFullscreen) {
+      container.requestFullscreen().catch(() => {
+        videoRef.current?.requestFullscreen().catch(() => {});
+      });
+    } else if (videoRef.current.requestFullscreen) {
+      videoRef.current.requestFullscreen().catch(() => {});
+    }
+  };
+
+  const handleRetryVideo = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setVideoError(false);
+    setIsVideoLoading(true);
+    if (videoRef.current) {
+      videoRef.current.load();
+      videoRef.current
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+          setHasStartedPlaying(true);
+          setIsVideoLoading(false);
+        })
+        .catch(() => {
+          setIsVideoLoading(false);
+        });
+    }
+  };
 
   return (
     <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-[#F4F8F7] dark:bg-[#07111c] transition-colors duration-300">
@@ -258,39 +334,140 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           <div className="relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border border-slate-200/90 dark:border-cyan-500/25 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md shadow-2xl transition-all duration-500 group">
             {/* 16:9 Aspect Ratio Frame */}
             <div className="relative aspect-video w-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#0c242c] via-[#091823] to-[#1c122e]">
-              {/* Abstract Platform Screen Preview Background / Subtle Visual Grid */}
-              <div
-                className="absolute inset-0 opacity-40 mix-blend-screen pointer-events-none"
-                style={{
-                  backgroundImage: `radial-gradient(circle at 50% 50%, rgba(6, 182, 212, 0.25) 0%, transparent 60%), radial-gradient(circle at 85% 20%, rgba(168, 85, 247, 0.2) 0%, transparent 50%)`,
+              {/* HTML5 Video Element */}
+              <video
+                ref={videoRef}
+                src="/videos/wazan-intro.mp4"
+                poster="/assets/wazan_landing_page.jpg"
+                playsInline
+                preload="metadata"
+                className="w-full h-full object-cover cursor-pointer"
+                onPlay={() => setIsPlaying(true)}
+                onPause={() => setIsPlaying(false)}
+                onEnded={() => {
+                  setIsPlaying(false);
+                  setHasStartedPlaying(false);
                 }}
+                onWaiting={() => setIsVideoLoading(true)}
+                onPlaying={() => setIsVideoLoading(false)}
+                onCanPlay={() => setIsVideoLoading(false)}
+                onError={() => {
+                  setVideoError(true);
+                  setIsVideoLoading(false);
+                  setIsPlaying(false);
+                }}
+                onClick={handleTogglePlay}
+                aria-label="الفيديو التعريفي لمنظومة وزان"
               />
 
-              {/* Decorative Concentric Rings in Player Backdrop */}
-              <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-30">
-                <div className="w-72 h-72 rounded-full border border-cyan-400/30 animate-pulse" />
-                <div className="absolute w-96 h-96 rounded-full border border-purple-500/20" />
-              </div>
+              {/* Poster subtle gradient overlay when paused/before play to enhance central play button contrast */}
+              {!isPlaying && !videoError && (
+                <div
+                  className="absolute inset-0 bg-black/35 pointer-events-none transition-opacity duration-300"
+                  aria-hidden="true"
+                />
+              )}
 
-              {/* Central Glowing Play Button */}
-              <button
-                type="button"
-                onClick={() => onNavigateToAuth('login')}
-                className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0B6E72] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(11,110,114,0.45)] dark:shadow-[0_0_35px_rgba(6,182,212,0.45)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(11,110,114,0.6)] dark:group-hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] cursor-pointer"
-                aria-label="تشغيل الفيديو التعريفي"
-              >
-                <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform" />
-              </button>
+              {/* Decorative Concentric Rings in Player Backdrop when paused before first play */}
+              {!isPlaying && !videoError && !hasStartedPlaying && (
+                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25">
+                  <div className="w-72 h-72 rounded-full border border-cyan-400/30 animate-pulse" />
+                  <div className="absolute w-96 h-96 rounded-full border border-purple-500/20" />
+                </div>
+              )}
+
+              {/* Loading State Overlay */}
+              {isVideoLoading && !videoError && (
+                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-xs pointer-events-none animate-fadeIn">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/75 border border-white/10 text-white text-xs font-bold shadow-lg">
+                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                    <span>جارٍ تحميل المقطع...</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Fallback Error State Overlay */}
+              {videoError && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md text-white text-center space-y-3 animate-fadeIn">
+                  <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shadow-inner">
+                    <AlertCircle className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-white">تعذّر تشغيل الفيديو مؤقتاً</h4>
+                    <p className="text-xs text-slate-300 max-w-sm leading-relaxed">
+                      قد يكون ذلك بسبب ضعف الاتصال بالشبكة. يمكنك إعادة المحاولة الآن.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRetryVideo}
+                    className="min-h-[44px] min-w-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] text-white text-xs font-bold transition-all shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    <span>إعادة المحاولة</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Central Glowing Play Button Overlay */}
+              {!isPlaying && !videoError && (
+                <button
+                  type="button"
+                  onClick={handleTogglePlay}
+                  className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0B6E72] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(11,110,114,0.45)] dark:shadow-[0_0_35px_rgba(6,182,212,0.45)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(11,110,114,0.6)] dark:group-hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 cursor-pointer min-h-[44px] min-w-[44px]"
+                  aria-label="تشغيل الفيديو التعريفي"
+                  title="تشغيل الفيديو التعريفي"
+                >
+                  <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform" />
+                </button>
+              )}
 
               {/* Player Bottom Control Bar (Arabic-Ready Presentation) */}
-              <div className="absolute bottom-0 inset-x-0 p-4 sm:p-5 bg-gradient-to-t from-black/85 via-black/40 to-transparent flex items-center justify-between text-white text-xs z-10">
-                <div className="flex items-center gap-2 font-bold">
-                  <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
-                  <span className="text-white/95">تجربة وزان: التناغم الحياتي بالذكاء الاصطناعي</span>
+              <div className="absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex flex-wrap items-center justify-between gap-2 text-white text-xs z-10">
+                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                  <button
+                    type="button"
+                    onClick={handleTogglePlay}
+                    className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-white hover:text-cyan-300 hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 cursor-pointer"
+                    aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
+                    title={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
+                  >
+                    {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleToggleMute}
+                    className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-white hover:text-cyan-300 hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 cursor-pointer"
+                    aria-label={isMuted ? 'تشغيل الصوت' : 'كتم الصوت'}
+                    title={isMuted ? 'تشغيل الصوت' : 'كتم الصوت'}
+                  >
+                    {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                  </button>
+                  <div className="flex items-center gap-1.5 font-bold truncate">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping flex-shrink-0" />
+                    <span className="text-white/95 text-xs truncate">تجربة وزان: التناغم الحياتي بالذكاء الاصطناعي</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-3 text-[11px] font-semibold text-slate-300">
-                  <span className="px-2 py-0.5 rounded-md bg-white/10 backdrop-blur-xs border border-white/10">03:15 دقيقة</span>
-                  <span className="px-2 py-0.5 rounded-md bg-cyan-500/20 text-cyan-300 border border-cyan-400/20">4K Ultra HD</span>
+
+                <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-semibold text-slate-200">
+                  <span
+                    className="px-2.5 py-1 rounded-md bg-white/15 backdrop-blur-xs border border-white/15 flex items-center gap-1 font-mono text-xs font-bold text-white"
+                    dir="ltr"
+                  >
+                    00:10
+                  </span>
+                  <span className="px-2.5 py-1 rounded-md bg-cyan-500/25 text-cyan-200 border border-cyan-400/30 font-bold">
+                    HD 720p
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleToggleFullscreen}
+                    className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-slate-200 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 cursor-pointer"
+                    aria-label="ملء الشاشة"
+                    title="ملء الشاشة"
+                  >
+                    <Maximize className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             </div>
