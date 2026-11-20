@@ -699,10 +699,11 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
               className="flex items-center gap-2"
             >
               <VoiceInput
-                onTranscript={(transcript) =>
-                  setInputMessage((prev) => (prev ? `${prev} ${transcript}` : transcript))
-                }
+                currentValue={inputMessage}
+                onTranscript={(transcript) => setInputMessage(transcript)}
                 disabled={isLoading}
+                showStatusBadge={true}
+                resetKey={currentAdvisorId}
               />
 
               <input

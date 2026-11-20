@@ -1115,11 +1115,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             >
               {/* Mic Button for Voice Dictation */}
               <VoiceInput
-                onTranscript={(transcript) =>
-                  setInputText((prev) => (prev ? `${prev} ${transcript}` : transcript))
-                }
+                currentValue={inputText}
+                onTranscript={(transcript) => setInputText(transcript)}
                 disabled={isAdvisorReplying}
-                showStatusBadge={false}
+                showStatusBadge={true}
+                resetKey={currentAdvisorIndex}
               />
 
               {/* Free Text Input */}
