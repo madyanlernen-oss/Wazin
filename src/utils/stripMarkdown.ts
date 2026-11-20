@@ -6,6 +6,8 @@ export function stripMarkdown(text: string): string {
   if (!text) return '';
 
   return text
+    // Strip XML-like thought/reasoning blocks
+    .replace(/<(?:thought|reasoning)>[\s\S]*?<\/(?:thought|reasoning)>/gi, '')
     // Strip fenced code blocks ```lang ... ```
     .replace(/^```[a-zA-Z]*\n?([\s\S]*?)\n?```$/gm, '$1')
     .replace(/```/g, '')

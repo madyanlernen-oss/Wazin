@@ -217,15 +217,50 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   onNavigateToDirector: _onNavigateToDirector,
   theme: _theme = 'light',
 }) => {
-  const [goals, setGoals] = useState<EisenhowerGoalItem[]>(
-    propGoals && propGoals.length > 0 ? propGoals : INITIAL_EISENHOWER_GOALS
-  );
-  const [activeTimeframe, setActiveTimeframe] = useState<GoalTimeframe>('weekly');
+  const [goals, setGoals] = useState<EisenhowerGoalItem[]>(() => {
+    if (propGoals && propGoals.length > 0) return propGoals;
+    try {
+      const stored = localStorage.getItem('wazan_eisenhower_goals');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return INITIAL_EISENHOWER_GOALS;
+  });
+
+  const [activeTimeframe, setActiveTimeframe] = useState<GoalTimeframe>(() => {
+    try {
+      const stored = localStorage.getItem('wazan_eisenhower_timeframe');
+      if (stored === 'daily' || stored === 'weekly' || stored === 'monthly' || stored === 'yearly') {
+        return stored;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return 'weekly';
+  });
+
+  // Sync activeTimeframe to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('wazan_eisenhower_timeframe', activeTimeframe);
+    } catch (e) {
+      // ignore
+    }
+  }, [activeTimeframe]);
 
   // Sync propGoals when updated externally (e.g. from AI Advisors)
   React.useEffect(() => {
     if (propGoals && propGoals.length > 0) {
       setGoals(propGoals);
+      try {
+        localStorage.setItem('wazan_eisenhower_goals', JSON.stringify(propGoals));
+      } catch (e) {
+        // ignore
+      }
     }
   }, [propGoals]);
 
@@ -243,6 +278,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   const [isSuggestionsCollapsed, setIsSuggestionsCollapsed] = useState(false);
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [editingSuggestion, setEditingSuggestion] = useState<EisenhowerSuggestionItem | null>(null);
+  const [editingGoal, setEditingGoal] = useState<EisenhowerGoalItem | null>(null);
   const [dismissedSuggestionIds, setDismissedSuggestionIds] = useState<Set<string>>(new Set());
   const [notificationToast, setNotificationToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null);
 
@@ -348,10 +384,22 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
 
   // Open clean manual modal
   const handleOpenAddModalManual = () => {
+    setEditingGoal(null);
     setEditingSuggestion(null);
     setNewTitle('');
     setNewQuadrant('q2_important_not_urgent');
     setNewAreaId('career');
+    setShowAddModal(true);
+  };
+
+  // Start editing existing goal
+  const handleStartEditGoal = (g: EisenhowerGoalItem) => {
+    setEditingSuggestion(null);
+    setEditingGoal(g);
+    setNewTitle(g.title);
+    setNewQuadrant(g.quadrant);
+    setNewAreaId(g.areaId);
+    setActiveTimeframe(g.timeframe);
     setShowAddModal(true);
   };
 
@@ -363,6 +411,11 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
 
   const updateAllGoals = (updated: EisenhowerGoalItem[]) => {
     setGoals(updated);
+    try {
+      localStorage.setItem('wazan_eisenhower_goals', JSON.stringify(updated));
+    } catch (e) {
+      // ignore
+    }
     if (onUpdateGoals) onUpdateGoals(updated);
   };
 
@@ -411,10 +464,30 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
     }
   };
 
-  // Add new goal manually (or save customized suggestion)
+  // Add new goal manually (or save customized suggestion / edited goal)
   const handleAddGoal = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTitle.trim()) return;
+
+    if (editingGoal) {
+      const updated = goals.map((g) =>
+        g.id === editingGoal.id
+          ? {
+              ...g,
+              title: newTitle.trim(),
+              quadrant: newQuadrant,
+              timeframe: activeTimeframe,
+              areaId: newAreaId,
+            }
+          : g
+      );
+      updateAllGoals(updated);
+      setEditingGoal(null);
+      showToast('تم تعديل وحفظ الهدف بنجاح!', 'success');
+      setNewTitle('');
+      setShowAddModal(false);
+      return;
+    }
 
     const newGoal: EisenhowerGoalItem = {
       id: `goal_${Date.now()}`,
@@ -544,7 +617,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             )}
           </div>
 
-          {/* Quick Actions: Quadrant Move Dropdown & Delete Button */}
+          {/* Quick Actions: Quadrant Move Dropdown, Edit & Delete Buttons */}
           <div className="flex items-center gap-1.5 flex-shrink-0 ms-auto">
             <select
               aria-label="نقل المربع لمصفوفة أيزنهاور"
@@ -558,6 +631,19 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
               <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
             </select>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleStartEditGoal(g);
+              }}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-[#0B6E72] dark:hover:text-cyan-400 hover:bg-[#0B6E72]/10 dark:hover:bg-cyan-950/50 border border-transparent hover:border-[#0B6E72]/30 dark:hover:border-cyan-800/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#112028] transition-all cursor-pointer flex-shrink-0"
+              title="تعديل الهدف"
+              aria-label={`تعديل الهدف: ${g.title}`}
+            >
+              <Edit3 className="w-3.5 h-3.5" />
+            </button>
 
             <button
               type="button"
@@ -609,7 +695,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'daily'}
               onClick={() => setActiveTimeframe('daily')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'daily'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -623,7 +709,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'weekly'}
               onClick={() => setActiveTimeframe('weekly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'weekly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -637,7 +723,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'monthly'}
               onClick={() => setActiveTimeframe('monthly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'monthly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -651,7 +737,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'yearly'}
               onClick={() => setActiveTimeframe('yearly')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                 activeTimeframe === 'yearly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
@@ -1115,12 +1201,21 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-2xl bg-[#0B6E72]/15 dark:bg-cyan-950/70 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/20 dark:border-cyan-800/50 flex items-center justify-center flex-shrink-0">
-                  {editingSuggestion ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                  {editingGoal || editingSuggestion ? <Edit3 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                 </div>
                 <div>
                   <h3 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
-                    {editingSuggestion ? 'تخصيص اقتراح وكيل أهدافي 11' : 'إضافة هدف جديد لمصفوفة أيزنهاور'}
+                    {editingGoal
+                      ? 'تعديل الهدف في مصفوفة أيزنهاور'
+                      : editingSuggestion
+                      ? 'تخصيص اقتراح وكيل أهدافي 11'
+                      : 'إضافة هدف جديد لمصفوفة أيزنهاور'}
                   </h3>
+                  {editingGoal && editingGoal.advisorName && (
+                    <p className="text-[11px] text-[#0B6E72] dark:text-cyan-300 font-bold mt-0.5">
+                      توجيه المستشار: {editingGoal.advisorName}
+                    </p>
+                  )}
                   {editingSuggestion && (
                     <p className="text-[11px] text-[#0B6E72] dark:text-cyan-300 font-bold mt-0.5">
                       مستخلص من: {editingSuggestion.sourceAgentName} • {editingSuggestion.sourceTypeLabel}
@@ -1132,6 +1227,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                 type="button"
                 onClick={() => {
                   setShowAddModal(false);
+                  setEditingGoal(null);
                   setEditingSuggestion(null);
                 }}
                 className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1.5 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors"
@@ -1222,17 +1318,22 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                   type="button"
                   onClick={() => {
                     setShowAddModal(false);
+                    setEditingGoal(null);
                     setEditingSuggestion(null);
                   }}
-                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-[#64748B] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
+                  className="px-4 py-2.5 min-h-[44px] rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-bold text-[#64748B] dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 cursor-pointer transition-colors"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs cursor-pointer transition-colors"
+                  className="px-5 py-2.5 min-h-[44px] rounded-xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-xs font-black shadow-xs cursor-pointer transition-colors"
                 >
-                  {editingSuggestion ? 'حفظ وطرح الهدف في المصفوفة' : 'حفظ الهدف'}
+                  {editingGoal
+                    ? 'تحديث وحفظ الهدف'
+                    : editingSuggestion
+                    ? 'حفظ وطرح الهدف في المصفوفة'
+                    : 'حفظ الهدف'}
                 </button>
               </div>
             </form>

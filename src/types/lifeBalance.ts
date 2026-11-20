@@ -138,6 +138,7 @@ export interface ChatMessage {
   reasoning?: string;
   summary?: string;
   advice?: string;
+  isCrisis?: boolean;
 }
 
 export interface MonthData {

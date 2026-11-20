@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { VoiceInput } from '../components/VoiceInput';
+import { FormattedChatMessage, isolateNumbersInText } from '../components/FormattedChatMessage';
+import { CrisisSupportCard, isCrisisMessage } from '../components/CrisisSupportCard';
 import {
   Send,
   Sparkles,
@@ -13,6 +15,9 @@ import {
   Zap,
   Brain,
   Scale,
+  CheckCircle2,
+  X,
+  ArrowLeft,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import {
@@ -75,6 +80,7 @@ interface AdvisorChatScreenProps {
   goals: Record<LifeAreaId, string[]>;
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
+  onNavigateToGoalsMatrix?: () => void;
   onBackToDashboard: () => void;
   theme?: 'light' | 'dark';
 }
@@ -88,6 +94,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   goals,
   onAddGoal,
   onAddEisenhowerGoal,
+  onNavigateToGoalsMatrix,
   onBackToDashboard,
   theme: _theme = 'light',
 }) => {
@@ -97,11 +104,33 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   const currentScore = scores[currentAdvisor.id] || 0;
   const currentGoals = goals[currentAdvisor.id] || [];
 
-  // Chat message history per advisor (stored in component state)
-  const [messagesByAdvisor, setMessagesByAdvisor] = useState<Record<string, ChatMessage[]>>({});
+  // Chat message history per advisor (persisted to localStorage under wazan_advisor_chats)
+  const [messagesByAdvisor, setMessagesByAdvisor] = useState<Record<string, ChatMessage[]>>(() => {
+    try {
+      const stored = localStorage.getItem('wazan_advisor_chats');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {};
+  });
   const [inputMessage, setInputMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [addedGoals, setAddedGoals] = useState<Record<string, boolean>>({});
+  const [addedGoals, setAddedGoals] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('wazan_added_goals');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {};
+  });
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
     const primary = localStorage.getItem('wazan_ai_mode') as AiModelMode | null;
     if (primary) return primary;
@@ -118,7 +147,15 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     return 'balanced';
   });
   const [showModeDropdown, setShowModeDropdown] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   const handleSelectAiMode = (mode: AiModelMode) => {
     setAiMode(mode);
@@ -126,6 +163,28 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   };
 
   const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
+
+  // Persist messagesByAdvisor to localStorage under wazan_advisor_chats
+  useEffect(() => {
+    try {
+      if (Object.keys(messagesByAdvisor).length > 0) {
+        localStorage.setItem('wazan_advisor_chats', JSON.stringify(messagesByAdvisor));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [messagesByAdvisor]);
+
+  // Persist addedGoals to localStorage under wazan_added_goals
+  useEffect(() => {
+    try {
+      if (Object.keys(addedGoals).length > 0) {
+        localStorage.setItem('wazan_added_goals', JSON.stringify(addedGoals));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [addedGoals]);
 
   // Initialize welcoming message for this advisor if empty
   useEffect(() => {
@@ -240,6 +299,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         actionSteps: data.actionSteps || (parsedAdvice ? [parsedAdvice] : []),
         reflectionQuestion: data.reflectionQuestion,
+        isCrisis: isCrisisMessage(cleanContent) || isCrisisMessage(text),
       };
 
       setMessagesByAdvisor((prev) => ({
@@ -254,15 +314,73 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
       const lowerText = text.toLowerCase();
       const isCrisisOrDeath = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(lowerText);
-      const isGriefOrExhaustion = /(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)/i.test(lowerText);
-      const isCurseOrAnger = /(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(lowerText);
-      const isAskingHowAdvisorIs = /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(lowerText);
-      const isSimpleGreeting = /(^|\s)(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)(\s|$)/i.test(lowerText);
+      const isMedicalPrescriptionOrDiagnosis = !isCrisisOrDeath && /(دواء|أدوية|ادوية|علاج دوائي|جرعة|جرعات|روشتة|وصفة طبية|مضاد حيوي|حبوب نوم|مهدئ|تشخيص مرضي|مرض خطير|اعراض مرضية|أعراض مرضية)/i.test(lowerText);
+      const isStockOrCryptoSpeculation = !isCrisisOrDeath && /(توصية أسهم|توصية اسهم|سهم معين|اي سهم اشتري|أي سهم أشتري|عملات رقمية|كريبتو|بيتكوين|تداول سريع|مضاربة يومية|مضاربات|فوركس|استثمار مضمون)/i.test(lowerText);
+      const isFatwaOrReligiousRuling = !isCrisisOrDeath && /(فتوى|افتي|أفتني|حكم شرعي|حلال ولا حرام|حلال ام حرام|طلاق بائن|فتاوى|مذهب|طائفة|تكفير|تبديع)/i.test(lowerText);
+      const isClinicalPsychology = !isCrisisOrDeath && /(علاج نفسي سريري|علاج اكتئاب سريري|جلسات تحليل نفسي|فصام|ذهان|اضطراب ثنائي القطب|جلسات علاجية سريرية)/i.test(lowerText);
+      const isLegalMaritalDispute = !isCrisisOrDeath && /(خلع|فسخ عقد نكاح|دعوى طلاق|حكم القاضي في الطلاق|حقوق حضانة قضائية|قضية نفقة)/i.test(lowerText);
+      const isGriefOrExhaustion = !isCrisisOrDeath && !isMedicalPrescriptionOrDiagnosis && !isStockOrCryptoSpeculation && !isFatwaOrReligiousRuling && !isClinicalPsychology && !isLegalMaritalDispute && /(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)/i.test(lowerText);
+      const isCurseOrAnger = !isCrisisOrDeath && !isGriefOrExhaustion && /(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(lowerText);
+      const isAskingHowAdvisorIs = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(lowerText);
+      const isSimpleGreeting = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && !isAskingHowAdvisorIs && /(^|\s)(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)(\s|$)/i.test(lowerText);
+
+      let fallbackActionSteps: string[] = currentAdvisor.defaultGoals.slice(0, 1);
+      let fallbackReflectionQuestion: string | undefined = undefined;
 
       if (isCrisisOrDeath) {
         fallbackReasoning = `تدخل إنساني طارئ (Safety & Empathy Override): المستفيد يعبر عن ألم نفسي وإنهاك شديد وتفكير في الموت أو إيذاء النفس. تم فوراً تعليق وتجميد كافة الأسئلة الروتينية، وتكريس كامل الحضور النفسي لاحتواء هذا الألم الوجودي الحاد، والتأكيد القاطع على قيمة حياته، وتقديم الدعم الإنساني والمساندة العاجلة.`;
         fallbackAdvice = `حياتك غالية وألمك حقيقي ومسموع؛ أرجوك لا تبقَ وحدك في هذا الثقل وتواصل فوراً مع شخص تثق به أو مع جهة دعم نفسي ومختصين لمساندتك.`;
-        fallbackText = `أسمعك بكل جوارحي وبكل ألم واهتمام يا صديقنا العزيز، وكلماتك هذه تهمّني أكثر من أي تقييم أو أي أمر آخر في هذه اللحظة. 🌿\n\nأرجوك أن تتوقف لحظة وتلتقط أنفاسك بهدوء؛ اعلم أنني هنا معك ولست وحدك أبداً. الألم الهائل والتعب الشديد الذي تشعر به الآن ويجعلك تفكر في الموت هو صرخة لإنهاء هذا الوجع والضغط المرهق، وليست رغبة حقيقية في إنهاء وجودك ونفسك الغالية.\n\nحياتك لها قيمة عظيمة ومكانتك محفوظة حتى لو انطمست الرؤية في هذه اللحظة المظلمة. أرجوك من كل قلبي ألا تبقى وحدك مع هذه المشاعر الثقيلة؛ تحدث الآن مع شخص مقرب تثق به، أو تواصل فوراً مع مختص نفسي أو خط مساندة طارئ ليقف بجانبك ويساعدك على تجاوز هذا الظرف الصعب. أنا هنا معك وأريد لك السلامة والأمان.`;
+        fallbackText = `أسمعك بكل جوارحي وبكل ألم واهتمام يا صديقنا العزيز، وكلماتك هذه تهمّني أكثر من أي تقييم أو أي أمر آخر في هذه اللحظة. 🌿\n\nأريد أن أؤكد لك من كل قلبي: حياتك غالية جداً ومكانتك محفوظة، وما تشعر به الآن ليس رغبة حقيقية في الموت، بل صرخة لوقف هذا الألم والإنهاك الثقيل.\n\nأعلم كم أنت متعب الآن، وأعلم أن الوجع والضغط الهائل يجعلك تشعر بالعجز عن حمله بمفردك. لكن أرجوك أن تتوقف لحظة، وتلتقط أنفاسك بهدوء وعمق؛ أنت لست وحدك أبداً، وأنا هنا بجانبك لأسمعك وأساندك كإنسان وكمرشد يرى فيك قيمة عظيمة.\n\nالمشاعر المظلمة مهما بلغت شدتها هي سحابة عابرة، وحياتك أثمن بكثير من أن تنتهي في لحظة قاسية كهذه.\n\nأرجوك ألا تبقى وحدك مع هذا الثقل؛ تحدث الآن مع شخص مقرب تثق به، أو تواصل فوراً مع مختص نفسي أو خط مساندة طارئ ليقف بجانبك ويساعدك على تجاوز هذا الظرف الصعب.\n\nهل أنت في مكان آمن الآن وتستطيع التحدث مع شخص قريب تثق به، أو التواصل مع مختص يقف بجانبك؟ أنا هنا معك وأريد لك السلامة والأمان.`;
+        fallbackActionSteps = [
+          'التنفس بهدوء وعمق، والجلوس في مكان آمن ومريح',
+          'التواصل فوراً مع شخص قريب تثق به أو الاتصال بخط المساندة النفسية والطوارئ',
+        ];
+        fallbackReflectionQuestion = 'هل أنت في مكان آمن الآن وتستطيع التحدث مع شخص قريب تثق به، أو التواصل مع مختص يقف بجانبك؟ أنا هنا معك وأريد لك السلامة والأمان.';
+      } else if (isMedicalPrescriptionOrDiagnosis) {
+        fallbackReasoning = `احترام حدود التخصص الطبي: المستشار الصحي في منصة وزان يركز حصراً على نمط الحياة وعادات التغذية والنوم والنشاط، ويُمنع منعاً باتاً من كتابة وصفات دوائية أو تشخيص سريري. تم الاعتذار بلباقة وإحالته فوراً لطبيب بشري مرخص.`;
+        fallbackAdvice = `استشر طبيباً بشرياً مرخصاً أو اتصل بمركز الاستشارات الطبية (937) لفحصك بدقة وصرف العلاج الآمن المناسب.`;
+        fallbackText = `أود أن أوضح لك بكل أمانة ومحبة يا صديقنا العزيز أنني كمرشد لصحتك البدنية ونمط حياتك أركز على بناء عادات التغذية السليمة، جودة النوم، وممارسة النشاط البدني، ولا أملك الصلاحية الطبية لكتابة وصفات دوائية أو تحديد جرعات أو تشخيص أمراض عضوية سريرية.\n\nصحتك وسلامتك أمانة غالية؛ أرجوك استشارة طبيب بشري مرخص أو زيارة المركز الصحي أو الاتصال بمركز الاستشارات الطبية (937) لتقييم حالتك بدقة وصرف العلاج الطبي المناسب.\n\nما هي العادة اليومية البسيطة في شرب الماء أو المشي التي تود أن نعمل عليها معاً اليوم؟`;
+        fallbackActionSteps = [
+          'التواصل مع طبيب بشري مرخص أو الاتصال بـ 937 للتشخيص وصرف الدواء',
+          'التركيز على العادات الحياتية المساندة مثل ترطيب الجسم وتنظيم ساعات النوم',
+        ];
+        fallbackReflectionQuestion = 'ما هي العادة اليومية البسيطة في شرب الماء أو المشي التي تود أن نعمل عليها معاً اليوم؟';
+      } else if (isStockOrCryptoSpeculation) {
+        fallbackReasoning = `حوكمة التخصص المالي: المستشار المالي في منصة وزان يركز على الميزانية الشخصية، الادخار، التحرر من الديون، وصندوق الطوارئ، ويُمنع منعاً باتاً من تقديم توصيات استثمارية لأسهم أو مضاربات.`;
+        fallbackAdvice = `احمِ مدخراتك من المضاربات عالية المخاطر وركز على الادخار وبناء صندوق الطوارئ واستشارة مرخص مالي.`;
+        fallbackText = `أحييك على اهتمامك بتنمية أموالك يا صديقنا العزيز، ولكن كمرشد ومخطط مالي شخصي في منصة وزان، أركز حصراً على التخطيط المالي الرشيد، تنظيم الميزانية، التحرر من الديون، وبناء صندوق الطوارئ الآمن، وأمتنع تماماً عن تقديم أي توصيات لشراء أو بيع أسهم معينة، العملات المشفرة، أو مضاربات التداول عالية المخاطر.\n\nلحماية مدخراتك واستثمارها بشكل آمن ومسؤول، ننصحك باستشارة مستشار استثماري مرخص ومعتمد من هيئة السوق المالية لدراسة محفظتك.\n\nهل ترغب في أن نراجع معاً خطة بناء صندوق الطوارئ كخطوة أولى آمنة؟`;
+        fallbackActionSteps = [
+          'استشارة خبير استثماري مرخص ومعتمد قبل الدخول في أي أصل مالي عالي المخاطر',
+          'تأمين صندوق الطوارئ أولاً ليغطي مصاريف 3 إلى 6 أشهر',
+        ];
+        fallbackReflectionQuestion = 'هل ترغب في أن نراجع معاً خطة بناء صندوق الطوارئ كخطوة أولى آمنة؟';
+      } else if (isFatwaOrReligiousRuling) {
+        fallbackReasoning = `حوكمة التخصص الروحي: المستشار الروحي يقتصر دوره على السكينة القلبية والتأمل القيمي والأذكار، ويُمنع تماماً من إصدار فتاوى شرعية. تم توجيهه لدار الإفتاء الرسمية.`;
+        fallbackAdvice = `الفتوى تؤخذ من جهاتها المعتمدة؛ تواصل مع دار الإفتاء الرسمية للحصول على الحكم الشرعي الموثق.`;
+        fallbackText = `أقدّر حرصك وسؤالك الطيب يا صديقنا العزيز، لكن بصفتي مرشداً للسلام الداخلي والصفاء الإيماني والسكينة، يقتصر دوري على إعانتك على عادات الذكر، التوكل، والدعاء وتزكية النفس، وأمتنع تماماً عن إصدار الفتاوى الفقهية أو الفصل في الأحكام الشرعية والمذهبية.\n\nالمسائل الفقهية والأحكام الشرعية تؤخذ من مصادرها الرسمية؛ لذا نوصيك بالرجوع إلى دار الإفتاء الرسمية أو مركز الفتوى المعتمد للحصول على إجابة شرعية موثقة.\n\nما هو الذكر أو العمل القلبي البسيط الذي تشعر أنه يملأ صدرك سكينة اليوم؟`;
+        fallbackActionSteps = [
+          'التواصل مع دار الإفتاء الرسمية للاستفسارات الفقهية الدقيقة',
+          'المحافظة على ورد يومي بسيط من الذكر والدعاء لتعزيز الطمأنينة',
+        ];
+        fallbackReflectionQuestion = 'ما هو الذكر أو العمل القلبي البسيط الذي تشعر أنه يملأ صدرك سكينة اليوم؟';
+      } else if (isClinicalPsychology) {
+        fallbackReasoning = `حوكمة التخصص النفسي الذاتي: المستشارة الذاتية تركز على الوعي وإدارة الضغوط وبناء العادات اليومية وتتجنب العلاج السريري، مع التوجيه لأخصائي نفسي مرخص.`;
+        fallbackAdvice = `الحالات الإكلينيكية تستوجب جلسات علاج نفسي سريري متخصصة مع معالج مرخص.`;
+        fallbackText = `أسمعك بكل مودة واهتمام يا صديقنا العزيز. كمرشدة لبناء الوعي الذاتي وإدارة الضغوط اليومية والعادات الشخصية، أركز على مهارات التكيف والمرونة وتنمية الصلابة، ولا أقدم علاجاً نفسياً إكلينيكياً أو تشخيصاً سريرياً للاضطرابات النفسية العميقة.\n\nإذا كنت تعاني من أعراض سريرية مرهقة، فإن الخطوة الأجمل والأنفع هي حجز جلسات مع أخصائي نفسي أو طبيب نفسي إكلينيكي مرخص ليضع معك خطة علاجية علمية متكاملة.\n\nهل تود أن نتشارك خطوة بسيطة اليوم في تفريغ الضغوط وتدوين ما يشغل تفكيرك؟`;
+        fallbackActionSteps = [
+          'مراجعة عيادة نفسية مرخصة أو استشارة أخصائي نفسي سريري معتمد',
+          'ممارسة تمارين الاسترخاء والتنفس اليومية لتخفيف التوتر',
+        ];
+        fallbackReflectionQuestion = 'هل تود أن نتشارك خطوة بسيطة اليوم في تفريغ الضغوط وتدوين ما يشغل تفكيرك؟';
+      } else if (isLegalMaritalDispute) {
+        fallbackReasoning = `حوكمة التخصص الأسري: المستشارة الأسرية تركز على المودة والتفاهم الأسري وتتجنب الأحكام القضائية والشرعية.`;
+        fallbackAdvice = `النزاعات القضائية وحقوق الطلاق تتطلب جهات توثيق قانونية ومراكز استشارات أسرية متخصصة.`;
+        fallbackText = `سلامة قلبك وبيتك يا صديقنا العزيز. كمرشدة للعلاقات الأسرية، ينصبّ جهدي على ترسيخ لغة الحوار الدافئ، تعزيز المودة، وبر الوالدين وحل الخلافات بالرفق، ولا أتدخل في النزاعات القضائية أو قضايا الطلاق أو الأحكام الشرعية والقانونية الملزمة.\n\nفي مثل هذه القضايا الحساسة، ننصحك بالرجوع إلى مراكز التنمية والإرشاد الأسري المعتمدة أو المستشارين الأسريين والقانونيين المرخصين لحفظ الحقوق وتقديم الرأي السديد.\n\nكيف يمكننا اليوم تخفيف حدة التوتر وبدء خطوة حوار هادئة داخل الأسرة؟`;
+        fallbackActionSteps = [
+          'مراجعة مراكز التنمية والإرشاد الأسري المعتمدة أو مستشار قانوني مرخص',
+          'تهدئة المشاعر وتجنب اتخاذ قرارات مصيرية في لحظات الغضب',
+        ];
+        fallbackReflectionQuestion = 'كيف يمكننا اليوم تخفيف حدة التوتر وبدء خطوة حوار هادئة داخل الأسرة؟';
       } else if (isGriefOrExhaustion) {
         fallbackReasoning = `تحليل مشاعر الإنهاك والحزن والضيق النفسي لدى المستفيد: إدراك أن المشاعر المتألمة تحتاج إلى إنصات واحتواء إنساني دافئ قبل أي نصائح عملية، وكسر حلقة العزلة والضغط الداخلي.`;
         fallbackAdvice = `الحزن والإنهاك رسائل من الجسد والروح بحاجتهما للراحة والتفريغ؛ لا تكابر وامنح نفسك فرصة لالتقاط الأنفاس.`;
@@ -289,7 +407,9 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         summary: `تفاعل واستشارة مباشرة في ${currentAdvisor.title}`,
         advice: fallbackAdvice,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-        actionSteps: currentAdvisor.defaultGoals.slice(0, 1),
+        actionSteps: fallbackActionSteps,
+        reflectionQuestion: fallbackReflectionQuestion,
+        isCrisis: isCrisisMessage(fallbackText) || isCrisisMessage(text),
       };
 
       setMessagesByAdvisor((prev) => ({
@@ -307,6 +427,11 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
       onAddEisenhowerGoal(actionText, currentAdvisor.name, currentAdvisor.id);
     }
     setAddedGoals((prev) => ({ ...prev, [actionText]: true }));
+    setToastMessage(`تمت إضافة المهمة إلى المربع الثاني (مهم وغير عاجل) بمصفوفة أيزنهاور بنجاح 🎯`);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 4000);
   };
 
   return (
@@ -316,7 +441,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         <div className="flex items-center gap-3">
           <button
             onClick={onBackToDashboard}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-xs font-bold transition-all shadow-xs cursor-pointer"
+            className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
           >
             <ArrowRight className="w-4 h-4" />
             <span>العودة إلى عجلة الحياة</span>
@@ -362,7 +487,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 <button
                   key={advisor.id}
                   onClick={() => onSelectAdvisor(advisor.id)}
-                  className={`w-full text-right p-3 rounded-2xl transition-all duration-200 flex items-center justify-between border cursor-pointer ${
+                  className={`w-full text-right p-3 rounded-2xl transition-all duration-200 flex items-center justify-between border cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
                     isSelected
                       ? 'bg-[#F7F6F2] dark:bg-[#112028] border-[#0F6E6E] dark:border-[#0891B2] shadow-xs'
                       : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#0F172A] dark:text-[#F1F5F9]'
@@ -552,11 +677,16 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                           : 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] rounded-tl-none shadow-xs'
                       }`}
                     >
-                      <div className="whitespace-pre-wrap">{msg.content}</div>
-                      <span className="text-[10px] opacity-60 block mt-2 text-left">
+                      <FormattedChatMessage text={msg.content} isAdvisor={!isUser} />
+                      <span className="text-[10px] opacity-60 block mt-2 text-left" dir="ltr">
                         {msg.timestamp}
                       </span>
                     </div>
+
+                    {/* Render Crisis Support Card if crisis response detected */}
+                    {!isUser && (msg.isCrisis || isCrisisMessage(msg.content)) && (
+                      <CrisisSupportCard />
+                    )}
 
                     {/* Actionable Steps suggested by advisor */}
                     {!isUser && msg.actionSteps && msg.actionSteps.length > 0 && (
@@ -573,7 +703,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                                 key={sIdx}
                                 className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9]"
                               >
-                                <span>{step}</span>
+                                <span>{isolateNumbersInText(step)}</span>
                                 <button
                                   type="button"
                                   onClick={() => handleAddActionToGoals(step)}
@@ -610,7 +740,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                           <span className="font-bold text-[#8A5A00] dark:text-[#FBBF24] block mb-0.5">
                             سؤال للتأمل الذاتي:
                           </span>
-                          <span>{msg.reflectionQuestion}</span>
+                          <span>{isolateNumbersInText(msg.reflectionQuestion)}</span>
                         </div>
                       </div>
                     )}
@@ -728,6 +858,38 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Floating Confirmation Toast for Eisenhower Injection */}
+      {toastMessage && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-6 start-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#064E3B] text-white shadow-2xl border border-emerald-500/50 backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-300 max-w-md"
+        >
+          <CheckCircle2 className="w-5 h-5 text-emerald-300 flex-shrink-0" />
+          <span className="text-xs font-bold leading-relaxed flex-1">
+            {toastMessage}
+          </span>
+          {onNavigateToGoalsMatrix && (
+            <button
+              type="button"
+              onClick={onNavigateToGoalsMatrix}
+              className="px-2.5 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-[11px] font-black text-emerald-100 hover:text-white transition-all flex items-center gap-1 flex-shrink-0 cursor-pointer shadow-xs"
+            >
+              <span>فتح المصفوفة</span>
+              <ArrowLeft className="w-3 h-3" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setToastMessage(null)}
+            className="p-1 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-800/60 transition-all flex-shrink-0 cursor-pointer"
+            aria-label="إغلاق الإشعار"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
     </div>
   );
 };

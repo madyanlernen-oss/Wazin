@@ -126,13 +126,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
             )}
 
-            {/* 15. Mobile drawer close button (at least 40x40px touch target) */}
+            {/* 15. Mobile drawer close button (at least 44x44px touch target) */}
             {onCloseMobile && (
               <button
                 ref={closeButtonRef}
                 type="button"
                 onClick={onCloseMobile}
-                className="lg:hidden min-w-10 min-h-10 w-10 h-10 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+                className="lg:hidden min-w-[44px] min-h-[44px] w-[44px] h-[44px] rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
                 aria-label="إغلاق القائمة"
               >
                 <X className="w-5 h-5" aria-hidden="true" />
@@ -158,7 +158,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 type="button"
                 onClick={() => handleSelectNav(item.screen)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
+                className={`w-full flex items-center gap-3 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                   isActive
                     ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs font-black'
                     : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028]'
@@ -209,13 +209,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </div>
           </div>
 
-          {/* 12, 14, 15. Calm, polite Logout Button (>= 40x40px, high contrast text-slate-600) */}
+          {/* 12, 14, 15. Calm, polite Logout Button (>= 44x44px, high contrast text-slate-600) */}
           <button
             type="button"
             onClick={onSignOut}
             title="تسجيل الخروج من الحساب"
             aria-label="تسجيل الخروج"
-            className="min-w-10 min-h-10 w-10 h-10 rounded-xl text-slate-600 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-[#0B161C] border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700/60 transition-all cursor-pointer flex-shrink-0 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+            className="min-w-[44px] min-h-[44px] w-[44px] h-[44px] rounded-xl text-slate-600 hover:text-rose-600 dark:text-slate-400 dark:hover:text-rose-400 hover:bg-white dark:hover:bg-[#0B161C] border border-transparent hover:border-slate-200/80 dark:hover:border-slate-700/60 transition-all cursor-pointer flex-shrink-0 flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
           >
             <LogOut className="w-4 h-4" aria-hidden="true" />
           </button>
@@ -230,7 +230,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setShowResetConfirm(true)}
               title="إعادة تعيين تقييمات المنظومة وبياناتها"
               aria-label="إعادة ضبط التقييم والبيانات"
-              className="inline-flex items-center gap-1.5 py-1.5 px-3 rounded-lg text-xs font-medium text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+              className="inline-flex items-center justify-center gap-1.5 py-2.5 px-3 min-h-[44px] rounded-lg text-xs font-medium text-slate-600 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-100/70 dark:hover:bg-slate-800/50 transition-colors cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
             >
               <RotateCcw className="w-3.5 h-3.5 text-slate-600 group-hover:text-amber-600 dark:text-slate-400 dark:group-hover:text-amber-400 transition-colors" aria-hidden="true" />
               <span>إعادة ضبط التقييم والبيانات</span>

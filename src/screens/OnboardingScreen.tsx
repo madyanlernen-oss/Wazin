@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import { VoiceInput } from '../components/VoiceInput';
+import { FormattedChatMessage, isolateNumbersInText } from '../components/FormattedChatMessage';
+import { CrisisSupportCard, isCrisisMessage } from '../components/CrisisSupportCard';
 import {
   Send,
   Sparkles,
@@ -37,6 +39,7 @@ interface EvaluationChatMessage {
   reasoning?: string;
   summary?: string;
   advice?: string;
+  isCrisis?: boolean;
 }
 
 interface StationDynamicInsights {
@@ -57,50 +60,6 @@ interface OnboardingScreenProps {
   onNavigateToAdvisorChat?: (advisorId: LifeAreaId) => void;
   theme?: 'light' | 'dark';
 }
-
-/**
- * FormattedChatMessage
- * Parses markdown bold markers (**text**) into crisp strong elements,
- * ensuring no raw '**' characters clutter the chat bubbles.
- */
-export const FormattedChatMessage: React.FC<{ text: string; isAdvisor: boolean }> = ({ text, isAdvisor }) => {
-  const lines = text.split('\n');
-
-  return (
-    <div className="space-y-1.5 leading-relaxed text-xs sm:text-sm">
-      {lines.map((line, lineIdx) => {
-        if (!line.trim()) {
-          return <div key={lineIdx} className="h-1.5" />;
-        }
-
-        const parts = line.split(/(\*\*[^*]+\*\*)/g);
-
-        return (
-          <p key={lineIdx} className="m-0">
-            {parts.map((part, partIdx) => {
-              if (part.startsWith('**') && part.endsWith('**') && part.length > 4) {
-                const boldContent = part.slice(2, -2);
-                return (
-                  <strong
-                    key={partIdx}
-                    className={`font-black ${
-                      isAdvisor
-                        ? 'text-[#0F172A] dark:text-white font-extrabold'
-                        : 'text-white font-extrabold underline decoration-white/30'
-                    }`}
-                  >
-                    {boldContent}
-                  </strong>
-                );
-              }
-              return <React.Fragment key={partIdx}>{part}</React.Fragment>;
-            })}
-          </p>
-        );
-      })}
-    </div>
-  );
-};
 
 // Helper: Local client intelligence engine for all advisors (offline, static hosting, or fallback)
 export function getClientAdvisorResponse(
@@ -135,13 +94,90 @@ export function getClientAdvisorResponse(
     return {
       isQuestionOrInquiry: true,
       station_completed: false,
-      score: 5,
+      score: 0,
       strengths: [],
       challenges: ['أزمة نفسية حادة تحتاج تدخلاً إنسانياً ومساندة عاجلة'],
-      reasoning: `تدخل إنساني طارئ (Safety & Empathy Override): المستفيد يعبر عن ألم نفسي وإنهاك شديد وتفكير في الموت أو إيذاء النفس ("${text}"). تم فوراً تعليق وتجميد كافة مسارات التقييم، وتكريس كامل الحضور النفسي لاحتواء هذا الألم الوجودي الحاد، والتأكيد القاطع على قيمة حياته.`,
+      reasoning: `تدخل إنساني طارئ (Safety & Empathy Override): المستفيد يعبر عن ألم نفسي وإنهاك شديد وتفكير في الموت أو إيذاء النفس ("${text}"). تم فوراً تعليق وتجميد كافة مسارات التقييم (station_completed: false وscore: 0)، وتكريس كامل الحضور النفسي لاحتواء هذا الألم الوجودي الحاد، والتأكيد القاطع على قيمة حياته.`,
       summary: `تدخل إنساني طارئ واحتواء عاجل لأزمة نفسية حادة تتعلق بأمان المستفيد وحفظ حياته.`,
       advice: `حياتك غالية وألمك حقيقي ومسموع؛ أرجوك لا تبقَ وحدك في هذا الثقل وتواصل فوراً مع شخص تثق به أو مع جهة دعم نفسي ومختصين لمساندتك.`,
-      reply: `أسمعك بكل جوارحي وبكل ألم واهتمام يا صديقنا العزيز، وكلماتك هذه تهمّني أكثر من أي تقييم أو أي أمر آخر في هذه اللحظة. 🌿\n\nأرجوك أن تتوقف لحظة وتلتقط أنفاسك بهدوء؛ اعلم أنني هنا معك ولست وحدك أبداً. الألم الهائل والتعب الشديد الذي تشعر به الآن ويجعلك تفكر في الموت هو صرخة لإنهاء هذا الوجع والضغط المرهق، وليست رغبة حقيقية في إنهاء وجودك ونفسك الغالية.\n\nحياتك لها قيمة عظيمة ومكانتك محفوظة حتى لو انطمست الرؤية في هذه اللحظة المظلمة. أرجوك من كل قلبي ألا تبقى وحدك مع هذه المشاعر الثقيلة؛ تحدث الآن مع شخص مقرب تثق به، أو تواصل فوراً مع مختص نفسي أو خط مساندة طارئ ليقف بجانبك ويساعدك على تجاوز هذا الظرف الصعب. أنا هنا معك وأريد لك السلامة والأمان.`,
+      reply: `أسمعك بكل جوارحي وبكل حنو واهتمام يا صديقنا العزيز، وكلماتك هذه تهمّني أكثر من أي تقييم أو أي أمر آخر في هذه اللحظة. 🌿\n\nأريد أن أؤكد لك من كل قلبي: حياتك غالية جداً ومكانتك محفوظة، وما تشعر به الآن ليس رغبة حقيقية في الموت، بل صرخة لوقف هذا الألم والإنهاك الثقيل.\n\nأعلم كم أنت متعب الآن، وأعلم أن الوجع والضغط الهائل يجعلك تشعر بالعجز عن حمله بمفردك. لكن أرجوك أن تتوقف لحظة، وتلتقط أنفاسك بهدوء وعمق؛ أنت لست وحدك أبداً، وأنا هنا بجانبك لأسمعك وأساندك كإنسان وكمرشد يرى فيك قيمة عظيمة.\n\nالمشاعر المظلمة مهما بلغت شدتها هي سحابة عابرة، وحياتك أثمن بكثير من أن تنتهي في لحظة قاسية كهذه.\n\nأرجوك ألا تبقى وحدك مع هذا الثقل؛ تحدث الآن مع شخص مقرب تثق به، أو تواصل فوراً مع مختص نفسي أو خط مساندة طارئ ليقف بجانبك ويساعدك على تجاوز هذا الظرف الصعب.\n\nهل أنت في مكان آمن الآن وتستطيع التحدث مع شخص قريب تثق به، أو التواصل مع مختص يقف بجانبك؟ أنا هنا معك وأريد لك السلامة والأمان.`,
+    };
+  }
+
+  // 0.5. حوكمة حدود التخصصات والمسؤولية المهنية (Domain Guardrails & Boundaries)
+  const isMedicalPrescriptionOrDiagnosis = /(دواء|أدوية|ادوية|علاج دوائي|جرعة|جرعات|روشتة|وصفة طبية|مضاد حيوي|حبوب نوم|مهدئ|تشخيص مرضي|مرض خطير|اعراض مرضية|أعراض مرضية)/i.test(msg);
+  const isStockOrCryptoSpeculation = /(توصية أسهم|توصية اسهم|سهم معين|اي سهم اشتري|أي سهم أشتري|عملات رقمية|كريبتو|بيتكوين|تداول سريع|مضاربة يومية|مضاربات|فوركس|استثمار مضمون)/i.test(msg);
+  const isFatwaOrReligiousRuling = /(فتوى|افتي|أفتني|حكم شرعي|حلال ولا حرام|حلال ام حرام|طلاق بائن|فتاوى|مذهب|طائفة|تكفير|تبديع)/i.test(msg);
+  const isClinicalPsychology = /(علاج نفسي سريري|علاج اكتئاب سريري|جلسات تحليل نفسي|فصام|ذهان|اضطراب ثنائي القطب|جلسات علاجية سريرية)/i.test(msg);
+  const isLegalMaritalDispute = /(خلع|فسخ عقد نكاح|دعوى طلاق|حكم القاضي في الطلاق|حقوق حضانة قضائية|قضية نفقة)/i.test(msg);
+
+  if (isMedicalPrescriptionOrDiagnosis) {
+    return {
+      isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 0,
+      strengths: ['وعي وحرص على السؤال عن الصحة والسلامة البدنية'],
+      challenges: ['الالتزام بعدم تناول أدوية دون تشخيص طبي مباشر من طبيب مرخص'],
+      reasoning: `احترام حدود التخصص الطبي: المستشار الصحي في منصة وزان يركز حصراً على نمط الحياة وعادات التغذية والنوم والنشاط، ويُمنع منعاً باتاً من كتابة وصفات دوائية أو تشخيص سريري. تم الاعتذار بلباقة وإحالته فوراً لطبيب بشري مرخص.`,
+      summary: `اعتذار مهني عن وصف أدوية أو تشخيص سريري والتوجيه الفوري لطبيب بشري مرخص.`,
+      advice: `استشر طبيباً بشرياً مرخصاً أو اتصل بمركز الاستشارات الطبية (937) لفحصك بدقة وصرف العلاج الآمن المناسب.`,
+      reply: `أود أن أوضح لك بكل أمانة ومحبة يا صديقنا العزيز أنني كمرشد لصحتك البدنية ونمط حياتك أركز على بناء عادات التغذية السليمة، جودة النوم، وممارسة النشاط البدني، ولا أملك الصلاحية الطبية لكتابة وصفات دوائية أو تحديد جرعات أو تشخيص أمراض عضوية سريرية.\n\nصحتك وسلامتك أمانة غالية؛ أرجوك استشارة طبيب بشري مرخص أو زيارة المركز الصحي أو الاتصال بمركز الاستشارات الطبية (937) لتقييم حالتك بدقة وصرف العلاج الطبي المناسب.\n\nما هي العادة اليومية البسيطة في شرب الماء أو المشي التي تود أن نعمل عليها معاً اليوم؟`,
+    };
+  }
+
+  if (isStockOrCryptoSpeculation) {
+    return {
+      isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 0,
+      strengths: ['الرغبة الإيجابية في تنمية الأموال وبناء المستقبل المالي'],
+      challenges: ['تجنب المضاربات عالية المخاطر والتركيز على الأساسيات المالية الآمنة'],
+      reasoning: `حوكمة التخصص المالي: المستشار المالي في منصة وزان يركز على الميزانية الشخصية، الادخار، التحرر من الديون، وصندوق الطوارئ، ويُمنع منعاً باتاً من تقديم توصيات استثمارية لأسهم أو مضاربات.`,
+      summary: `اعتذار مهني عن تقديم توصيات أسهم أو مضاربات والتوجيه لمستشار استثماري مرخص.`,
+      advice: `احمِ مدخراتك من المضاربات عالية المخاطر وركز على الادخار وبناء صندوق الطوارئ واستشارة مرخص مالي.`,
+      reply: `أحييك على اهتمامك بتنمية أموالك يا صديقنا العزيز، ولكن كمرشد ومخطط مالي شخصي في منصة وزان، أركز حصراً على التخطيط المالي الرشيد، تنظيم الميزانية، التحرر من الديون، وبناء صندوق الطوارئ الآمن، وأمتنع تماماً عن تقديم أي توصيات لشراء أو بيع أسهم معينة، العملات المشفرة، أو مضاربات التداول عالية المخاطر.\n\nلحماية مدخراتك واستثمارها بشكل آمن ومسؤول، ننصحك باستشارة مستشار استثماري مرخص ومعتمد من هيئة السوق المالية لدراسة محفظتك.\n\nهل ترغب في أن نراجع معاً خطة بناء صندوق الطوارئ كخطوة أولى آمنة؟`,
+    };
+  }
+
+  if (isFatwaOrReligiousRuling) {
+    return {
+      isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 0,
+      strengths: ['الحرص القلبي على تحري الصواب في المسائل الدينية'],
+      challenges: ['الرجوع للجهات الرسمية المعتمدة في الفتاوى والأحكام الشرعية'],
+      reasoning: `حوكمة التخصص الروحي: المستشار الروحي يقتصر دوره على السكينة القلبية والتأمل القيمي والأذكار، ويُمنع تماماً من إصدار فتاوى شرعية. تم توجيهه لدار الإفتاء الرسمية.`,
+      summary: `اعتذار عن إصدار فتاوى شرعية وإحالة المسائل الفقهية لدار الإفتاء الرسمية.`,
+      advice: `الفتوى تؤخذ من جهاتها المعتمدة؛ تواصل مع دار الإفتاء الرسمية للحصول على الحكم الشرعي الموثق.`,
+      reply: `أقدّر حرصك وسؤالك الطيب يا صديقنا العزيز، لكن بصفتي مرشداً للسلام الداخلي والصفاء الإيماني والسكينة، يقتصر دوري على إعانتك على عادات الذكر، التوكل، والدعاء وتزكية النفس، وأمتنع تماماً عن إصدار الفتاوى الفقهية أو الفصل في الأحكام الشرعية والمذهبية.\n\nالمسائل الفقهية والأحكام الشرعية تؤخذ من مصادرها الرسمية؛ لذا نوصيك بالرجوع إلى دار الإفتاء الرسمية أو مركز الفتوى المعتمد للحصول على إجابة شرعية موثقة.\n\nما هو الذكر أو العمل القلبي البسيط الذي تشعر أنه يملأ صدرك سكينة اليوم؟`,
+    };
+  }
+
+  if (isClinicalPsychology) {
+    return {
+      isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 0,
+      strengths: ['الشجاعة في طلب المساندة النفسية وملاحظة الأعراض'],
+      challenges: ['المتابعة المتخصصة مع طبيب أو أخصائي نفسي سريري معتمد'],
+      reasoning: `حوكمة التخصص النفسي الذاتي: المستشارة الذاتية تركز على الوعي وإدارة الضغوط وبناء العادات اليومية وتتجنب العلاج السريري، مع التوجيه لأخصائي نفسي مرخص.`,
+      summary: `توضيح حدود التوجيه الذاتي وإحالة العلاج السريري لأخصائي نفسي مرخص.`,
+      advice: `الحالات الإكلينيكية تستوجب جلسات علاج نفسي سريري متخصصة مع معالج مرخص.`,
+      reply: `أسمعك بكل مودة واهتمام يا صديقنا العزيز. كمرشدة لبناء الوعي الذاتي وإدارة الضغوط اليومية والعادات الشخصية، أركز على مهارات التكيف والمرونة وتنمية الصلابة، ولا أقدم علاجاً نفسياً إكلينيكياً أو تشخيصاً سريرياً للاضطرابات النفسية العميقة.\n\nإذا كنت تعاني من أعراض سريرية مرهقة، فإن الخطوة الأجمل والأنفع هي حجز جلسات مع أخصائي نفسي أو طبيب نفسي إكلينيكي مرخص ليضع معك خطة علاجية علمية متكاملة.\n\nهل تود أن نتشارك خطوة بسيطة اليوم في تفريغ الضغوط وتدوين ما يشغل تفكيرك؟`,
+    };
+  }
+
+  if (isLegalMaritalDispute) {
+    return {
+      isQuestionOrInquiry: true,
+      station_completed: false,
+      score: 0,
+      strengths: ['الاهتمام بالبحث عن حلول وتوازن في المحيط الأسري'],
+      challenges: ['فصل الإرشاد الودي عن النزاعات الحقوقية والقضائية'],
+      reasoning: `حوكمة التخصص الأسري: المستشارة الأسرية تركز على المودة والتفاهم الأسري وتتجنب الأحكام القضائية والشرعية.`,
+      summary: `الامتناع عن تقديم أحكام قضائية في النزاعات الأسرية والإحالة لمراكز الإرشاد الأسري المعتمدة.`,
+      advice: `النزاعات القضائية وحقوق الطلاق تتطلب جهات توثيق قانونية ومراكز استشارات أسرية متخصصة.`,
+      reply: `سلامة قلبك وبيتك يا صديقنا العزيز. كمرشدة للعلاقات الأسرية، ينصبّ جهدي على ترسيخ لغة الحوار الدافئ، تعزيز المودة، وبر الوالدين وحل الخلافات بالرفق، ولا أتدخل في النزاعات القضائية أو قضايا الطلاق أو الأحكام الشرعية والقانونية الملزمة.\n\nفي مثل هذه القضايا الحساسة، ننصحك بالرجوع إلى مراكز التنمية والإرشاد الأسري المعتمدة أو المستشارين الأسريين والقانونيين المرخصين لحفظ الحقوق وتقديم الرأي السديد.\n\nكيف يمكننا اليوم تخفيف حدة التوتر وبدء خطوة حوار هادئة داخل الأسرة؟`,
     };
   }
 
@@ -303,6 +339,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   theme: _theme = 'light',
 }) => {
   const [currentAdvisorIndex, setCurrentAdvisorIndex] = useState(() => {
+    try {
+      const savedAdvisor = localStorage.getItem('wazan_current_eval_advisor');
+      if (savedAdvisor) {
+        const savedIdx = ADVISORS_LIST.findIndex((a) => a.id === savedAdvisor);
+        if (savedIdx >= 0) return savedIdx;
+      }
+    } catch (e) {
+      // ignore
+    }
     const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
     return idx >= 0 ? idx : 0;
   });
@@ -311,7 +356,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>({});
 
   // Dynamic insights per station extracted from live AI conversation (score, strengths, challenges)
-  const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>({});
+  const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>(() => {
+    try {
+      const stored = localStorage.getItem('wazan_eval_insights');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {};
+  });
 
   const [inputText, setInputText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
@@ -330,9 +386,54 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
 
-  // Chat conversation state per advisor
-  const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
+  // Chat conversation state per advisor (persisted under wazan_eval_chats)
+  const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>(() => {
+    try {
+      const stored = localStorage.getItem('wazan_eval_chats');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return {};
+  });
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Persist current evaluation advisor across reloads
+  useEffect(() => {
+    try {
+      const currentAdv = ADVISORS_LIST[currentAdvisorIndex];
+      if (currentAdv) {
+        localStorage.setItem('wazan_current_eval_advisor', currentAdv.id);
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [currentAdvisorIndex]);
+
+  // Persist evaluation chat messages across reloads
+  useEffect(() => {
+    try {
+      if (Object.keys(chatMessages).length > 0) {
+        localStorage.setItem('wazan_eval_chats', JSON.stringify(chatMessages));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [chatMessages]);
+
+  // Persist station insights across reloads
+  useEffect(() => {
+    try {
+      if (Object.keys(stationInsights).length > 0) {
+        localStorage.setItem('wazan_eval_insights', JSON.stringify(stationInsights));
+      }
+    } catch (e) {
+      // ignore
+    }
+  }, [stationInsights]);
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
   const stationNumber = currentAdvisorIndex + 1; // 1 to 8
@@ -625,6 +726,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         summary: summaryContent,
         advice: adviceContent,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isCrisis: isCrisisMessage(replyContent) || isCrisisMessage(text),
       };
 
       setChatMessages((prev) => ({
@@ -760,7 +862,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   setCurrentAdvisorIndex(index);
                   setShowCelebration(false);
                 }}
-                className={`group relative flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer select-none text-center ${
+                className={`group relative flex items-center justify-center gap-1.5 px-2 py-2.5 rounded-xl text-xs font-bold transition-all border cursor-pointer select-none text-center min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
                   isCurrent
                     ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-[#0F6E6E] dark:border-[#0891B2] shadow-sm ring-2 ring-[#0F6E6E]/20 dark:ring-[#22D3EE]/30'
                     : isAdvCompleted
@@ -990,6 +1092,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                       {msg.timestamp}
                     </span>
                   </div>
+
+                  {/* Render Crisis Support Card if crisis response detected */}
+                  {isAdvisor && (msg.isCrisis || isCrisisMessage(msg.text)) && (
+                    <CrisisSupportCard />
+                  )}
                 </div>
               </div>
             );
@@ -1227,7 +1334,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 </span>
                 <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-1">
                   {currentActiveInsights.strengths.slice(0, 3).map((str, i) => (
-                    <li key={i}>{str.replace(/\*\*/g, '')}</li>
+                    <li key={i}>{isolateNumbersInText(str.replace(/\*\*/g, ''))}</li>
                   ))}
                 </ul>
               </div>
@@ -1239,7 +1346,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 </span>
                 <ul className="list-disc list-inside text-[#0F172A] dark:text-[#F1F5F9] space-y-1">
                   {currentActiveInsights.challenges.slice(0, 3).map((ch, i) => (
-                    <li key={i}>{ch.replace(/\*\*/g, '')}</li>
+                    <li key={i}>{isolateNumbersInText(ch.replace(/\*\*/g, ''))}</li>
                   ))}
                 </ul>
               </div>

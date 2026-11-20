@@ -258,6 +258,24 @@ export const resetStoredState = (): void => {
         // ignore
       }
     });
+    const extraWazanKeys = [
+      'wazan_advisor_chats',
+      'wazan_eval_chats',
+      'wazan_eval_insights',
+      'wazan_eisenhower_goals',
+      'wazan_eisenhower_timeframe',
+      'wazan_current_eval_advisor',
+      'wazan_added_goals',
+      'wazan_added_hani_goals',
+      'wazan_ai_mode',
+    ];
+    extraWazanKeys.forEach((key) => {
+      try {
+        localStorage.removeItem(key);
+      } catch {
+        // ignore
+      }
+    });
   } catch (e) {
     console.error('Failed to reset storage:', e);
   }

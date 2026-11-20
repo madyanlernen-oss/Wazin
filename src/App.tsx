@@ -40,14 +40,22 @@ export default function App() {
     if (loaded.userProfile?.name?.includes('عبدالرحمن') || loaded.userProfile?.name === 'مستخدم تجريبي') {
       loaded.userProfile = null;
     }
-    return {
-      ...loaded,
-      userProfile: null, // Start clean on landing screen
-    };
+    return loaded;
   });
 
-  // Screen navigation state
-  const [activeScreen, setActiveScreen] = useState<Screen>('landing');
+  // Screen navigation state: restore last screen on reload if user is authenticated
+  const [activeScreen, setActiveScreen] = useState<Screen>(() => {
+    const loaded = loadStoredState();
+    if (
+      loaded.userProfile &&
+      loaded.lastActiveScreen &&
+      loaded.lastActiveScreen !== 'login' &&
+      loaded.lastActiveScreen !== 'landing'
+    ) {
+      return loaded.lastActiveScreen;
+    }
+    return 'landing';
+  });
 
   // Track whether user clicked 'login' or 'signup' from top buttons
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
@@ -158,6 +166,7 @@ export default function App() {
     setAppState((prev) => ({
       ...prev,
       userProfile: null,
+      lastActiveScreen: 'landing',
     }));
     setActiveScreen('landing');
   };
@@ -349,7 +358,7 @@ export default function App() {
             <button
               type="button"
               onClick={() => setIsMobileSidebarOpen(true)}
-              className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-[#0B6E72] dark:text-cyan-400 border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
+              className="min-w-[44px] min-h-[44px] w-[44px] h-[44px] p-2 rounded-xl bg-slate-50 dark:bg-slate-800 text-[#0B6E72] dark:text-cyan-400 border border-slate-200 dark:border-slate-700 hover:bg-white dark:hover:bg-slate-700 transition-colors flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
               aria-label="فتح القائمة الجانبية"
             >
               <Menu className="w-5 h-5" />
@@ -363,7 +372,7 @@ export default function App() {
             <button
               type="button"
               onClick={toggleTheme}
-              className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#0B6E72] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
+              className="min-w-[44px] min-h-[44px] w-[44px] h-[44px] p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white/80 dark:bg-slate-800/80 text-[#0B6E72] dark:text-cyan-400 hover:scale-105 active:scale-95 transition-all shadow-xs cursor-pointer flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
               title={theme === 'dark' ? 'تفعيل الوضع النهاري' : 'تفعيل الوضع الليلي'}
               aria-label="تبديل الوضع الليلي والنهاري"
             >
@@ -386,10 +395,12 @@ export default function App() {
               answers={appState.answers}
               goals={appState.goals}
               completedAdvisors={appState.completedAdvisors}
+              directorReport={appState.directorReport}
               onSelectAdvisorChat={handleSelectAdvisorChat}
               onEditAdvisorEvaluation={handleEditAdvisorEvaluation}
               onNavigateToDirectorSummary={() => setActiveScreen('director_summary')}
               onAddGoal={handleAddGoal}
+              onAddEisenhowerGoal={handleAddEisenhowerGoal}
               onStartEvaluation={() => setActiveScreen('onboarding')}
               theme={theme}
             />
@@ -423,6 +434,7 @@ export default function App() {
               goals={appState.goals}
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
+              onNavigateToGoalsMatrix={() => setActiveScreen('goals_matrix')}
               onBackToDashboard={() => setActiveScreen('dashboard')}
               theme={theme}
             />
