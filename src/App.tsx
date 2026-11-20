@@ -16,6 +16,7 @@ import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
 import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
 import { Menu, Sun, Moon } from 'lucide-react';
+import { ADVISORS_LIST } from './data/advisorsData';
 import {
   DirectorSummaryReport,
   LifeAreaId,
@@ -211,6 +212,55 @@ export default function App() {
     });
   };
 
+  // Handler: Reset a single advisor's station for re-evaluation
+  const handleResetAdvisorStation = (advisorId: LifeAreaId) => {
+    setAppState((prev) => {
+      const newCompleted = prev.completedAdvisors.filter((id) => id !== advisorId);
+      const newScores = {
+        ...prev.scores,
+        [advisorId]: 0,
+      };
+      const newCompletedDates = { ...(prev.completedDates || {}) };
+      delete newCompletedDates[advisorId];
+
+      return {
+        ...prev,
+        completedAdvisors: newCompleted,
+        scores: newScores,
+        completedDates: newCompletedDates,
+      };
+    });
+  };
+
+  // Handler: Start a fresh new weekly assessment cycle
+  const handleStartNewWeeklyAssessment = () => {
+    setAppState((prev) => {
+      const resetScores: Record<string, number> = {};
+      ADVISORS_LIST.forEach((adv) => {
+        resetScores[adv.id] = 0;
+      });
+
+      return {
+        ...prev,
+        assessmentMode: 'weekly_checkin',
+        completedAdvisors: [],
+        completedDates: {},
+        scores: resetScores,
+        directorReport: null,
+      };
+    });
+
+    try {
+      localStorage.removeItem('wazan_eval_chats');
+      localStorage.removeItem('wazan_eval_insights');
+      localStorage.removeItem('wazan_current_eval_advisor');
+    } catch {
+      // ignore
+    }
+
+    setActiveScreen('onboarding');
+  };
+
   // Handler: Finish all 8 advisors
   const handleCompleteAll = () => {
     setActiveScreen('dashboard');
@@ -402,6 +452,7 @@ export default function App() {
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
               onStartEvaluation={() => setActiveScreen('onboarding')}
+              onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               theme={theme}
             />
           )}
@@ -412,6 +463,8 @@ export default function App() {
               answers={appState.answers}
               onSaveAnswer={handleSaveAnswer}
               onFinishAdvisor={handleFinishAdvisor}
+              onResetAdvisor={handleResetAdvisorStation}
+              onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               onCompleteAll={handleCompleteAll}
               completedAdvisors={appState.completedAdvisors}
               completedDates={appState.completedDates}

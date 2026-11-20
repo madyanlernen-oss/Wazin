@@ -161,7 +161,7 @@ function generateLocalAgentResponse(
       reply: finalReply,
       actionSteps: data.actionSteps || [finalAdvice],
       reflectionQuestion: data.reflectionQuestion || 'ما هي الخطوة البسيطة التي ستبدأ بها اليوم؟',
-      station_completed: data.station_completed ?? false,
+      station_completed: Boolean(isEvaluationSession) && Boolean(data.station_completed),
       strengths: data.strengths || [],
       challenges: data.challenges || [],
     };
@@ -1030,6 +1030,15 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 3. السياج الصارم وحفظ السياق (Strict Domain Guardrail):
    - ركّز فقط على بعد (${advisorRole})، وإذا سأل عن حالك أو بادر بالتحية، أجب بلطف في سطر وأعده مباشرة لسؤال التشخيص.
 `;
+    } else {
+      evaluationSessionGuideline = `
+[بروتوكول جلسة الاستشارة المفتوحة المستقلة (Independent Open Advisor Consultation) 💬]
+المستفيد حالياً في غرفة الاستشارة الحرة المستمرة معك (${advisorName}).
+قواعد استقلالية الاستشارة المفتوحة:
+1. هذه الجلسة استشارية حرة ومستقلة تماماً عن مسار التقييم الأسبوعي.
+2. ⚠️ إلزام صارم: يجب أن تكون قيمة "station_completed": false دائماً في هذه الجلسة. لا يجوز إكمال محطة أو تعديل درجات التقييم الأسبوعي من داخل غرفة الاستشارة الحرة.
+3. ركز على الإجابة الاستشارية المعمقة، الإرشاد المستمر، العصف الذهني، وتطوير العادات في مجال (${advisorRole}).
+`;
     }
 
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
@@ -1205,7 +1214,7 @@ ${evaluationSessionGuideline}
     parsed.summary = parsed.summary || '';
     parsed.advice = parsed.advice || '';
     parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
-    parsed.station_completed = Boolean(parsed.station_completed);
+    parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
     parsed.strengths = Array.isArray(parsed.strengths) ? parsed.strengths : [];
     parsed.challenges = Array.isArray(parsed.challenges) ? parsed.challenges : [];
     if (!parsed.reply && (parsed.advice || parsed.summary)) {

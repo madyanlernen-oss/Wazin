@@ -129,11 +129,15 @@ export function cleanupStoredUserPasswords(): void {
 
 /**
  * Checks if an advisor is locked for the current week (7 days lock)
+ * In development, testing, and continuous weekly cycles, allowReassessment defaults to true
+ * to allow non-blocking inspection and dynamic re-evaluation.
  */
 export const isAdvisorWeeklyLocked = (
   advisorId: string,
-  completedDates?: Record<string, number>
+  completedDates?: Record<string, number>,
+  allowReassessment: boolean = true
 ): boolean => {
+  if (allowReassessment) return false;
   if (!completedDates || !completedDates[advisorId]) return false;
   const completedAt = completedDates[advisorId];
   return Date.now() - completedAt < ONE_WEEK_MS;

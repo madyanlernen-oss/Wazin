@@ -257,6 +257,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           message: text,
           history: conversationHistory,
           aiMode,
+          isEvaluationSession: false,
         }),
       });
 

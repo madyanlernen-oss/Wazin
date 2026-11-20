@@ -53,6 +53,8 @@ interface OnboardingScreenProps {
   answers: Record<string, any>;
   onSaveAnswer: (advisorId: LifeAreaId, questionId: string, value: any) => void;
   onFinishAdvisor: (advisorId: LifeAreaId, score: number) => void;
+  onResetAdvisor?: (advisorId: LifeAreaId) => void;
+  onStartNewWeeklyAssessment?: () => void;
   onCompleteAll: () => void;
   completedAdvisors: LifeAreaId[];
   completedDates?: Record<string, number>;
@@ -331,6 +333,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   answers,
   onSaveAnswer,
   onFinishAdvisor,
+  onResetAdvisor,
+  onStartNewWeeklyAssessment,
   onCompleteAll,
   completedAdvisors,
   completedDates,
@@ -512,10 +516,44 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, currentAdvisorIndex]);
 
-  // Finish and approve current advisor assessment manually
+  // Reopen and restart evaluation for current advisor station
+  const handleReopenStation = () => {
+    const advisorKey = currentAdvisor.id;
+    setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
+    const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, stationNumber);
+    setChatMessages((prev) => {
+      const updated = { ...prev, [advisorKey]: [openingMsg] };
+      try {
+        localStorage.setItem('wazan_eval_chats', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
+      return updated;
+    });
+    setStationInsights((prev) => {
+      const copy = { ...prev };
+      delete copy[advisorKey];
+      try {
+        localStorage.setItem('wazan_eval_insights', JSON.stringify(copy));
+      } catch {
+        // ignore
+      }
+      return copy;
+    });
+    if (onResetAdvisor) {
+      onResetAdvisor(advisorKey);
+    }
+  };
+
+  // Reset and restart evaluation for current advisor
+  const handleResetCurrentAdvisor = () => {
+    handleReopenStation();
+  };
+
+  // Fallback programmatic finish (only used if explicitly invoked after active conversation)
   const handleFinishCurrentAdvisor = () => {
     const calculatedScore = calculateScoreForAdvisor(currentAdvisor, answers);
-    const scoreToSave = calculatedScore > 0 ? calculatedScore : 7.5;
+    const scoreToSave = calculatedScore > 0 ? calculatedScore : 5.0;
     
     // Save dynamic insights if not already set
     if (!stationInsights[currentAdvisor.id]) {
@@ -537,14 +575,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       origin: { y: 0.7 },
     });
     setShowCelebration(true);
-  };
-
-  // Reset and restart evaluation for current advisor
-  const handleResetCurrentAdvisor = () => {
-    const advisorKey = currentAdvisor.id;
-    setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
-    const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, stationNumber);
-    setChatMessages((prev) => ({ ...prev, [advisorKey]: [openingMsg] }));
   };
 
   // Move to next incomplete advisor
@@ -1010,19 +1040,31 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               )}
             </div>
 
-            {/* Quick approve button if not locked yet */}
-            {!isLocked && (
+            {/* Reopen station button if completed */}
+            {isCompleted && (
               <button
                 type="button"
-                onClick={handleFinishCurrentAdvisor}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
-                title="اعتماد النتيجة الفورية"
+                onClick={handleReopenStation}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all shadow-xs cursor-pointer"
+                title="إعادة فتح هذه المحطة وإلغاء اعتمادها لإعادة التقييم"
               >
-                <CheckCircle2 className="w-3.5 h-3.5" />
-                <span className="flex items-center gap-1">
-                  <span>اعتماد</span>
-                  <span dir="ltr" className="font-mono">({currentAdvisorScore > 0 ? currentAdvisorScore : 7} / 10)</span>
-                </span>
+                <RotateCcw className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
+                <span className="hidden sm:inline">إعادة فتح المحطة</span>
+                <span className="sm:hidden">إعادة فتح</span>
+              </button>
+            )}
+
+            {/* Start New Weekly Assessment button */}
+            {onStartNewWeeklyAssessment && (
+              <button
+                type="button"
+                onClick={onStartNewWeeklyAssessment}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7F6F2] dark:bg-[#162734] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all shadow-xs cursor-pointer"
+                title="بدء دورة تقييم أسبوعي جديدة لكافة الأبعاد"
+              >
+                <Sparkles className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
+                <span className="hidden sm:inline">بدء تقييم أسبوعي جديد</span>
+                <span className="sm:hidden">تقييم جديد</span>
               </button>
             )}
           </div>
@@ -1258,15 +1300,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             <div className="mt-2 flex items-center justify-between text-[11px] text-[#334155] dark:text-[#CBD5E1] px-1">
               <span className="flex items-center gap-1">
                 <Lightbulb className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
-                <span>حوار استشاري تكيفي: المستشار يصغي لتفاصيلك ويتكيف معك لتشخيص اتزانك بإنصاف.</span>
+                <span>حوار استشاري أسبوعي: يتم احتساب درجة البعد وتأكيد اكتمال المحطة تلقائياً من خلال الحوار الفعلي مع المستشار.</span>
               </span>
-              <button
-                type="button"
-                onClick={handleFinishCurrentAdvisor}
-                className="text-[#0F6E6E] dark:text-[#22D3EE] hover:underline font-bold cursor-pointer"
-              >
-                اعتماد وإنهاء المحطة فوراً ✓
-              </button>
             </div>
           </div>
         </div>

@@ -18,6 +18,7 @@ import {
   AlertOctagon,
   Layers,
   ArrowRight,
+  RotateCcw,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { RadarChart } from '../components/RadarChart';
@@ -39,6 +40,7 @@ interface DashboardScreenProps {
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
   onStartEvaluation?: () => void;
+  onStartNewWeeklyAssessment?: () => void;
   theme?: 'light' | 'dark';
 }
 
@@ -55,6 +57,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onAddGoal,
   onAddEisenhowerGoal,
   onStartEvaluation,
+  onStartNewWeeklyAssessment,
   theme = 'light',
 }) => {
   const [selectedAreaId, setSelectedAreaId] = useState<LifeAreaId | null>('spiritual');
@@ -289,15 +292,28 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <ArrowLeft className="w-4 h-4" />
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={onNavigateToDirectorSummary}
-                className="flex items-center gap-2 px-6 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-extrabold text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] group cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4 text-[#ffd67a] dark:text-amber-300" />
-                <span>تقرير المنسق العام التكاملي</span>
-                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onNavigateToDirectorSummary}
+                  className="flex items-center gap-2 px-5 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-extrabold text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] group cursor-pointer"
+                >
+                  <Sparkles className="w-4 h-4 text-[#ffd67a] dark:text-amber-300" />
+                  <span>تقرير المنسق العام التكاملي</span>
+                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                </button>
+                {onStartNewWeeklyAssessment && (
+                  <button
+                    type="button"
+                    onClick={onStartNewWeeklyAssessment}
+                    className="flex items-center gap-1.5 px-4 py-4 rounded-2xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0B6E72] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] font-bold text-xs sm:text-sm shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] transition-all cursor-pointer"
+                    title="بدء دورة تقييم أسبوعي جديدة وإعادة فحص المحطات"
+                  >
+                    <RotateCcw className="w-4 h-4 text-[#0B6E72] dark:text-[#22D3EE]" />
+                    <span>بدء تقييم أسبوعي جديد</span>
+                  </button>
+                )}
+              </div>
             )}
           </div>
         </div>
