@@ -305,13 +305,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         {/* Main Card */}
         <div className="bg-white/92 dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 dark:shadow-black/40 backdrop-blur-md transition-colors">
-          {/* 1. Visible Prototype Badge at the top of the auth card */}
-          <div className="mb-5 flex justify-center">
-            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700/60 text-xs font-bold text-amber-900 dark:text-amber-300 shadow-xs">
-              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" aria-hidden="true" />
-              <span>نموذج أولي للعرض</span>
-            </span>
-          </div>
 
           {/* 1-Click Google Button (Clean Arabic Label with Aligned Icon) */}
           <div className="mb-6">
