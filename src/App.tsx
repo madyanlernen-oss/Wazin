@@ -120,7 +120,10 @@ export default function App() {
   // Handler: Load Sample Profile
   const handleLoadSample = () => {
     const sample = loadSampleState();
+    sample.completedAdvisors = [];
+    sample.completedDates = {};
     setAppState(sample);
+    saveStoredState(sample);
     setActiveScreen('dashboard');
   };
 
@@ -146,6 +149,8 @@ export default function App() {
     if (isDemo) {
       const sample = loadSampleState();
       sample.userProfile = profile;
+      sample.completedAdvisors = [];
+      sample.completedDates = {};
       setAppState(sample);
       saveStoredState(sample);
     } else {
@@ -451,7 +456,13 @@ export default function App() {
               onNavigateToDirectorSummary={() => setActiveScreen('director_summary')}
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
-              onStartEvaluation={() => setActiveScreen('onboarding')}
+              onStartEvaluation={() => {
+                if (appState.completedAdvisors.length >= 8) {
+                  handleStartNewWeeklyAssessment();
+                } else {
+                  setActiveScreen('onboarding');
+                }
+              }}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               theme={theme}
             />

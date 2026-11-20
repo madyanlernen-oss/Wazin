@@ -373,6 +373,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     return {};
   });
 
+  // When starting or running an uncompleted weekly assessment (completedAdvisors is empty), ensure dynamic insights are cleared
+  useEffect(() => {
+    if (completedAdvisors.length === 0) {
+      setStationInsights({});
+      try {
+        localStorage.removeItem('wazan_eval_insights');
+      } catch {
+        // ignore
+      }
+    }
+  }, [completedAdvisors.length]);
+
   const [inputText, setInputText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
@@ -1058,7 +1070,20 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             {onStartNewWeeklyAssessment && (
               <button
                 type="button"
-                onClick={onStartNewWeeklyAssessment}
+                onClick={() => {
+                  setChatMessages({});
+                  setStationInsights({});
+                  setStationTurnCount({});
+                  setCurrentAdvisorIndex(0);
+                  try {
+                    localStorage.removeItem('wazan_eval_chats');
+                    localStorage.removeItem('wazan_eval_insights');
+                    localStorage.removeItem('wazan_current_eval_advisor');
+                  } catch {
+                    // ignore
+                  }
+                  onStartNewWeeklyAssessment();
+                }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7F6F2] dark:bg-[#162734] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all shadow-xs cursor-pointer"
                 title="بدء دورة تقييم أسبوعي جديدة لكافة الأبعاد"
               >

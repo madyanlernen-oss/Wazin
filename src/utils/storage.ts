@@ -122,6 +122,37 @@ export function cleanupStoredUserPasswords(): void {
         }
       }
     }
+
+    // 3. Reset legacy completedAdvisors (8/8) so weekly assessment starts fresh and uncompleted
+    for (const stateKey of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
+      const raw = localStorage.getItem(stateKey);
+      if (raw) {
+        try {
+          const parsed = JSON.parse(raw);
+          if (parsed && Array.isArray(parsed.completedAdvisors) && parsed.completedAdvisors.length >= 8) {
+            parsed.completedAdvisors = [];
+            parsed.completedDates = {};
+            localStorage.setItem(stateKey, JSON.stringify(parsed));
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
+
+    // 4. Clear old assessment caches if fully populated
+    try {
+      const insightsRaw = localStorage.getItem('wazan_eval_insights');
+      if (insightsRaw) {
+        const parsed = JSON.parse(insightsRaw);
+        if (parsed && Object.keys(parsed).length >= 8) {
+          localStorage.removeItem('wazan_eval_insights');
+          localStorage.removeItem('wazan_eval_chats');
+        }
+      }
+    } catch {
+      // ignore
+    }
   } catch (err) {
     console.warn('Password cleanup skipped or failed:', err);
   }
@@ -213,6 +244,12 @@ export const loadStoredState = (): StoredAppState => {
       ...getDefaultInitialState(),
       ...parsed,
     };
+
+    // Ensure weekly assessment starts fresh and uncompleted (0/8) if pre-completed or legacy 8/8
+    if (merged.completedAdvisors && merged.completedAdvisors.length >= 8) {
+      merged.completedAdvisors = [];
+      merged.completedDates = {};
+    }
 
     // Ensure state is written to primary wazan key if loaded from a legacy key
     if (sourceKey !== STORAGE_KEY) {
@@ -419,17 +456,9 @@ export const loadSampleState = (): StoredAppState => {
     answers: sampleAnswers,
     goals: SAMPLE_GOALS,
     eisenhowerGoals: SAMPLE_EISENHOWER_GOALS,
-    completedAdvisors: [
-      'spiritual',
-      'financial',
-      'career',
-      'personal',
-      'learning',
-      'family',
-      'social',
-      'health',
-    ],
-    hasCompletedBaseline: true,
+    completedAdvisors: [],
+    completedDates: {},
+    hasCompletedBaseline: false,
     assessmentMode: 'weekly_checkin',
     directorReport: {
       overallDiagnosis:
