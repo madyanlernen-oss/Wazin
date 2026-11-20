@@ -333,15 +333,14 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           {/* Video Player Frame Container with Design System Rounded Corners and Dark Glass Frame */}
           <div className="relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border border-slate-200/90 dark:border-cyan-500/25 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md shadow-2xl transition-all duration-500 group">
             {/* 16:9 Aspect Ratio Frame */}
-            <div className="relative aspect-video w-full flex items-center justify-center overflow-hidden bg-gradient-to-br from-[#0c242c] via-[#091823] to-[#1c122e]">
+            <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-[#0c242c] via-[#091823] to-[#1c122e]">
               {/* HTML5 Video Element */}
               <video
                 ref={videoRef}
                 src="/videos/wazan-intro.mp4"
-                poster="/assets/wazan_landing_page.jpg"
                 playsInline
-                preload="metadata"
-                className="w-full h-full object-cover cursor-pointer"
+                preload="auto"
+                className="absolute inset-0 w-full h-full object-cover cursor-pointer z-0"
                 onPlay={() => setIsPlaying(true)}
                 onPause={() => setIsPlaying(false)}
                 onEnded={() => {
@@ -360,25 +359,17 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 aria-label="الفيديو التعريفي لمنظومة وزان"
               />
 
-              {/* Poster subtle gradient overlay when paused/before play to enhance central play button contrast */}
+              {/* Subtle overlay when paused/before play to enhance central play button contrast */}
               {!isPlaying && !videoError && (
                 <div
-                  className="absolute inset-0 bg-black/35 pointer-events-none transition-opacity duration-300"
+                  className="absolute inset-0 bg-black/30 pointer-events-none z-10 transition-opacity duration-300"
                   aria-hidden="true"
                 />
               )}
 
-              {/* Decorative Concentric Rings in Player Backdrop when paused before first play */}
-              {!isPlaying && !videoError && !hasStartedPlaying && (
-                <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-25">
-                  <div className="w-72 h-72 rounded-full border border-cyan-400/30 animate-pulse" />
-                  <div className="absolute w-96 h-96 rounded-full border border-purple-500/20" />
-                </div>
-              )}
-
               {/* Loading State Overlay */}
               {isVideoLoading && !videoError && (
-                <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 backdrop-blur-xs pointer-events-none animate-fadeIn">
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-xs pointer-events-none animate-fadeIn">
                   <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/75 border border-white/10 text-white text-xs font-bold shadow-lg">
                     <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
                     <span>جارٍ تحميل المقطع...</span>
@@ -388,7 +379,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
 
               {/* Fallback Error State Overlay */}
               {videoError && (
-                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md text-white text-center space-y-3 animate-fadeIn">
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md text-white text-center space-y-3 animate-fadeIn">
                   <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shadow-inner">
                     <AlertCircle className="w-6 h-6" />
                   </div>
@@ -409,21 +400,38 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 </div>
               )}
 
-              {/* Central Glowing Play Button Overlay */}
+              {/* Perfectly Centered Glowing Play Button Overlay */}
               {!isPlaying && !videoError && (
-                <button
-                  type="button"
-                  onClick={handleTogglePlay}
-                  className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0B6E72] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(11,110,114,0.45)] dark:shadow-[0_0_35px_rgba(6,182,212,0.45)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(11,110,114,0.6)] dark:group-hover:shadow-[0_0_50px_rgba(6,182,212,0.6)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 cursor-pointer min-h-[44px] min-w-[44px]"
-                  aria-label="تشغيل الفيديو التعريفي"
-                  title="تشغيل الفيديو التعريفي"
+                <div
+                  className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: '100%',
+                    height: '100%',
+                  }}
                 >
-                  <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform" />
-                </button>
+                  <button
+                    type="button"
+                    onClick={handleTogglePlay}
+                    style={{ margin: 'auto' }}
+                    className="pointer-events-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0B6E72] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(11,110,114,0.55)] dark:shadow-[0_0_35px_rgba(6,182,212,0.55)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(11,110,114,0.7)] dark:group-hover:shadow-[0_0_50px_rgba(6,182,212,0.7)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 cursor-pointer min-h-[44px] min-w-[44px]"
+                    aria-label="تشغيل الفيديو التعريفي"
+                    title="تشغيل الفيديو التعريفي"
+                  >
+                    <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform" />
+                  </button>
+                </div>
               )}
 
               {/* Player Bottom Control Bar (Arabic-Ready Presentation) */}
-              <div className="absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex flex-wrap items-center justify-between gap-2 text-white text-xs z-10">
+              <div className="absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex flex-wrap items-center justify-between gap-2 text-white text-xs z-20">
                 <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
                   <button
                     type="button"
