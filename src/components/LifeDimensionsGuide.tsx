@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Sparkles,
   HelpCircle,
@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { InteractiveLifeWheel } from './InteractiveLifeWheel';
 import { LIFE_DOMAINS } from '../data/lifeDomains';
-import scaleImage from '../assets/images/balance_scale_guide_1794404547579.jpg';
+import { InteractiveScaleGame } from './InteractiveScaleGame';
+import { WazanExplainerModal } from './WazanExplainerModal';
 
 interface LifeDimensionsGuideProps {
   onNavigateToAuth?: (mode: 'login' | 'signup') => void;
@@ -20,6 +21,7 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
 }) => {
   const isDark = theme === 'dark';
   // 5. Derive dimensions directly from shared single source LIFE_DOMAINS
+  const [isExplainerOpen, setIsExplainerOpen] = useState(false);
   const dimensions = LIFE_DOMAINS;
 
   return (
@@ -30,9 +32,20 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
     >
       {/* 1. Header & Main Concept */}
       <div className="space-y-4">
-        <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-xs font-bold text-[#0B6E72] dark:text-cyan-400 shadow-xs">
-          <Scale className="w-4 h-4 text-[#8A5A00] dark:text-amber-400" aria-hidden="true" />
-          <span>الدليل المعرفي لنموذج التوازن</span>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-xs font-bold text-[#0B6E72] dark:text-cyan-400 shadow-xs">
+            <Scale className="w-4 h-4 text-[#8A5A00] dark:text-amber-400" aria-hidden="true" />
+            <span>الدليل المعرفي لنموذج التوازن</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsExplainerOpen(true)}
+            className="px-4 py-2 rounded-2xl bg-[#0F6E6E]/10 hover:bg-[#0F6E6E]/20 dark:bg-cyan-950/60 dark:hover:bg-cyan-900/60 border border-[#0F6E6E]/30 dark:border-cyan-500/40 text-[#0F6E6E] dark:text-cyan-300 text-xs font-black transition-all shadow-xs flex items-center gap-2 cursor-pointer group"
+          >
+            <Sparkles className="w-4 h-4 text-amber-500 group-hover:rotate-12 transition-transform" />
+            <span>💡 كيف يعمل وزان؟ دليل المفهوم ومقياس الاتزان</span>
+          </button>
         </div>
 
         <h2
@@ -206,17 +219,8 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
           </div>
         </div>
 
-        {/* Visual Scale Infographic Image - 2. Arabic alt, loading lazy, explicit size, object-contain */}
-        <div className="rounded-2xl overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-sm bg-[#F8FAFA] dark:bg-[#0c1827] flex items-center justify-center p-2">
-          <img
-            src={scaleImage}
-            alt="رسم توضيحي لمقياس الرضا عن الحياة من 1 إلى 10"
-            loading="lazy"
-            width={1376}
-            height={768}
-            className="w-full h-auto object-contain max-h-[380px]"
-          />
-        </div>
+        {/* Gamified Interactive Life Balance Scale & Quick Simulator */}
+        <InteractiveScaleGame onNavigateToAuth={onNavigateToAuth} theme={theme} />
 
         {/* Summary Takeaway */}
         <div className="p-4 rounded-2xl bg-[#F8FAFA] dark:bg-slate-900/80 border border-slate-200/90 dark:border-slate-800 text-xs text-[#334155] dark:text-slate-300 flex items-center justify-between gap-4 transition-colors">
@@ -228,6 +232,12 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
           </div>
         </div>
       </div>
+      {/* Interactive Explainer Modal */}
+      <WazanExplainerModal
+        isOpen={isExplainerOpen}
+        onClose={() => setIsExplainerOpen(false)}
+        onStartAssessment={() => onNavigateToAuth && onNavigateToAuth('signup')}
+      />
     </section>
   );
 };
