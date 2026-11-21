@@ -557,6 +557,12 @@ export const calculateScoreForAdvisor = (
   advisor: AdvisorConfig,
   answers: Record<string, any>
 ): number => {
+  // If an exact clinical score was already recorded for this advisor, return it directly
+  const recordedScore = answers[`${advisor.id}_score`];
+  if (typeof recordedScore === 'number' && recordedScore >= 1 && recordedScore <= 10) {
+    return Number(recordedScore.toFixed(1));
+  }
+
   let totalScore = 0;
   let count = 0;
 
@@ -576,20 +582,32 @@ export const calculateScoreForAdvisor = (
         count++;
       }
     } else if (q.type === 'multi_select' && Array.isArray(val)) {
-      // selecting goals shows positive engagement
       const weight = Math.min(10, 5 + val.length * 1.5);
       totalScore += weight;
       count++;
     } else if (q.type === 'open_text' && typeof val === 'string' && val.trim().length > 5) {
-      // thoughtful response
-      totalScore += 8;
+      // Analyze text sentiment instead of blind hardcoding
+      const isNegative = /(سلبي|ضياع|يضيع|تعب|مشاكل|قلق|توتر|ديون|تسويف|خمول|فشل|محبط|مدمر|صفر)/i.test(val);
+      const isPositive = /(ممتاز|سكينة|طمأنينة|ورد|انجاز|وفرة|ادخار|شغف|رياضة)/i.test(val);
+      totalScore += isNegative ? 3.2 : isPositive ? 8.2 : 5.8;
       count++;
     }
   });
 
-  if (count === 0) return 5.0; // neutral default
+  // Check any text responses recorded during the evaluation
+  Object.keys(answers).forEach((k) => {
+    if (k.startsWith(`${advisor.id}_response_`) && typeof answers[k] === 'string') {
+      const resp = answers[k];
+      const isNegative = /(سلبي|ضياع|يضيع|تعب|مشاكل|قلق|توتر|ديون|تسويف|خمول|فشل|محبط|مدمر|صفر)/i.test(resp);
+      const isPositive = /(ممتاز|سكينة|طمأنينة|ورد|انجاز|وفرة|ادخار|شغف|رياضة)/i.test(resp);
+      totalScore += isNegative ? 2.8 : isPositive ? 8.2 : 5.4;
+      count++;
+    }
+  });
+
+  if (count === 0) return 6.0;
   const avg = totalScore / count;
-  return Number(Math.max(1, Math.min(10, avg)).toFixed(1));
+  return Number(Math.max(1.5, Math.min(9.8, avg)).toFixed(1));
 };
 
 // Quick synthesis of strengths and challenges based on questions answered
