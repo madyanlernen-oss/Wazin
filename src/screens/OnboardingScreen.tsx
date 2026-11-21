@@ -343,15 +343,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   theme: _theme = 'light',
 }) => {
   const [currentAdvisorIndex, setCurrentAdvisorIndex] = useState(() => {
-    try {
-      const savedAdvisor = localStorage.getItem('wazan_current_eval_advisor');
-      if (savedAdvisor) {
-        const savedIdx = ADVISORS_LIST.findIndex((a) => a.id === savedAdvisor);
-        if (savedIdx >= 0) return savedIdx;
-      }
-    } catch (e) {
-      // ignore
-    }
     const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
     return idx >= 0 ? idx : 0;
   });
@@ -359,31 +350,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // Track turn count per advisor station for the adaptive clinical flow
   const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>({});
 
-  // Dynamic insights per station extracted from live AI conversation (score, strengths, challenges)
-  const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>(() => {
-    try {
-      const stored = localStorage.getItem('wazan_eval_insights');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === 'object') return parsed;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return {};
-  });
-
-  // When starting or running an uncompleted weekly assessment (completedAdvisors is empty), ensure dynamic insights are cleared
-  useEffect(() => {
-    if (completedAdvisors.length === 0) {
-      setStationInsights({});
-      try {
-        localStorage.removeItem('wazan_eval_insights');
-      } catch {
-        // ignore
-      }
-    }
-  }, [completedAdvisors.length]);
+  // Dynamic insights per station in memory only (never saved to localStorage across sessions)
+  const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>({});
 
   const [inputText, setInputText] = useState('');
   const [showCelebration, setShowCelebration] = useState(false);
@@ -402,54 +370,28 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
 
-  // Chat conversation state per advisor (persisted under wazan_eval_chats)
-  const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>(() => {
-    try {
-      const stored = localStorage.getItem('wazan_eval_chats');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === 'object') return parsed;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return {};
-  });
+  // Chat conversation state per advisor in memory only (never saved to localStorage across sessions)
+  const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // Persist current evaluation advisor across reloads
+  // Proactively purge any residual evaluation caches from localStorage on mount & when uncompleted
   useEffect(() => {
     try {
-      const currentAdv = ADVISORS_LIST[currentAdvisorIndex];
-      if (currentAdv) {
-        localStorage.setItem('wazan_current_eval_advisor', currentAdv.id);
-      }
-    } catch (e) {
+      localStorage.removeItem('wazan_eval_chats');
+      localStorage.removeItem('wazan_eval_insights');
+      localStorage.removeItem('wazan_current_eval_advisor');
+    } catch {
       // ignore
     }
-  }, [currentAdvisorIndex]);
+  }, []);
 
-  // Persist evaluation chat messages across reloads
   useEffect(() => {
-    try {
-      if (Object.keys(chatMessages).length > 0) {
-        localStorage.setItem('wazan_eval_chats', JSON.stringify(chatMessages));
-      }
-    } catch (e) {
-      // ignore
+    if (completedAdvisors.length === 0) {
+      setChatMessages({});
+      setStationInsights({});
+      setStationTurnCount({});
     }
-  }, [chatMessages]);
-
-  // Persist station insights across reloads
-  useEffect(() => {
-    try {
-      if (Object.keys(stationInsights).length > 0) {
-        localStorage.setItem('wazan_eval_insights', JSON.stringify(stationInsights));
-      }
-    } catch (e) {
-      // ignore
-    }
-  }, [stationInsights]);
+  }, [completedAdvisors.length]);
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
   const stationNumber = currentAdvisorIndex + 1; // 1 to 8
@@ -533,23 +475,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const advisorKey = currentAdvisor.id;
     setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
     const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, stationNumber);
-    setChatMessages((prev) => {
-      const updated = { ...prev, [advisorKey]: [openingMsg] };
-      try {
-        localStorage.setItem('wazan_eval_chats', JSON.stringify(updated));
-      } catch {
-        // ignore
-      }
-      return updated;
-    });
+    setChatMessages((prev) => ({ ...prev, [advisorKey]: [openingMsg] }));
     setStationInsights((prev) => {
       const copy = { ...prev };
       delete copy[advisorKey];
-      try {
-        localStorage.setItem('wazan_eval_insights', JSON.stringify(copy));
-      } catch {
-        // ignore
-      }
       return copy;
     });
     if (onResetAdvisor) {

@@ -122,6 +122,7 @@ export default function App() {
     const sample = loadSampleState();
     sample.completedAdvisors = [];
     sample.completedDates = {};
+    sample.answers = {};
     setAppState(sample);
     saveStoredState(sample);
     setActiveScreen('dashboard');
@@ -151,6 +152,7 @@ export default function App() {
       sample.userProfile = profile;
       sample.completedAdvisors = [];
       sample.completedDates = {};
+      sample.answers = {};
       setAppState(sample);
       saveStoredState(sample);
     } else {
@@ -250,6 +252,7 @@ export default function App() {
         assessmentMode: 'weekly_checkin',
         completedAdvisors: [],
         completedDates: {},
+        answers: {},
         scores: resetScores,
         directorReport: null,
       };
@@ -457,11 +460,20 @@ export default function App() {
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
               onStartEvaluation={() => {
-                if (appState.completedAdvisors.length >= 8) {
-                  handleStartNewWeeklyAssessment();
-                } else {
-                  setActiveScreen('onboarding');
+                setAppState((prev) => ({
+                  ...prev,
+                  completedAdvisors: [],
+                  completedDates: {},
+                  answers: {},
+                }));
+                try {
+                  localStorage.removeItem('wazan_eval_chats');
+                  localStorage.removeItem('wazan_eval_insights');
+                  localStorage.removeItem('wazan_current_eval_advisor');
+                } catch {
+                  // ignore
                 }
+                setActiveScreen('onboarding');
               }}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               theme={theme}

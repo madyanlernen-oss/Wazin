@@ -132,6 +132,7 @@ export function cleanupStoredUserPasswords(): void {
           if (parsed && Array.isArray(parsed.completedAdvisors) && parsed.completedAdvisors.length >= 8) {
             parsed.completedAdvisors = [];
             parsed.completedDates = {};
+            parsed.answers = {};
             localStorage.setItem(stateKey, JSON.stringify(parsed));
           }
         } catch {
@@ -140,16 +141,11 @@ export function cleanupStoredUserPasswords(): void {
       }
     }
 
-    // 4. Clear old assessment caches if fully populated
+    // 4. Always clear old assessment caches (chats, insights, and current advisor)
     try {
-      const insightsRaw = localStorage.getItem('wazan_eval_insights');
-      if (insightsRaw) {
-        const parsed = JSON.parse(insightsRaw);
-        if (parsed && Object.keys(parsed).length >= 8) {
-          localStorage.removeItem('wazan_eval_insights');
-          localStorage.removeItem('wazan_eval_chats');
-        }
-      }
+      localStorage.removeItem('wazan_eval_insights');
+      localStorage.removeItem('wazan_eval_chats');
+      localStorage.removeItem('wazan_current_eval_advisor');
     } catch {
       // ignore
     }
@@ -245,10 +241,11 @@ export const loadStoredState = (): StoredAppState => {
       ...parsed,
     };
 
-    // Ensure weekly assessment starts fresh and uncompleted (0/8) if pre-completed or legacy 8/8
-    if (merged.completedAdvisors && merged.completedAdvisors.length >= 8) {
+    // Ensure weekly assessment starts fresh with no saved previous answers
+    if (merged.completedAdvisors && (merged.completedAdvisors.length === 0 || merged.completedAdvisors.length >= 8)) {
       merged.completedAdvisors = [];
       merged.completedDates = {};
+      merged.answers = {};
     }
 
     // Ensure state is written to primary wazan key if loaded from a legacy key
@@ -453,7 +450,7 @@ export const loadSampleState = (): StoredAppState => {
   const sampleState: StoredAppState = {
     userProfile: SAMPLE_USER_PROFILE,
     scores: SAMPLE_SCORES,
-    answers: sampleAnswers,
+    answers: {},
     goals: SAMPLE_GOALS,
     eisenhowerGoals: SAMPLE_EISENHOWER_GOALS,
     completedAdvisors: [],
