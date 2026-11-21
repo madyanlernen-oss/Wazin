@@ -60,6 +60,7 @@ interface OnboardingScreenProps {
   completedDates?: Record<string, number>;
   onNavigateToDashboard: () => void;
   onNavigateToAdvisorChat?: (advisorId: LifeAreaId) => void;
+  onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
   theme?: 'light' | 'dark';
 }
 
@@ -325,6 +326,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onStartNewWeeklyAssessment,
   onCompleteAll,
   completedAdvisors,
+  onAddEisenhowerGoal,
   completedDates,
   onNavigateToDashboard,
   onNavigateToAdvisorChat,
@@ -700,6 +702,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       if (isStationCompleted) {
         // Save the dynamic earned score
         onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, earnedScore);
+
+        // Auto-feed the golden habit into Eisenhower Matrix (Quadrant 2)
+        const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+        if (onAddEisenhowerGoal) {
+          onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
+        }
         
         // Save dynamic insights extracted from the conversation
         const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, earnedScore, answers);
@@ -1316,7 +1324,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   style={{ color: currentAdvisor.themeColor }}
                   dir="ltr"
                 >
-                  {currentActiveInsights.score > 0 ? currentActiveInsights.score : 7} <span className="text-base text-[#64748B] dark:text-[#94A3B8]">/ 10</span>
+                  {Number(currentActiveInsights.score > 0 ? currentActiveInsights.score : 7.5).toFixed(1)} <span className="text-base text-[#64748B] dark:text-[#94A3B8]">/ 10</span>
                 </span>
               </div>
               <div className="h-10 w-px bg-[#E2E8F0] dark:bg-[#1E343F]" />
@@ -1383,7 +1391,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 }}
               >
                 <span>
-                  {completedAdvisors.length >= 8
+                  {(completedAdvisors.length >= 7 || stationNumber === 8)
                     ? '🎉 عرض خريطتي المتكاملة (الداشبورد)'
                     : 'المحطة التالية ←'}
                 </span>

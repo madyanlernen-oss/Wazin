@@ -489,6 +489,7 @@ export default function App() {
               onResetAdvisor={handleResetAdvisorStation}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               onCompleteAll={handleCompleteAll}
+              onAddEisenhowerGoal={handleAddEisenhowerGoal}
               completedAdvisors={appState.completedAdvisors}
               completedDates={appState.completedDates}
               onNavigateToDashboard={() => setActiveScreen('dashboard')}
