@@ -131,6 +131,108 @@ export function calculateSemanticScore(
   return Number(Math.max(1.5, Math.min(9.8, calculated)).toFixed(1));
 }
 
+// Helper: Specialized consultative FAQ and Q&A responder for common user inquiries per domain
+function answerUserInquiry(advisorId: string, text: string): string | null {
+  const t = text.toLowerCase().trim();
+
+  // 1. الجانب الروحي (د. سفيان الروحي)
+  if (advisorId === 'spiritual') {
+    if (/(خلوة|الخلوة|وقت|مكان|مساحة|ساعة|كم دقيقة|كم وقت|طول الوقت|كم يجب|مكان هادئ)/i.test(t)) {
+      return 'سؤالك دقيق وجوهري يا صديقنا: الخلوة الروحية لا تشترط ساعات طويلة ولا مكاناً فسيحاً خاصاً! تكفيك 5 إلى 10 دقائق فقط في بداية يومك أو قبل نومك، في زاوية هادئة من غرفتك أو حتى في سيارتك قبل النزول. المقصود ليس الانعزال الجغرافي أو المكاني، بل هدوء الذهن وانقطاع الهاتف والمشتتات لتتنفس وتستشعر قرب الله وسكينة صدرك.';
+    }
+    if (/(صلاة|الصلاة|اصلي|أصلي|ركوع|سجود|خشوع|أخشع|اخشع|فرض|سنن|ما اصلي|لا اصلي)/i.test(t)) {
+      return 'أقدر صراحتك وشجاعتك العميقة؛ البداية لا تتطلب المثالية دفعة واحدة، بل خطوة ميسرة تثبت عليها دون أن تثقل على نفسك. ابدأ بركعتين هادئتين تستحضر فيهما معنى التسليم وراحة القلب والفضفضة مع الله، فالتدرج برفق هو سر الثبات والسكينة.';
+    }
+    if (/(ورد|الورد|أذكار|اذكار|قرآن|قران|تسبيح|استغفار)/i.test(t)) {
+      return 'الورد اليومي واحة للروح وليس واجباً شاقاً؛ صفحة واحدة من القرآن أو دقيقتان من الاستغفار المركز مع حضور القلب كفيلة بإنارة يومك وطرد شتات الذهن.';
+    }
+    if (/(دعاء|أدعو|ادعو|استجابة|قلق|تعبان|ضيق)/i.test(t)) {
+      return 'الدعاء هو حديث القلب الصادق؛ لا تتكلف ألفاظاً، بل تحدث مع الله بضعفك واحتياجك كما تتحدث مع أقرب سند لك، والسكينة تبدأ فور أن تسلّم همك لخالقك.';
+    }
+  }
+
+  // 2. الجانب المالي (أ. كمال المالي)
+  if (advisorId === 'financial') {
+    if (/(طوارئ|طواريء|صندوق|ادخار|أدخر|ادخر|توفير|أوفر)/i.test(t)) {
+      return 'بناء صندوق الطوارئ يبدأ بقرار ميسر: اقتطاع مبلغ صغير في حساب بنكي منفصل تماماً (يبدأ براتب شهر واحد كهدف أولي أو حتى مبلغ رمزي شهرياً)، ليكون صمام أمان يحميك من الديون المفاجئة.';
+    }
+    if (/(دين|ديون|قرض|سداد|أقساط|اقساط|بطاقة|فيزا)/i.test(t)) {
+      return 'القاعدة الذهبية في التحرر من الديون هي البدء بأصغر دين حجماً لسداده سريعاً (طريقة كرة الثلج) لتشعر بنشوة الإنجاز والتحرر، مع التجميد الفوري لكافة بطاقات الائتمان.';
+    }
+    if (/(ميزانية|راتب|مصاريف|يتسرب|وين يروح|أين يذهب)/i.test(t)) {
+      return 'قاعدة 50/30/20 هي البوصلة الأبسط: 50% للأساسيات الضرورية، 30% للاحتياجات المرنة، و20% للادخار وصندوق الطوارئ مع تسجيل المصاريف أسبوعياً لتحديد مزاريب التسرب.';
+    }
+  }
+
+  // 3. الجانب المهني (م. طارق المهني)
+  if (advisorId === 'career') {
+    if (/(تسويف|تأجيل|تاجيل|كسل|ابدأ|أبدأ|ما عندي دافع|شغف)/i.test(t)) {
+      return 'علاج التسويف يكمن في قاعدة الـ 5 دقائق الذهبية: الزم نفسك بالعمل على المهمة المؤجلة لمدة 5 دقائق فقط دون اشتراط الإنجاز الكامل؛ كسر حاجز البداية يحل 80% من صعوبة المهمة.';
+    }
+    if (/(أقول لا|اقول لا|رفض|مديري|ضغط العمل|ساعات إضافية|حدود)/i.test(t)) {
+      return 'وضع الحدود المهنية مهارة ذكاء قيادية: يمكنك الرفض بلباقة من خلال ربطه بالأولويات: "يسعدني التعاون، لكن تركيزي اليوم على تسليم المهمة الأساسية بجودة عالية يمنعني من إعطاء مهمة جديدة حقها".';
+    }
+  }
+
+  // 4. الجانب الشخصي والذاتي (د. ليلى الذاتية)
+  if (advisorId === 'personal') {
+    if (/(جلد الذات|ألوم نفسي|الوم نفسي|تأنيب|احباط|إحباط|فاشل)/i.test(t)) {
+      return 'جلد الذات يستنزف طاقتك بدلاً من علاج المشكلة. عامل نفسك برفق كما تعامل صديقاً عزيزاً أخطأ؛ اسأل نفسك بحنو: "ما هو الدرس المستفاد هنا؟" ثم تحرك نحو الخطوة التالية.';
+    }
+    if (/(وقت لنفسي|أرتاح|ارتاح|مساحة شخصية|استرخاء)/i.test(t)) {
+      return 'المساحة الشخصية ليست رفاهية، بل وقود حيوي؛ تخصيص 15 دقيقة يومياً دون شاشات أو مسؤوليات يمنح جهازك العصبي فرصة التعافي وإعادة الاتزان.';
+    }
+  }
+
+  // 5. الجانب المعرفي والتعلم (بروفيسور زياد المعرفي)
+  if (advisorId === 'learning') {
+    if (/(قراءة|اقرأ|أقرأ|كتاب|كتب|كم صفحة|وقت للقراءة)/i.test(t)) {
+      return 'التعلم المستمر يحتاج عادة ذكية لا تفرغاً تاماً: قراءة 10 صفحات يومياً (تستغرق 15 دقيقة فقط) تمكنك من إنهاء أكثر من 12 إلى 15 كتاباً نوعياً كل عام!';
+    }
+    if (/(هاتف|جوال|شاشات|تيك توك|انستقرام|تشتت|المشتتات)/i.test(t)) {
+      return 'استبدل المقاومة بالبيئة الذكية: اجعل الهاتف بعيداً عن متناول يدك أثناء فترات التركيز، وفعل وضع التدرج الرمادي لتقليل إغراء التطبيقات السريعة.';
+    }
+  }
+
+  // 6. الجانب الأسري (د. مريم الأسرية)
+  if (advisorId === 'family') {
+    if (/(وقت للاهل|وقت للأسرة|أهلي|زوجتي|أولادي|أبنائي|جلسة عائلية)/i.test(t)) {
+      return 'الأسرة تحتاج جودة الحضور لا كثرة الساعات؛ 30 دقيقة من الإنصات الكامل والحديث الدافئ الخالي من الشاشات تصنع أثراً أعمق بكثير من ساعات من الحضور الغائب ذهنياً.';
+    }
+    if (/(مشاكل البيت|خلافات|عصبية|توتر البيت|نكد)/i.test(t)) {
+      return 'في الأجواء المتوترة، طبق قاعدة الإمهال الواعي: تنفس بعمق وتجنب الرد وقت الانفعال، واحرص على الاستماع لا بنية الرد والتبرير، بل بنية الاحتواء وفهم مشاعر الطرف الآخر.';
+    }
+  }
+
+  // 7. الجانب الاجتماعي (أ. سامي الاجتماعي)
+  if (advisorId === 'social') {
+    if (/(وحدة|وحيد|أصدقاء|اصدقاء|صحبة|عزلة|انطواء)/i.test(t)) {
+      return 'العلاقات الصادقة تُبنى حول الاهتمامات والقيم المشتركة؛ جرب الانضمام لمجتمع قراءة، تطوع، أو نشاط رياضي، فالصحبة الملهمة تأتي عبر الأنشطة ذات المعنى.';
+    }
+    if (/(علاقات سامة|مستنزفة|استنزاف|حدود اجتماعية|أقطع علاقة)/i.test(t)) {
+      return 'حماية طاقتك النفسية حق مشروع؛ قلل مساحات التواجد والمجاملات تدريجياً وبطريقة هادئة، وركز طاقتك ووقتك على الدائرة القريبة التي تمنحك الأمان والتقدير.';
+    }
+  }
+
+  // 8. الجانب الصحي والبدني (د. ريان الصحي)
+  if (advisorId === 'health') {
+    if (/(نوم|أرق|ارق|كم ساعة|سهر|اسهر|أصحى|اصحى)/i.test(t)) {
+      return 'النوم الصحي يرتكز على 7 إلى 8 ساعات منتظمة، والسر يكمن في تثبيت موعد الاستيقاظ صباحاً وقطع الشاشات الزرقاء قبل النوم بـ 45 دقيقة مع تهيئة بيئة نوم مظلمة وباردة.';
+    }
+    if (/(رياضة|مشي|جيم|تمرين|كسل عن الرياضة|خمول)/i.test(t)) {
+      return 'لا تجعل الرياضة عبئاً؛ مشي يومي نشط لمدة 15 إلى 20 دقيقة كافٍ جداً لضبط كيمياء الدماغ، تنشيط الدورة الدموية، وتحسين المزاج والطاقة بصورة فورية.';
+    }
+  }
+
+  // General questions detection
+  const isGenericQuestion = /[؟?]/.test(text) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(text);
+  if (isGenericQuestion) {
+    return 'سؤالك ذكي ويلامس صلب اتزانك يا صديقنا: الحل لا يكمن في القفزات المفاجئة، بل في التدرج الواعي وعادة يومية صغيرة ومحمية تناسب ظروفك الحالية وتصنع أثراً تراكمياً ملموساً.';
+  }
+
+  return null;
+}
+
 export function getClientAdvisorResponse(
   advisor: AdvisorConfig,
   text: string,
@@ -273,20 +375,38 @@ export function getClientAdvisorResponse(
 
   const domainQuestions = EXTENDED_DOMAIN_QUESTIONS[advisor.id] || EXTENDED_DOMAIN_QUESTIONS.spiritual;
   const currentQuestionIdx = Math.min(stationTurnCount, domainQuestions.length - 1);
+  const nextRawQuestion = domainQuestions[currentQuestionIdx];
+
+  const MIN_DIAGNOSTIC_TURNS = 5;
+  const directInquiryAnswer = answerUserInquiry(advisor.id, text);
+  const isUserAskingQuestion = Boolean(directInquiryAnswer) || /[؟?]/.test(msg) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(msg);
 
   // شروط الاستمرار في الحوار السقراطي:
-  // 1. إذا طلب المستخدم التعمق أكثر (userWantsMoreDepth)
-  // 2. إذا كانت إجابة المستخدم مقتضبة أو مبهمة جداً (isVagueOrShort)
-  // 3. إذا كان الحوار لم يصل للحد التشخيصي الكافي (stationTurnCount < 3 في التقييم التأسيسي)
-  // ولم يطلب المستخدم صراحة اعتماد النتيجة:
-  const shouldContinueInquiry = (!userAgreesToComplete && (stationTurnCount < 3 || isVagueOrShort || userWantsMoreDepth)) && stationTurnCount < 10;
+  // 1. ما دام الحوار لم يستوفِ الحد الأدنى التشخيصي التأسيسي (أقل من 5 أسئلة/تبادلات)
+  // 2. إذا طرح المستخدم سؤالاً أو استفساراً (يجب الإجابة عليه ومواصلة التشخيص دون إغلاق المحطة)
+  // 3. إذا كانت إجابة المستخدم مقتضبة أو مبهمة جداً وتحتاج لاستيضاح أعمق
+  // 4. إذا طلب المستخدم التعمق أكثر
+  // ولا يتم الإغلاق أبداً قبل 5 تبادلات أو أثناء وجود تساؤل معلق:
+  const shouldContinueInquiry = (
+    stationTurnCount < MIN_DIAGNOSTIC_TURNS ||
+    isUserAskingQuestion ||
+    isVagueOrShort ||
+    userWantsMoreDepth
+  ) && (!userAgreesToComplete || stationTurnCount < MIN_DIAGNOSTIC_TURNS) && stationTurnCount < 10;
 
   if (shouldContinueInquiry) {
-    let nextProbe = domainQuestions[currentQuestionIdx];
-    if (isVagueOrShort && stationTurnCount > 0) {
-      nextProbe = `أسمعك يا صديقنا، لكن إجابتك مقتضبة جداً ولا تسمح لي كطبيب بتشخيص جذور هذا الجانب بدقة. 🌿\n\nدعنا نتناولها بصراحة أعمق:\n${nextProbe}`;
+    let nextProbe = nextRawQuestion;
+
+    if (directInquiryAnswer) {
+      nextProbe = `💡 **إجابة استشارية مباشرة عن تساؤلك:**\n${directInquiryAnswer}\n\n🌿 **والآن لنواصل تشخيص واقعك في ${advTitle} بدقة (المحاورة ${stationTurnCount + 1} من 5+):**\n${nextRawQuestion}`;
+    } else if (isVagueOrShort && stationTurnCount > 0) {
+      nextProbe = `أسمعك يا صديقنا، لكن إجابتك مقتضبة جداً ولا تسمح لي كطبيب بتشخيص جذور هذا الجانب بدقة. 🌿\n\nدعنا نتناولها بصراحة أعمق (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
     } else if (userWantsMoreDepth) {
-      nextProbe = `أحييك على رغبتك الصادقة في التعمق والوضوح! هذا يثبت وعيك وحرصك على اتزانك. 🌿\n\nلنتناول زاوية أعمق:\n${nextProbe}`;
+      nextProbe = `أحييك على رغبتك الصادقة في التعمق والوضوح! هذا يثبت وعيك وحرصك على اتزانك. 🌿\n\nلنتناول زاوية أعمق (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
+    } else if (userAgreesToComplete && stationTurnCount < MIN_DIAGNOSTIC_TURNS) {
+      nextProbe = `أقدر رغبتك في حسم التقييم يا صديقنا العزيز، ولكن كطبيب ومستشار مؤتمن في هذا التقييم التأسيسي الأول، نحتاج لاستيفاء 5 محاور أساسية على الأقل لنبني عليها خطتك بدقة متناهية. 🌿\n\nدعنا نتناول هذا المحور الحيوي (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
+    } else {
+      nextProbe = `أسمعك بتركيز وتفهم واهتمام. لننتقل إلى زاوية تشخيصية مكملة في ${advTitle} (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
     }
 
     return {
@@ -295,9 +415,9 @@ export function getClientAdvisorResponse(
       score: semanticScore,
       strengths: [],
       challenges: [],
-      reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1}): متابعة الحوار الاستكشافي المتعمق. الدرجة المحسوبة حتى الآن: ${semanticScore.toFixed(1)}/10. لا يتم الإغلاق لضمان استيفاء المعطيات التشخيصية.`,
+      reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1} من 5+): متابعة الحوار الاستكشافي المتعمق. ${directInquiryAnswer ? 'تم رصد وإجابة استفسار المستفيد مباشرة.' : ''} الدرجة المحسوبة دلالياً: ${semanticScore.toFixed(1)}/10. لا يتم الإغلاق لضمان استيفاء المعطيات التشخيصية.`,
       summary: `مواصلة الحوار السقراطي الاستكشاري في ${advTitle}.`,
-      advice: `التشخيص الدقيق هو أساس العلاج الناجح.`,
+      advice: `التشخيص الدقيق والاستماع لواقعك هو أساس خطة التوازن الناجحة.`,
       reply: `${nextProbe}`,
     };
   }
@@ -325,13 +445,29 @@ export function getClientAdvisorResponse(
 
   const levelText = semanticScore <= 3.5 ? 'مستوى حرج يحتاج رعاية وإسعافاً عاجلاً' : semanticScore <= 6.0 ? 'مستوى متوسط يواجه ضغوطاً وقابل لقفزة نوعية' : 'مستوى متميز وملهم يعكس اتزاناً عالياً';
 
+  // إذا تم استيفاء 5 أسئلة ولكن المستخدم لم يطلب صراحة الاعتماد ولم يصل للحد الأقصى (8 أسئلة):
+  // الطبيب يعرض مسودة التقييم ويخيره بين الاعتماد أو الاستفاضة
+  if (!userAgreesToComplete && stationTurnCount < 8) {
+    return {
+      isQuestionOrInquiry: true,
+      station_completed: false,
+      score: semanticScore,
+      strengths: dynamicStrengths,
+      challenges: dynamicChallenges,
+      reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1}): تم استيفاء الحد الأدنى للتشخيص (${stationTurnCount + 1} محاورات). عرض مسودة التقييم (${semanticScore.toFixed(1)}/10) والتخيير بين الاعتماد أو التعمق الإضافي.`,
+      summary: `جاهزية اعتماد تقييم ${advTitle} بدرجة (${semanticScore.toFixed(1)} من 10) مع إتاحة الاستفاضة.`,
+      advice: `التوازن يبدأ بخطوة واضحة ومستمرة.`,
+      reply: `أشكرك من قلبي على صراحتك وعمق إجاباتك طوال محاوراتنا السابقة يا صديقنا العزيز! 🌿\n\nلقد تشكّلت لدي الآن رؤية سريرية واضحة جداً لواقعك في **${advTitle}**:\n📊 **التقييم المستحق لواقعك**: (${semanticScore.toFixed(1)} من 10) — ${levelText}.\n\n🏆 **أبرز مواطن القوة المرصودة:**\n• ${dynamicStrengths[0]}\n• ${dynamicStrengths[1]}\n\n⚡ **فرص التطوير والتحديات:**\n• ${dynamicChallenges[0]}\n• ${dynamicChallenges[1]}\n\nهل تود أن **نعتمد هذا التقييم رسمياً** وننطلق للمحطة التالية، أم ترغب في التحدث عن زاوية أخرى في هذا الجانب؟`,
+    };
+  }
+
   return {
     isQuestionOrInquiry: false,
     station_completed: true,
     score: semanticScore,
     strengths: dynamicStrengths,
     challenges: dynamicChallenges,
-    reasoning: `بروتوكول سقراطي تكيفي - اعتماد سريري توافقي (المحطة ${stationNumber} من 8: ${advTitle}): إتمام الحوار التشخيصي بالكامل (${stationTurnCount + 1} محاورات). تم احتساب الدرجة الدلالية بدقة عشرية مستحقة (${semanticScore.toFixed(1)} من 10) بناءً على المشاعر والتحديات الحقيقية.`,
+    reasoning: `بروتوكول سقراطي تكيفي - اعتماد سريري توافقي (المحطة ${stationNumber} من 8: ${advTitle}): إتمام الحوار التشخيصي بالكامل (${stationTurnCount + 1} محاورات متعمقة). تم احتساب الدرجة الدلالية بدقة عشرية مستحقة (${semanticScore.toFixed(1)} من 10) بناءً على المشاعر والتحديات الحقيقية.`,
     summary: `اعتماد تقييم ${advTitle} بدرجة (${semanticScore.toFixed(1)} من 10) بعد حوار سقراطي تكيفي شامل.`,
     advice: semanticScore <= 3.5
       ? 'الاعتراف بالواقع هو نصف الشفاء؛ لا تكلف نفسك ما لا تطيق وابدأ اليوم بخطوة إسعافية واحدة صغيرة.'
@@ -586,8 +722,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_response_${currentTurns}`, text);
     }
 
-    // Increment station turn count
-    setStationTurnCount((prev) => ({ ...prev, [advisorKey]: currentTurns + 1 }));
+    // Increment station turn count only for genuine diagnostic exchanges (not crisis emergency safety triggers)
+    const isCrisisOrDeathMsg = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(text);
+    if (!isCrisisOrDeathMsg) {
+      setStationTurnCount((prev) => ({ ...prev, [advisorKey]: currentTurns + 1 }));
+    }
 
     // Display user message immediately
     setChatMessages((prev) => ({
@@ -1194,8 +1333,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         {/* Input Bar & Dynamic Quick Choices */}
         <div className="border-t border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
 
-          {/* Socratic Interactive Consensus & Depth Controls */}
-          {!isCompleted && (stationTurnCount[currentAdvisor.id] || 0) >= 2 && (
+          {/* Socratic Interactive Consensus & Depth Controls (Only visible after at least 5 diagnostic inquiries) */}
+          {!isCompleted && (stationTurnCount[currentAdvisor.id] || 0) >= 5 && (
             <div className="px-4 py-2 bg-amber-50/80 dark:bg-amber-950/30 border-b border-amber-200/80 dark:border-amber-900/40 flex items-center justify-between gap-2 flex-wrap transition-colors">
               <span className="text-[11px] font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
