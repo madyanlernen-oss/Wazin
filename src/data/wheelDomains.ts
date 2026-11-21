@@ -29,8 +29,8 @@ const WHEEL_EXTRAS: Record<
   spiritual: {
     gradientColors: ['#047857', '#03664a'],
     glowColor: 'rgba(16, 185, 129, 0.45)',
-    keystoneHabit: 'المحافظة على ورد يومي من الصلاة والذكر بتدبر',
-    advisorRole: 'مستشار الصفاء الإيماني والسلام الداخلي',
+    keystoneHabit: 'تخصيص 15 دقيقة يومياً للتأمل والخلوة الروحية الصامتة',
+    advisorRole: 'مستشار السكينة والسلام الداخلي والمعنى',
   },
   health: {
     gradientColors: ['#15803d', '#126d34'],

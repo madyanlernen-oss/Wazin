@@ -32,10 +32,10 @@ const getColors = (id: LifeAreaId, defaultColor: string, defaultStrong: string) 
 export const LIFE_DOMAINS: LifeDomainItem[] = [
   {
     id: 'spiritual',
-    name: 'الجانب الروحي',
-    icon: '🕌',
+    name: 'الجانب الروحي والسكينة',
+    icon: '🕊️',
     ...getColors('spiritual', '#10b981', '#047857'),
-    description: 'السلام الداخلي، الصلة بالخالق، استشعار المعنى والرسالة في الحياة، والصفاء القلبي والتسامح.',
+    description: 'السلام الداخلي، السكينة النفسية، استشعار المعنى والغاية في الحياة، والصفاء القلبي والتسامح.',
   },
   {
     id: 'health',
