@@ -234,6 +234,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     const reqId = Date.now().toString();
     currentRequestIdRef.current = reqId;
     lastSentUserTextRef.current = text;
+    console.log('[AdvisorChat] handleSendMessage initiated, reqId:', reqId, 'text:', text);
 
     setInputMessage('');
 
@@ -348,8 +349,15 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), advisorReply],
       }));
     } catch (err: any) {
-      if (err?.name === 'AbortError' || controller.signal.aborted || currentRequestIdRef.current !== reqId) {
-        console.log('[AdvisorChat] تم إلغاء الطلب من قبل المستخدم.');
+      console.log('[AdvisorChat] catch in handleSendMessage:', err?.name, err?.message, 'aborted:', controller.signal.aborted, 'currentReqId:', currentRequestIdRef.current, 'reqId:', reqId);
+      if (
+        err?.name === 'AbortError' ||
+        controller.signal.aborted ||
+        currentRequestIdRef.current !== reqId ||
+        String(err?.message || '').toLowerCase().includes('abort')
+      ) {
+        console.log('[AdvisorChat] تم إيقاف الطلب بنجاح وتجاهل أي نتيجة.');
+        setIsLoading(false);
         return;
       }
       console.error('Advisor chat error:', err);
@@ -470,15 +478,46 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     }
   };
 
-  const handleStopMessage = () => {
+  const handleStopMessage = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    console.log('[AdvisorChat] handleStopMessage called. Current isLoading:', isLoading, 'reqId:', currentRequestIdRef.current);
+    if (!isLoading) {
+      console.log('[AdvisorChat] handleStopMessage ignored because not currently loading.');
+      return;
+    }
+
+    // 1) Invalidate request ID immediately to reject any in-flight response
+    currentRequestIdRef.current = 'stopped_' + Date.now();
+
+    // 2) Abort in-flight fetch
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      console.log('[AdvisorChat] Aborting controller in handleStopMessage...');
+      try {
+        abortControllerRef.current.abort();
+      } catch (abortErr) {
+        console.warn('[AdvisorChat] Error aborting controller:', abortErr);
+      }
       abortControllerRef.current = null;
     }
+
+    // 3) Clear toast or pending timers if any
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = null;
+    }
+
+    // 4) Immediately turn off loading indicator
     setIsLoading(false);
+
+    // 5) Restore text to input field
     if (lastSentUserTextRef.current) {
       setInputMessage(lastSentUserTextRef.current);
     }
+
+    // 6) Remove user message from chat list
     const sentId = lastSentMsgIdRef.current;
     if (sentId) {
       setMessagesByAdvisor((prev) => ({
@@ -942,13 +981,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
               </span>
             </div>
 
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendMessage();
-              }}
-              className="flex items-center gap-2"
-            >
+            <div className="flex items-center gap-2">
               <VoiceInput
                 currentValue={inputMessage}
                 onTranscript={(transcript) => setInputMessage(transcript)}
@@ -957,22 +990,42 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 resetKey={currentAdvisorId}
               />
 
-              <input
-                type="text"
-                value={inputMessage}
-                onChange={(e) => setInputMessage(e.target.value)}
-                placeholder={`اطرح سؤالك أو تحدث بصوتك مع ${currentAdvisor.name}...`}
-                className="flex-1 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
-                dir="rtl"
-                disabled={isLoading}
-              />
+              {/* Free Text Input in dedicated Form for Enter key support */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!isLoading && inputMessage.trim()) {
+                    handleSendMessage();
+                  }
+                }}
+                className="flex-1"
+              >
+                <input
+                  type="text"
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  placeholder={`اطرح سؤالك أو تحدث بصوتك مع ${currentAdvisor.name}...`}
+                  className="w-full bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
+                  dir="rtl"
+                  disabled={isLoading}
+                />
+              </form>
 
-              {/* Send or Stop Button */}
+              {/* Send or Stop Button completely outside form */}
               {isLoading ? (
                 <button
                   type="button"
-                  onClick={handleStopMessage}
-                  className="h-12 px-3.5 sm:px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 transition-all shadow-md flex-shrink-0 cursor-pointer font-bold text-xs"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleStopMessage(e);
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  className="relative z-20 pointer-events-auto h-12 px-3.5 sm:px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white flex items-center justify-center gap-1.5 transition-all shadow-md flex-shrink-0 cursor-pointer font-bold text-xs select-none"
                   title="إيقاف انتظار الرد واسترجاع رسالتك"
                 >
                   <Square className="w-4 h-4 fill-current" />
@@ -980,8 +1033,13 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 </button>
               ) : (
                 <button
-                  type="submit"
-                  disabled={!inputMessage.trim()}
+                  type="button"
+                  disabled={!inputMessage.trim() || isLoading}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSendMessage();
+                  }}
                   className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
                   style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
                   title="إرسال"
@@ -989,7 +1047,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                   <Send className="w-5 h-5 -rotate-90" />
                 </button>
               )}
-            </form>
+            </div>
           </div>
         </div>
       </div>

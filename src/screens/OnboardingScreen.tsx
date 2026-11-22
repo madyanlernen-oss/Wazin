@@ -779,6 +779,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const reqId = Date.now().toString();
     currentRequestIdRef.current = reqId;
     lastSentUserTextRef.current = text;
+    console.log('[OnboardingScreen] handleSendAnswer initiated, reqId:', reqId, 'text:', text);
 
     const advisorKey = currentAdvisor.id;
     const userMsg: EvaluationChatMessage = {
@@ -926,14 +927,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           }
         }
       } catch (fetchErr: any) {
-        if (fetchErr?.name === 'AbortError' || controller.signal.aborted || currentRequestIdRef.current !== reqId) {
-          console.log('[OnboardingScreen] تم إيقاف الطلب من قبل المستخدم.');
+        console.log('[OnboardingScreen] catch in fetch:', fetchErr?.name, fetchErr?.message, 'aborted:', controller.signal.aborted, 'currentReqId:', currentRequestIdRef.current, 'reqId:', reqId);
+        if (
+          fetchErr?.name === 'AbortError' ||
+          controller.signal.aborted ||
+          currentRequestIdRef.current !== reqId ||
+          String(fetchErr?.message || '').toLowerCase().includes('abort')
+        ) {
+          console.log('[OnboardingScreen] تم إيقاف الطلب بنجاح وتجاهل أي رد.');
+          setIsAdvisorReplying(false);
           return;
         }
         console.warn('API call failed or offline, activating client intelligence engine:', fetchErr);
       }
 
       if (controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+        console.log('[OnboardingScreen] تم إلغاء الطلب قبل تجهيز الرد المحلي.');
+        setIsAdvisorReplying(false);
         return;
       }
 
@@ -1013,8 +1023,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         setShowCelebration(true);
       }
     } catch (err: any) {
-      if (err?.name === 'AbortError' || controller.signal.aborted || currentRequestIdRef.current !== reqId) {
-        console.log('[OnboardingScreen] تم إيقاف الطلب من قبل المستخدم.');
+      console.log('[OnboardingScreen] outer catch in handleSendAnswer:', err?.name, err?.message, 'currentReqId:', currentRequestIdRef.current, 'reqId:', reqId);
+      if (
+        err?.name === 'AbortError' ||
+        controller.signal.aborted ||
+        currentRequestIdRef.current !== reqId ||
+        String(err?.message || '').toLowerCase().includes('abort')
+      ) {
+        setIsAdvisorReplying(false);
         return;
       }
       console.error('Advisor chat error in onboarding:', err);
@@ -1026,15 +1042,40 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   };
 
-  const handleStopAnswer = () => {
+  const handleStopAnswer = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    console.log('[OnboardingScreen] handleStopAnswer called. Current isAdvisorReplying:', isAdvisorReplying, 'reqId:', currentRequestIdRef.current);
+    if (!isAdvisorReplying) {
+      console.log('[OnboardingScreen] handleStopAnswer ignored because not currently replying.');
+      return;
+    }
+
+    // 1) Invalidate request ID immediately with a timestamped stopped value
+    currentRequestIdRef.current = 'stopped_' + Date.now();
+
+    // 2) Abort the fetch request immediately
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      console.log('[OnboardingScreen] Aborting controller in handleStopAnswer...');
+      try {
+        abortControllerRef.current.abort();
+      } catch (abortErr) {
+        console.warn('[OnboardingScreen] Error aborting controller:', abortErr);
+      }
       abortControllerRef.current = null;
     }
+
+    // 3) Immediately turn off waiting indicator and button state
     setIsAdvisorReplying(false);
+
+    // 4) Restore last user text to input field
     if (lastSentUserTextRef.current) {
       setInputText(lastSentUserTextRef.current);
     }
+
+    // 5) Remove the user's message from chat as if it was never sent
     const sentId = lastSentMsgIdRef.current;
     if (sentId) {
       setChatMessages((prev) => ({
@@ -1042,6 +1083,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         [currentAdvisor.id]: (prev[currentAdvisor.id] || []).filter((m) => m.id !== sentId),
       }));
     }
+
+    // 6) Decrement station turn count if not a crisis message
     const isCrisis = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|الموت|بالموت|اموت|أموت|بموت)/i.test(lastSentUserTextRef.current);
     if (!isCrisis) {
       setStationTurnCount((prev) => ({
@@ -1693,13 +1736,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
           {/* Input Bar: Text + Mic + Send */}
           <div className="p-3 sm:p-4 bg-white dark:bg-[#0E1D24] transition-colors">
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSendAnswer();
-              }}
-              className="flex items-center gap-2"
-            >
+            <div className="flex items-center gap-2">
               {/* Mic Button for Voice Dictation */}
               <VoiceInput
                 currentValue={inputText}
@@ -1709,27 +1746,46 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 resetKey={currentAdvisorIndex}
               />
 
-              {/* Free Text Input */}
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
-                placeholder={
-                  isCompleted
-                    ? 'اكتب استشارتك أو سؤالك للمستشار بحرية...'
-                    : (currentStationConfig.consultation?.placeholder || currentStationConfig.initialDiagnostic?.placeholder || 'صف حالك ورضاك في هذا الجانب بصراحة...')
-                }
-                className="flex-1 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
-                dir="rtl"
-                disabled={isAdvisorReplying}
-              />
+              {/* Free Text Input in dedicated Form for Enter key support */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  if (!isAdvisorReplying && inputText.trim()) {
+                    handleSendAnswer();
+                  }
+                }}
+                className="flex-1"
+              >
+                <input
+                  type="text"
+                  value={inputText}
+                  onChange={(e) => setInputText(e.target.value)}
+                  placeholder={
+                    isCompleted
+                      ? 'اكتب استشارتك أو سؤالك للمستشار بحرية...'
+                      : (currentStationConfig.consultation?.placeholder || currentStationConfig.initialDiagnostic?.placeholder || 'صف حالك ورضاك في هذا الجانب بصراحة...')
+                  }
+                  className="w-full bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
+                  dir="rtl"
+                  disabled={isAdvisorReplying}
+                />
+              </form>
 
-              {/* Send or Stop Button */}
+              {/* Send or Stop Button completely outside the form to prevent accidental submission */}
               {isAdvisorReplying ? (
                 <button
                   type="button"
-                  onClick={handleStopAnswer}
-                  className="h-12 px-3.5 sm:px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 transition-all shadow-md flex-shrink-0 cursor-pointer font-bold text-xs"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleStopAnswer(e);
+                  }}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  className="relative z-20 pointer-events-auto h-12 px-3.5 sm:px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white flex items-center justify-center gap-1.5 transition-all shadow-md flex-shrink-0 cursor-pointer font-bold text-xs select-none"
                   title="إيقاف انتظار الرد واسترجاع رسالتك"
                 >
                   <Square className="w-4 h-4 fill-current" />
@@ -1737,8 +1793,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 </button>
               ) : (
                 <button
-                  type="submit"
+                  type="button"
                   disabled={!inputText.trim() || isAdvisorReplying}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleSendAnswer();
+                  }}
                   className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
                   style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
                   title="إرسال"
@@ -1746,7 +1807,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <Send className="w-5 h-5 -rotate-90" />
                 </button>
               )}
-            </form>
+            </div>
 
             <div className="mt-2 flex items-center justify-between text-[11px] text-[#334155] dark:text-[#CBD5E1] px-1">
               <span className="flex items-center gap-1">
