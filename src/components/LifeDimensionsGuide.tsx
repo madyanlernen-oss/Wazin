@@ -31,7 +31,7 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
       className="mt-14 pt-12 border-t border-slate-200/90 dark:border-slate-800 max-w-5xl mx-auto space-y-12 text-right transition-colors"
     >
       {/* 1. Header & Main Concept */}
-      <div className="space-y-4">
+      <div id="model" className="scroll-mt-36 space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 text-xs font-bold text-[#0B6E72] dark:text-cyan-400 shadow-xs">
             <Scale className="w-4 h-4 text-[#8A5A00] dark:text-amber-400" aria-hidden="true" />
@@ -74,71 +74,73 @@ export const LifeDimensionsGuide: React.FC<LifeDimensionsGuideProps> = ({
         </div>
       </div>
 
-      {/* 2. Interactive Arabic Life Wheel */}
-      <InteractiveLifeWheel onNavigateToAuth={onNavigateToAuth} theme={theme} />
+      {/* 2. Interactive Arabic Life Wheel & 8 Dimensions Breakdown */}
+      <div id="wheel" className="scroll-mt-36 space-y-12">
+        <InteractiveLifeWheel onNavigateToAuth={onNavigateToAuth} theme={theme} />
 
-      {/* 3. The 8 Dimensions Breakdown */}
-      <div className="space-y-6">
-        <div>
-          <h3 className="text-xl font-black text-[#0F172A] dark:text-white">
-            مجالات الحياة الثمانية بالتفصيل البسيط:
-          </h3>
-          <p className="text-xs text-[#334155] dark:text-slate-400 mt-1">
-            نظرة شاملة ومبسطة على كل بُعد من أبعاد النموذج وكيف يؤثر في جودة معيشتك
-          </p>
-        </div>
+        {/* 3. The 8 Dimensions Breakdown */}
+        <div className="space-y-6">
+          <div>
+            <h3 className="text-xl font-black text-[#0F172A] dark:text-white">
+              مجالات الحياة الثمانية بالتفصيل البسيط:
+            </h3>
+            <p className="text-xs text-[#334155] dark:text-slate-400 mt-1">
+              نظرة شاملة ومبسطة على كل بُعد من أبعاد النموذج وكيف يؤثر في جودة معيشتك
+            </p>
+          </div>
 
-        {/* 9. Render as <ul>/<li> with reset list styles */}
-        <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 list-none p-0 m-0">
-          {dimensions.map((dim, idx) => {
-            // 6. Contrast WCAG 2.2 AA: strongColor on Light mode, color / lighter tint on Dark mode
-            const badgeColor = isDark
-              ? dim.id === 'career'
-                ? '#818cf8' // indigo-400 achieves 5.99:1 on dark #0c1827
-                : dim.id === 'personal'
-                ? '#a78bfa' // violet-400 achieves 6.56:1 on dark #0c1827
-                : dim.color
-              : dim.strongColor;
+          {/* 9. Render as <ul>/<li> with reset list styles */}
+          <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 list-none p-0 m-0">
+            {dimensions.map((dim, idx) => {
+              // 6. Contrast WCAG 2.2 AA: strongColor on Light mode, color / lighter tint on Dark mode
+              const badgeColor = isDark
+                ? dim.id === 'career'
+                  ? '#818cf8' // indigo-400 achieves 5.99:1 on dark #0c1827
+                  : dim.id === 'personal'
+                  ? '#a78bfa' // violet-400 achieves 6.56:1 on dark #0c1827
+                  : dim.color
+                : dim.strongColor;
 
-            return (
-              <li
-                key={dim.id}
-                className="bg-white dark:bg-[#0c1827] border rounded-2xl p-5 space-y-2.5 transition-all duration-300 motion-safe:hover:-translate-y-1 shadow-xs hover:shadow-md"
-                style={{
-                  // 5. Border computed as ${color}4D
-                  borderColor: `${dim.color}4D`,
-                }}
-              >
-                <div className="flex items-center justify-between">
-                  {/* 8. aria-hidden on decorative emoji */}
-                  <span className="text-2xl" aria-hidden="true">
-                    {dim.icon}
-                  </span>
-                  {/* 4, 6, 7. text-xs, isolated number, strongColor in light mode */}
-                  <span
-                    className="text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
-                    style={{
-                      color: badgeColor,
-                      backgroundColor: `${badgeColor}1A`,
-                    }}
-                  >
-                    <span>البُعد</span>
-                    <span dir="ltr" className="[unicode-bidi:isolate]">
-                      {idx + 1}
+              return (
+                <li
+                  key={dim.id}
+                  className="bg-white dark:bg-[#0c1827] border rounded-2xl p-5 space-y-2.5 transition-all duration-300 motion-safe:hover:-translate-y-1 shadow-xs hover:shadow-md"
+                  style={{
+                    // 5. Border computed as ${color}4D
+                    borderColor: `${dim.color}4D`,
+                  }}
+                >
+                  <div className="flex items-center justify-between">
+                    {/* 8. aria-hidden on decorative emoji */}
+                    <span className="text-2xl" aria-hidden="true">
+                      {dim.icon}
                     </span>
-                  </span>
-                </div>
-                <h4 className="font-extrabold text-sm text-[#0F172A] dark:text-white">{dim.name}</h4>
-                {/* 7. Raised description paragraph to text-sm */}
-                <p className="text-sm text-[#334155] dark:text-slate-400 leading-relaxed">{dim.description}</p>
-              </li>
-            );
-          })}
-        </ul>
+                    {/* 4, 6, 7. text-xs, isolated number, strongColor in light mode */}
+                    <span
+                      className="text-xs font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1"
+                      style={{
+                        color: badgeColor,
+                        backgroundColor: `${badgeColor}1A`,
+                      }}
+                    >
+                      <span>البُعد</span>
+                      <span dir="ltr" className="[unicode-bidi:isolate]">
+                        {idx + 1}
+                      </span>
+                    </span>
+                  </div>
+                  <h4 className="font-extrabold text-sm text-[#0F172A] dark:text-white">{dim.name}</h4>
+                  {/* 7. Raised description paragraph to text-sm */}
+                  <p className="text-sm text-[#334155] dark:text-slate-400 leading-relaxed">{dim.description}</p>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
       </div>
 
       {/* 4. How the Model Works & Rating Scale (1-10) */}
-      <div className="bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 transition-colors">
+      <div id="scale" className="scroll-mt-36 bg-white dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-sm space-y-6 transition-colors">
         <div>
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-950/60 border border-[#0B6E72]/20 dark:border-cyan-500/30 text-[#0B6E72] dark:text-cyan-300 text-xs font-bold mb-2">
             <HelpCircle className="w-3.5 h-3.5" aria-hidden="true" />

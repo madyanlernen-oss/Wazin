@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Sparkles,
   Users,
@@ -11,6 +11,7 @@ import {
   Maximize,
   AlertCircle,
   Loader2,
+  ArrowUp,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LifeDimensionsGuide } from '../components/LifeDimensionsGuide';
@@ -27,6 +28,137 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   theme = 'light',
 }) => {
   const isDark = theme === 'dark';
+
+  const NAV_SECTIONS = [
+    { id: 'hero', label: 'الرئيسية' },
+    { id: 'video', label: 'الفيديو' },
+    { id: 'model', label: 'النموذج' },
+    { id: 'wheel', label: 'العجلة' },
+    { id: 'scale', label: 'المقياس' },
+    { id: 'advisors', label: 'المستشارون' },
+    { id: 'features', label: 'المميزات' },
+  ];
+
+  const [activeSection, setActiveSection] = useState<string>('hero');
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const navContainerRef = useRef<HTMLDivElement>(null);
+  const navButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+
+  // Smooth scroll handler respecting prefers-reduced-motion
+  const handleScrollToSection = (sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (!el) return;
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    el.scrollIntoView({
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      block: 'start',
+    });
+  };
+
+  // Back to top handler respecting prefers-reduced-motion
+  const handleScrollToTop = () => {
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    window.scrollTo({
+      top: 0,
+      behavior: prefersReducedMotion ? 'auto' : 'smooth',
+    });
+  };
+
+  // Scroll-Spy with IntersectionObserver & Back-to-Top scroll trigger
+  useEffect(() => {
+    const sectionIds = ['hero', 'video', 'model', 'wheel', 'scale', 'advisors', 'features'];
+
+    const handleWindowScroll = () => {
+      setShowBackToTop(window.scrollY > 600);
+
+      // Fast reset to 'hero' when scrolled back near top
+      if (window.scrollY < 180) {
+        setActiveSection('hero');
+        return;
+      }
+
+      // Activate last section 'features' when near the very bottom
+      if (window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 80) {
+        setActiveSection('features');
+        return;
+      }
+    };
+
+    window.addEventListener('scroll', handleWindowScroll, { passive: true });
+    handleWindowScroll();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (window.scrollY < 180) {
+          setActiveSection('hero');
+          return;
+        }
+
+        // Find which section top is closest to sticky header offset (120px = 72px header + 48px sticky bar)
+        let bestSection = '';
+        let minDistance = Infinity;
+
+        sectionIds.forEach((id) => {
+          const el = document.getElementById(id);
+          if (el) {
+            const rect = el.getBoundingClientRect();
+            if (rect.top <= 240 && rect.bottom >= 120) {
+              const dist = Math.abs(rect.top - 120);
+              if (dist < minDistance) {
+                minDistance = dist;
+                bestSection = id;
+              }
+            }
+          }
+        });
+
+        if (bestSection) {
+          setActiveSection(bestSection);
+        } else {
+          const intersecting = entries.find((e) => e.isIntersecting);
+          if (intersecting && intersecting.target.id) {
+            setActiveSection(intersecting.target.id);
+          }
+        }
+      },
+      {
+        rootMargin: '-120px 0px -55% 0px',
+        threshold: [0, 0.2, 0.5, 0.8],
+      }
+    );
+
+    sectionIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) observer.observe(el);
+    });
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('scroll', handleWindowScroll);
+    };
+  }, []);
+
+  // Auto center active tab in horizontal scrollable bar on mobile
+  useEffect(() => {
+    const container = navContainerRef.current;
+    const activeBtn = navButtonRefs.current[activeSection];
+    if (!container || !activeBtn) return;
+
+    const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const containerRect = container.getBoundingClientRect();
+    const btnRect = activeBtn.getBoundingClientRect();
+
+    const btnCenter = btnRect.left + btnRect.width / 2;
+    const containerCenter = containerRect.left + containerRect.width / 2;
+    const offsetDiff = btnCenter - containerCenter;
+
+    if (Math.abs(offsetDiff) > 8) {
+      container.scrollBy({
+        left: offsetDiff,
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+      });
+    }
+  }, [activeSection]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -98,7 +230,62 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   };
 
   return (
-    <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-hidden bg-[#F4F8F7] dark:bg-[#07111c] transition-colors duration-300">
+    <div className="relative min-h-[calc(100vh-4.5rem)] pb-28 overflow-x-clip bg-[#F4F8F7] dark:bg-[#07111c] transition-colors duration-300">
+      {/* Sticky Sub-Navigation Bar */}
+      <nav
+        aria-label="أقسام الصفحة الرئيسية"
+        className="sticky top-[72px] z-30 bg-white/85 dark:bg-[#07111c]/90 backdrop-blur-md border-b border-slate-200/80 dark:border-slate-800 shadow-2xs transition-colors"
+        dir="rtl"
+      >
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between gap-2 sm:gap-4">
+          {/* Scrollable Links row on mobile / flex on desktop */}
+          <div
+            ref={navContainerRef}
+            className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-1 min-w-0 py-1"
+          >
+            {NAV_SECTIONS.map((section) => {
+              const isActive = activeSection === section.id;
+              return (
+                <button
+                  key={section.id}
+                  ref={(el) => {
+                    navButtonRefs.current[section.id] = el;
+                  }}
+                  type="button"
+                  onClick={() => handleScrollToSection(section.id)}
+                  aria-current={isActive ? 'true' : undefined}
+                  className={`relative flex items-center justify-center px-3 sm:px-3.5 py-1.5 min-h-[40px] text-xs sm:text-sm font-extrabold transition-all duration-200 rounded-xl cursor-pointer select-none whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
+                    isActive
+                      ? 'text-[#0F6E6E] dark:text-[#22D3EE] font-black'
+                      : 'text-[#475569] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <span>{section.label}</span>
+                  {isActive && (
+                    <span
+                      className="absolute bottom-0 inset-x-2 h-[2.5px] rounded-full bg-[#0F6E6E] dark:bg-[#22D3EE] shadow-xs"
+                      aria-hidden="true"
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Quick CTA on the left (end in RTL) */}
+          <button
+            type="button"
+            onClick={() => onNavigateToAuth('login')}
+            className="min-h-[40px] min-w-[40px] px-3 sm:px-4 py-1.5 rounded-full bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 flex-shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+            title="تسجيل الدخول / ابدأ الآن"
+            aria-label="ابدأ الآن وتسجيل الدخول"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-200" aria-hidden="true" />
+            <span className="hidden sm:inline">ابدأ الآن</span>
+          </button>
+        </div>
+      </nav>
+
       {/* 4-Corner Rich Ambient Mesh Gradient with Ultra-Slow Ambient Drift Animation (Airy Light & Deep Dark) */}
       <div
         className="absolute inset-0 pointer-events-none transition-all duration-500 animate-ambient-drift"
@@ -124,7 +311,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
       {/* Hero Ambient Wrapper with Glowing Central Halo and Orbital Wireframe Rings */}
       <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-6 space-y-16">
         {/* Main Centerpiece Frame with Generous Breathing Room */}
-        <div className="relative max-w-4xl mx-auto pt-8 pb-14 px-6 sm:px-14 lg:px-16 text-center">
+        <div id="hero" className="scroll-mt-36 relative max-w-4xl mx-auto pt-8 pb-14 px-6 sm:px-14 lg:px-16 text-center">
           {/* Luminous Oval Halo & Delicate Concentric Orbital Wireframes (SVG) */}
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
             {/* Central Glassmorphic Frame (88%-92% Soft Ivory/White in Light Mode for WCAG AA Clarity) */}
@@ -316,7 +503,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         </div>
 
         {/* Explainer Video Slot (حاوية الفيديو التوضيحي التعريفي لمنصة وزان) */}
-        <div className="relative max-w-4xl mx-auto space-y-5 text-center">
+        <div id="video" className="scroll-mt-36 relative max-w-4xl mx-auto space-y-5 text-center">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/90 dark:bg-slate-900/80 border border-slate-200 dark:border-cyan-500/25 text-xs font-bold text-[#0B6E72] dark:text-cyan-300 shadow-xs backdrop-blur-md">
               <span className="text-[#8A5A00] dark:text-amber-400">🎬</span>
@@ -488,7 +675,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         </div>
 
         {/* 8 Advisors Section */}
-        <div className="pt-6">
+        <div id="advisors" className="scroll-mt-36 pt-6">
           <div className="text-center mb-8">
             <h2 className="text-2xl font-black text-[#0F172A] dark:text-white transition-colors">المستشارون الثمانية وعوالم التوازن</h2>
             <p className="text-sm text-[#334155] dark:text-slate-400 mt-1 transition-colors">
@@ -547,7 +734,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         </div>
 
         {/* Features Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
+        <div id="features" className="scroll-mt-36 grid grid-cols-1 md:grid-cols-3 gap-6 pt-6">
           <div className="bg-white dark:bg-[#0c1827] border border-[#eae3d5] dark:border-slate-800 rounded-2xl p-6 space-y-3 shadow-xs transition-colors">
             <div className="w-10 h-10 rounded-xl bg-[#1b605b]/10 dark:bg-cyan-950/50 text-[#1b605b] dark:text-cyan-400 flex items-center justify-center">
               <BarChart3 className="w-5 h-5" />
@@ -582,6 +769,19 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Floating Back to Top Button */}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={handleScrollToTop}
+          aria-label="العودة لأعلى الصفحة"
+          title="العودة لأعلى الصفحة"
+          className="fixed left-6 bottom-6 z-40 w-11 h-11 min-h-[44px] min-w-[44px] rounded-full bg-white/95 dark:bg-[#0c1827]/95 hover:bg-white dark:hover:bg-[#102033] text-[#0F6E6E] dark:text-[#22D3EE] border border-slate-200/90 dark:border-slate-700 shadow-xl backdrop-blur-md flex items-center justify-center transition-all duration-300 hover:scale-110 active:scale-95 cursor-pointer animate-fadeIn focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+        >
+          <ArrowUp className="w-5 h-5 stroke-[2.5]" aria-hidden="true" />
+        </button>
+      )}
     </div>
   );
 };
