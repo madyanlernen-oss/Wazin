@@ -1038,6 +1038,11 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     const msgLower = message.toLowerCase().trim();
     const isCrisisOrDeath = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(msgLower);
 
+    // التحقق من تساؤلات المستفيد ومن إلزامية إبقاء المحطة مفتوحة
+    const isUserAsking = /[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(message);
+    const forcedIncomplete = Boolean(isEvaluationSession) && (stationTurnCount < 4 || isUserAsking);
+    const completionPhrasesRegex = /(أتممنا|انتهت\s+(?:هذه\s+)?المحطة|انتهينا\s+من\s+(?:هذه\s+)?المحطة|اكتملت\s+(?:هذه\s+)?المحطة|أنهينا\s+(?:هذه\s+)?المحطة|ختمنا\s+(?:هذه\s+)?المحطة|اكتمل\s+تقييم|أكملنا\s+تقييم|أتممنا\s+هذا\s+الجانب|أنهينا\s+هذا\s+الجانب|المحطة\s+التالية|ننتقل\s+(?:الآن\s+)?(?:إلى|ل)المحطة|اكتملت\s+محطة|أنجزنا\s+هذه\s+المحطة|أكملنا\s+هذه\s+المحطة|انتهت\s+هذه\s+المحطة|اكتملت\s+هذه\s+المحطة|أتممنا\s+تقييم)/i;
+
     // تحديد توجيهات النمط المختار من Gemini (سريع، متوازن، أو تفكير عميق استراتيجي)
     let modeGuideline = '';
     if (aiMode === 'fast') {
@@ -1106,32 +1111,27 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       evaluationSessionGuideline = `
 [بروتوكول جلسة الاستشارة والتقييم الحواري التكيفي (Doctor-Like Adaptive Clinical Evaluation Protocol) 🩺]
 المستفيد حالياً يخوض جلسة استشارية تقييمية لمحطة (${evaluationStep || 1} من 8: ${advisorName})${evaluationQuestionTitle ? ` وسؤال المحطة الحالي هو: "${evaluationQuestionTitle}"` : ''}.
-عدد المحاورات الحالية في هذه المحطة (stationTurnCount): ${stationTurnCount}.
+- عدد التبادلات الحوارية التي تمت في هذه المحطة حتى الآن (stationTurnCount): ${stationTurnCount}. (الحد الأدنى لإنهاء المحطة هو 5 تبادلات حوارية تشخيصية).
+- حالة إتمام المحطة: ${forcedIncomplete ? `المحطة مفتوحة ومستمرة حتماً (التبادل ${stationTurnCount + 1} من 5+) ${isUserAsking ? 'والمستفيد يطرح سؤالاً' : 'ولم يكتمل النصاب التشخيصي بعد'}، ويُمنع منعاً باتاً إنهاء المحطة أو إغلاقها!` : 'المحطة قد تكتمل فقط إذا كانت المعطيات كافية وإجابات المستفيد مستفيضة ولا توجد أسئلة معلقة منه.'}
 
-قواعد إلزامية حاسمة لجلسة الاستشارة وإدارة اكتمال المحطة (Station Completion Protocol):
-1. الشخصية الطبية/الاستشارية الحكيمة والمنصتة (Empathetic Doctor Persona):
+⚠️ توجيهات حاسمة وملزمة بخصوص عبارات إنهاء المحطة (Strict Station Completion Directives):
+1. ⛔ لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة" أو "أنهينا المحطة" إلا إذا كان station_completed يساوي true فقط!
+2. إن كان الحوار ما زال في مرحلة التشخيص (station_completed = false):
+   - يُمنع منعاً باتاً استخدام أي عبارات وداع أو إنهاء أو شكر ختامي أو انتقال للمحطة التالية.
+   - إذا طرح المستفيد سؤالاً أو استفساراً، أجب على سؤاله واستفساره مباشرة وبدفء واحتواء وعمق في أول فقرة كطبيب واستشاري خبير.
+   - اطرح حتماً سؤالاً تشخيصياً جديداً وموجهاً من زاوية نوعية أخرى في (${advisorRole}) لتعميق فهم حالة المستفيد ومواصلة الاستكشاف.
+3. الشخصية الطبية/الاستشارية الحكيمة والمنصتة (Empathetic Doctor Persona):
    - تحدث بنبرة طبيب/مستشار حكيم، رفيق، دافئ، ومباشر في صميم تخصصك (${advisorRole}).
-   - أنت شخصية مستقلة تفهم الشخص الذي أمامك: لا توافق على كل مدخل بشكل أعمى، ولا تعتمد المحطة عشوائياً بعد رسالة واحدة عابرة أو تحية أو كلام مقتضب.
-   - ⚠️ اسأل وحاور: استفسر منه بذكاء عما يعيشه، ولا تكتفِ بتلقي الإجابة بل حاوره كطبيب مهتم بمعرفة الجذور الحقيقية لعاداته وتحدياته.
-2. بروتوكول الحوار السقراطي التكيفي وعمق التشخيص التأسيسي (Adaptive Socratic Protocol):
-   - هذا هو التقييم التأسيسي الأول؛ يجب أن يكون الفحص عميقاً، سريرياً، ومتناغماً مع مستوى تفصيل المستفيد:
-   - ⚠️ قاعدة الحد الأدنى الإلزامي (Mandatory 5+ Inquiries): يُمنع منعاً باتاً إنهاء المحطة أو جعل "station_completed": true قبل إتمام 5 تبادلات استكشافية متعمقة على الأقل (أي عندما stationTurnCount < 5).
-   - ⚠️ قاعدة الإجابة الفورية على تساؤلات واستفسارات المستفيد (Interactive Q&A First):
-     * إذا طرح المستفيد أي سؤال أو استفسار (مثل: "كم وقت الخلوة"، "كيف أبدأ"، "هل الصلاة تكفي"، "كم يجب"، "ما الحل"):
-       - يُمنع منعاً باتاً إنهاء المحطة أو إعطاء التقييم النهائي، واجعل "station_completed": false حتماً!
-       - أجب على سؤاله واستفساره مباشرة وبدفء واحتواء وعمق في أول فقرة من ردك كطبيب واستشاري خبير.
-       - ثم انتقل بعد ذلك بسلاسة لطرح السؤال التشخيصي التالي من زاوية نوعية جديدة.
-   - إذا كانت إجابات المستفيد مقتضبة، غامضة، سطحية، أو لم يقدم تفاصيل كافية (مثل: "لا أدري", "شوية", "تمام", "عادي"), أو إذا طلب التعمق أكثر:
-     * اجعل "station_completed": false حتماً، وواصل الحوار واطرح سؤالاً استكشافياً من زاوية نوعية جديدة (يمتد الحوار حتى 8 أو 10 أسئلة إذا لزم الأمر).
-     * اجعل "strengths" و "challenges" مصفوفات فارغة مؤقتاً [].
-   - معايير احتساب الدرجة (Clinical Decimal Scoring):
-     * ⚠️ منع قاطع للدرجات الافتراضية الجامدة مثل (5 أو 7.5): إذا كان المستفيد سلبياً (يعاني من إحباط، ضياع وقت، قلة صلاة، نوم مدمر، ديون)، يجب أن تكون الدرجة منخفضة واقعية برقم عشري دقيق (مثلاً: 2.2 أو 2.8 أو 3.4 من 10)!
-     * إذا كان متزناً أو إيجابياً، اعتمد درجة ملهمة بدقة عشرية (مثلاً: 7.6 أو 8.4 من 10).
-     * ضع الدرجة العشرية دائماً في حقل "score" (Float with 1 decimal).
-   - عند اكتمال المعطيات التشخيصية الكافية (stationTurnCount >= 5 وإجابات مفصلة وموافقة صريحة على إنهاء المحطة):
+   - أنت شخصية مستقلة تفهم الشخص الذي أمامك: لا توافق على كل مدخل بشكل أعمى، ولا تعتمد المحطة عشوائياً بعد رسالة عابرة أو تحية أو كلام مقتضب.
+   - اسأل وحاور: استفسر منه بذكاء عما يعيشه، ولا تكتفِ بتلقي الإجابة بل حاوره كطبيب مهتم بمعرفة الجذور الحقيقية لعاداته وتحدياته.
+4. بروتوكول الحوار السقراطي التكيفي وعمق التشخيص التأسيسي (Adaptive Socratic Protocol):
+   - الحد الأدنى الإلزامي (Mandatory 5+ Inquiries): يُمنع إنهاء المحطة أو جعل "station_completed": true قبل إتمام 5 تبادلات استكشافية متعمقة على الأقل (أي عندما stationTurnCount < 4).
+   - إذا كانت إجابات المستفيد مقتضبة، غامضة، سطحية، أو لم يقدم تفاصيل كافية: اجعل "station_completed": false حتماً، واطرح سؤالاً استكشافياً جديداً.
+   - معايير احتساب الدرجة (Clinical Decimal Scoring): ضع دائماً درجة دقيقة برقم عشري (Float with 1 decimal) تعبر عن واقع المستفيد.
+   - عند اكتمال المعطيات التشخيصية الكافية (stationTurnCount >= 4 وإجابات مفصلة وموافقة صريحة على إنهاء المحطة):
      * اجعل "station_completed": true.
      * استخلص نقاط قوة حقيقية وتحديات دقيقة من كلامه.
-3. السياج الصارم وحفظ السياق (Strict Domain Guardrail):
+5. السياج الصارم وحفظ السياق (Strict Domain Guardrail):
    - ركّز فقط على بعد (${advisorRole})، وإذا سأل عن حالك أو بادر بالتحية، أجب بلطف في سطر وأعده مباشرة لسؤال التشخيص.
 `;
     } else {
@@ -1163,6 +1163,10 @@ ${evaluationSessionGuideline}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
 - إجابات التقييم: ${JSON.stringify(effectiveAnswers)}
+
+[تذكير ختامي ملزم حول عدد التبادلات والمحطة]:
+- عدد التبادلات الحالية التي تمت في هذه المحطة (stationTurnCount): ${stationTurnCount}.
+${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التشخيص (station_completed: false حتماً): لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة"، واختم ردك بسؤال تشخيصي جديد.` : ''}
 `;
 
     // تطهير وبناء تسلسل المحادثة التفاعلية بما يتوافق بدقة مع متطلبات Google GenAI
@@ -1430,10 +1434,69 @@ ${evaluationSessionGuideline}
     parsed.advice = parsed.advice || '';
     parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
     parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
-    // إلزام بروتوكول الحوار السقراطي التكيفي: لا يمكن إكمال المحطة قبل 5 تبادلات حوارية تشخيصية على الأقل أو أثناء طرح سؤال
-    const isUserAskingInEvaluation = /[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(message);
-    if (isEvaluationSession && (stationTurnCount < 4 || isUserAskingInEvaluation)) {
+    if (forcedIncomplete) {
       parsed.station_completed = false;
+    }
+
+    if (!parsed.reply && (parsed.advice || parsed.summary)) {
+      parsed.reply = parsed.advice || parsed.summary;
+    }
+
+    // 3) كحماية إضافية: إذا فُرض station_completed=false والرد يحتوي عبارات الإنهاء (أتممنا، انتهت المحطة، اكتملت)، أعد توليد الرد مرة واحدة مع تعليمة صريحة بعدم الإنهاء
+    if (forcedIncomplete && (completionPhrasesRegex.test(parsed.reply || '') || completionPhrasesRegex.test(parsed.advice || ''))) {
+      console.warn(`[Advisor Chat] رُصدت عبارات إنهاء مع فرض station_completed=false في رد Gemini (stationTurnCount=${stationTurnCount}). إعادة توليد الرد مرة واحدة بتعليمة صريحة بعدم الإنهاء...`);
+      try {
+        const retryInstruction = `${systemInstruction}
+
+⚠️ تنبيه إلزامي صارم بخصوص إعادة التوليد:
+الرد السابق الذي تم توليده احتوى خطأً على عبارة إنهاء للمحطة (مثل "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت")، بينما المحطة لم تكتمل بعد وما زلنا في مرحلة الاستكشاف والتشخيص الحواري التأسيسي (عدد التبادلات الحالية: ${stationTurnCount} من 5+).
+- لا تقل أبداً في ردك "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة" أو أي عبارة ختامية.
+- اجعل "station_completed": false حتماً.
+- إذا كان المستفيد قد طرح سؤالاً، أجب عليه باحتواء ووضوح أولاً.
+- اختم ردك حتماً بطرح سؤال تشخيصي جديد وموجه لاستكشاف زاوية أخرى في (${advisorRole}) لتعميق فهم حالة المستفيد.`;
+
+        const retryConfig = {
+          ...requestConfig,
+          systemInstruction: retryInstruction,
+        };
+
+        const retryResponse = await ai.models.generateContent({
+          model: winningResult.model,
+          contents,
+          config: retryConfig,
+        });
+
+        if (retryResponse.text) {
+          const reParsed = JSON.parse(retryResponse.text);
+          if (reParsed && (reParsed.reply || reParsed.advice)) {
+            parsed.reply = reParsed.reply || reParsed.advice;
+            if (reParsed.reasoning) parsed.reasoning = reParsed.reasoning;
+            if (reParsed.summary) parsed.summary = reParsed.summary;
+            if (reParsed.advice) parsed.advice = reParsed.advice;
+            if (reParsed.score !== undefined) parsed.score = reParsed.score;
+            if (Array.isArray(reParsed.actionSteps)) parsed.actionSteps = reParsed.actionSteps;
+            if (reParsed.reflectionQuestion) parsed.reflectionQuestion = reParsed.reflectionQuestion;
+            parsed.station_completed = false;
+          }
+        }
+      } catch (retryErr: any) {
+        console.error('[Advisor Chat] تعذرت إعادة توليد الرد عبر Gemini:', retryErr?.message || retryErr);
+      }
+
+      // تنظيف نهائي إن بقيت أي عبارة إنهاء
+      if (completionPhrasesRegex.test(parsed.reply || '')) {
+        parsed.reply = (parsed.reply || '')
+          .replace(/(?:وبهذا\s+)?(?:نكون\s+قد\s+)?(?:أتممنا|انتهت|اكتملت|أنهينا|ختمنا)\s+(?:هذه\s+)?المحطة[^\n.]*[.\n]?/gi, '')
+          .replace(/(?:وبهذا\s+)?(?:نكون\s+قد\s+)?(?:أتممنا|أنهينا|ختمنا)\s+(?:تقييم\s+)?هذا\s+الجانب[^\n.]*[.\n]?/gi, '')
+          .replace(/(?:دعنا\s+)?ننتقل\s+(?:الآن\s+)?(?:إلى|ل)المحطة\s+التالية[^\n.]*[.\n]?/gi, '')
+          .replace(/أتممنا\s+المحطة[^\n.]*[.\n]?/gi, '')
+          .replace(/انتهت\s+المحطة[^\n.]*[.\n]?/gi, '')
+          .replace(/اكتملت\s+المحطة[^\n.]*[.\n]?/gi, '')
+          .trim();
+        if (!/[؟?]/.test(parsed.reply)) {
+          parsed.reply += `\n\n🌿 ولنواصل استكشاف هذا الجانب بعمق: ما أكبر عائق أو تفصيل ترغب في مشاركته معي هنا؟`;
+        }
+      }
     }
     parsed.strengths = Array.isArray(parsed.strengths) ? parsed.strengths : [];
     parsed.challenges = Array.isArray(parsed.challenges) ? parsed.challenges : [];
@@ -1541,9 +1604,77 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
         parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
         parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
 
-        const isUserAsking = /[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(message);
-        if (isEvaluationSession && (stationTurnCount < 4 || isUserAsking)) {
+        if (forcedIncomplete) {
           parsed.station_completed = false;
+        }
+
+        if (!parsed.reply && (parsed.advice || parsed.summary)) {
+          parsed.reply = parsed.advice || parsed.summary;
+        }
+
+        // 3) كحماية إضافية: إذا فُرض station_completed=false والرد يحتوي عبارات الإنهاء (أتممنا، انتهت المحطة، اكتملت)، أعد توليد الرد مرة واحدة مع تعليمة صريحة بعدم الإنهاء
+        if (forcedIncomplete && (completionPhrasesRegex.test(parsed.reply || '') || completionPhrasesRegex.test(parsed.advice || ''))) {
+          console.warn(`[Advisor Chat] رُصدت عبارات إنهاء مع فرض station_completed=false في رد Groq (stationTurnCount=${stationTurnCount}). إعادة توليد الرد مرة واحدة بتعليمة صريحة بعدم الإنهاء...`);
+          try {
+            const retryGroqMessages = [...groqMessages];
+            retryGroqMessages.push({
+              role: 'system',
+              content: `⚠️ تنبيه تصحيحي إلزامي عاجل:
+الرد السابق احتوى خطأً على عبارة إنهاء للمحطة (مثل "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت") بينما المحطة لم تكتمل بعد وما زلنا في مرحلة الاستكشاف والتشخيص الحواري التأسيسي (عدد التبادلات الحالية: ${stationTurnCount} من 5+).
+- لا تقل أبداً في ردك "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة".
+- اجعل "station_completed": false حتماً.
+- إذا سأل المستفيد أجب على سؤاله باحتواء أولاً.
+- اختم ردك بطرح سؤال تشخيصي جديد وموجه في (${advisorRole}) لتعميق فهم حالة المستفيد.`,
+            });
+
+            const retryGroqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${groqApiKey}`,
+              },
+              body: JSON.stringify({
+                model: groqModel,
+                messages: retryGroqMessages,
+                response_format: { type: 'json_object' },
+                temperature: 0.6,
+              }),
+            });
+
+            if (retryGroqRes.ok) {
+              const retryGroqData = await retryGroqRes.json();
+              const retryContent = retryGroqData.choices?.[0]?.message?.content;
+              if (retryContent) {
+                const reParsed = JSON.parse(retryContent);
+                if (reParsed && (reParsed.reply || reParsed.advice)) {
+                  parsed.reply = reParsed.reply || reParsed.advice;
+                  if (reParsed.reasoning) parsed.reasoning = reParsed.reasoning;
+                  if (reParsed.summary) parsed.summary = reParsed.summary;
+                  if (reParsed.advice) parsed.advice = reParsed.advice;
+                  if (reParsed.score !== undefined) parsed.score = reParsed.score;
+                  if (Array.isArray(reParsed.actionSteps)) parsed.actionSteps = reParsed.actionSteps;
+                  if (reParsed.reflectionQuestion) parsed.reflectionQuestion = reParsed.reflectionQuestion;
+                  parsed.station_completed = false;
+                }
+              }
+            }
+          } catch (retryGroqErr: any) {
+            console.error('[Advisor Chat] تعذرت إعادة توليد الرد عبر Groq:', retryGroqErr?.message || retryGroqErr);
+          }
+
+          if (completionPhrasesRegex.test(parsed.reply || '')) {
+            parsed.reply = (parsed.reply || '')
+              .replace(/(?:وبهذا\s+)?(?:نكون\s+قد\s+)?(?:أتممنا|انتهت|اكتملت|أنهينا|ختمنا)\s+(?:هذه\s+)?المحطة[^\n.]*[.\n]?/gi, '')
+              .replace(/(?:وبهذا\s+)?(?:نكون\s+قد\s+)?(?:أتممنا|أنهينا|ختمنا)\s+(?:تقييم\s+)?هذا\s+الجانب[^\n.]*[.\n]?/gi, '')
+              .replace(/(?:دعنا\s+)?ننتقل\s+(?:الآن\s+)?(?:إلى|ل)المحطة\s+التالية[^\n.]*[.\n]?/gi, '')
+              .replace(/أتممنا\s+المحطة[^\n.]*[.\n]?/gi, '')
+              .replace(/انتهت\s+المحطة[^\n.]*[.\n]?/gi, '')
+              .replace(/اكتملت\s+المحطة[^\n.]*[.\n]?/gi, '')
+              .trim();
+            if (!/[؟?]/.test(parsed.reply)) {
+              parsed.reply += `\n\n🌿 ولنواصل استكشاف هذا الجانب بعمق: ما أكبر عائق أو تفصيل ترغب في مشاركته معي هنا؟`;
+            }
+          }
         }
 
         parsed.strengths = Array.isArray(parsed.strengths) ? parsed.strengths : [];
