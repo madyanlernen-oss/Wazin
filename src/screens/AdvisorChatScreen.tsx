@@ -243,6 +243,17 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           content: m.content,
         }));
 
+      // Sanitize user profile so no empty string context field is sent to the server
+      const cleanUserProfile = userProfile ? {
+        name: userProfile.name,
+        ...(userProfile.email?.trim() ? { email: userProfile.email.trim() } : {}),
+        ...(userProfile.ageGroup?.trim() ? { ageGroup: userProfile.ageGroup.trim() } : {}),
+        ...(userProfile.employmentStatus?.trim() ? { employmentStatus: userProfile.employmentStatus.trim() } : {}),
+        ...(userProfile.workStatus?.trim() ? { workStatus: userProfile.workStatus.trim() } : {}),
+        ...(userProfile.hasDependents?.trim() ? { hasDependents: userProfile.hasDependents.trim() } : {}),
+        ...(userProfile.currentFocus?.trim() ? { currentFocus: userProfile.currentFocus.trim() } : {}),
+      } : undefined;
+
       const res = await fetch('/api/gemini/advisor-chat', {
         method: 'POST',
         headers: {
@@ -252,7 +263,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           advisor: currentAdvisor,
           userScore: currentScore,
           userName: userProfile?.name || 'صديقنا',
-          userProfile: userProfile || undefined,
+          userProfile: cleanUserProfile,
           userGoals: currentGoals,
           userAnswers: answers,
           message: text,

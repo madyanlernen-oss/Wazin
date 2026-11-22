@@ -17,6 +17,7 @@ import {
   ArrowLeft,
   RotateCcw,
   Stethoscope,
+  X,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { AdvisorConfig, LifeAreaId, UserProfile } from '../types/lifeBalance';
@@ -524,6 +525,31 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const [ageGroupInput, setAgeGroupInput] = useState(userProfile?.ageGroup || '');
   const [hasDependentsInput, setHasDependentsInput] = useState(userProfile?.hasDependents || '');
 
+  // Check whether user context is completed
+  const isContextCompleted = Boolean(
+    (userProfile?.employmentStatus?.trim() || userProfile?.workStatus?.trim()) &&
+    userProfile?.ageGroup?.trim() &&
+    userProfile?.hasDependents?.trim()
+  );
+
+  // Banner dismissed state persisted in localStorage
+  const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('wazan_context_banner_dismissed_v1') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const handleDismissBanner = () => {
+    setIsBannerDismissed(true);
+    try {
+      localStorage.setItem('wazan_context_banner_dismissed_v1', 'true');
+    } catch {
+      // ignore
+    }
+  };
+
   useEffect(() => {
     if (userProfile) {
       setWorkStatusInput(userProfile.employmentStatus || userProfile.workStatus || '');
@@ -535,10 +561,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const handleSaveContext = () => {
     if (onUpdateProfile) {
       onUpdateProfile({
-        employmentStatus: workStatusInput || undefined,
-        workStatus: workStatusInput || undefined,
-        ageGroup: ageGroupInput || undefined,
-        hasDependents: hasDependentsInput || undefined,
+        employmentStatus: workStatusInput.trim() || undefined,
+        workStatus: workStatusInput.trim() || undefined,
+        ageGroup: ageGroupInput.trim() || undefined,
+        hasDependents: hasDependentsInput.trim() || undefined,
       });
     }
     setShowContextModal(false);
@@ -794,13 +820,24 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       let responseSource: 'gemini' | 'groq' | 'local-fallback' = 'gemini';
 
       try {
+        // بناء كائن سياق المستفيد بدون أي حقول فارغة
+        const cleanUserProfile = userProfile ? {
+          name: userProfile.name,
+          ...(userProfile.email?.trim() ? { email: userProfile.email.trim() } : {}),
+          ...(userProfile.ageGroup?.trim() ? { ageGroup: userProfile.ageGroup.trim() } : {}),
+          ...(userProfile.employmentStatus?.trim() ? { employmentStatus: userProfile.employmentStatus.trim() } : {}),
+          ...(userProfile.workStatus?.trim() ? { workStatus: userProfile.workStatus.trim() } : {}),
+          ...(userProfile.hasDependents?.trim() ? { hasDependents: userProfile.hasDependents.trim() } : {}),
+          ...(userProfile.currentFocus?.trim() ? { currentFocus: userProfile.currentFocus.trim() } : {}),
+        } : undefined;
+
         const res = await fetch('/api/gemini/advisor-chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             advisor: currentAdvisor,
             userName: userProfile?.name || 'صديقنا',
-            userProfile: userProfile || undefined,
+            userProfile: cleanUserProfile,
             message: text,
             history,
             answers,
@@ -1190,18 +1227,29 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               )}
             </div>
 
-            {/* Optional User Context Button */}
+            {/* User Context Button (سياق المستفيد) */}
             <button
               type="button"
               onClick={() => setShowContextModal(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all shadow-xs cursor-pointer"
+              className={`inline-flex items-center gap-1.5 sm:gap-2 px-3 sm:px-3.5 py-2 min-h-[44px] rounded-2xl border-2 transition-all shadow-xs cursor-pointer text-xs sm:text-sm font-bold ${
+                isContextCompleted
+                  ? 'bg-emerald-50/90 dark:bg-emerald-950/40 border-emerald-300 dark:border-emerald-700/70 text-emerald-800 dark:text-emerald-200 hover:border-emerald-500'
+                  : 'bg-amber-50/90 dark:bg-amber-950/40 border-amber-300 dark:border-amber-700/70 text-amber-900 dark:text-amber-200 hover:border-amber-500'
+              }`}
               title="تخصيص سياق المستفيد (حالة العمل، الفئة العمرية، المعالون)"
             >
-              <User className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
-              <span className="hidden sm:inline">سياق المستفيد</span>
-              <span className="sm:hidden">سياقي</span>
-              {(userProfile?.employmentStatus || userProfile?.workStatus) && (
-                <span className="w-1.5 h-1.5 rounded-full bg-[#0F6E6E] dark:bg-[#22D3EE]" />
+              <User className="w-4 h-4 text-[#0F6E6E] dark:text-[#22D3EE] flex-shrink-0" />
+              <span className="font-extrabold whitespace-nowrap">سياق المستفيد</span>
+              {isContextCompleted ? (
+                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 text-[10px] sm:text-xs font-black">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                  <span className="hidden sm:inline">مكتمل</span>
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-300 text-[10px] sm:text-xs font-black">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse flex-shrink-0" />
+                  <span>غير مكتمل</span>
+                </span>
               )}
             </button>
 
@@ -1252,6 +1300,45 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             )}
           </div>
         </div>
+
+        {/* Dismissible Context Prompt Banner (يظهر عند أول دخول إذا كانت الحقول فارغة ولم يغلق من قبل) */}
+        {!isBannerDismissed && !isContextCompleted && (
+          <div className="bg-gradient-to-r from-amber-50 via-teal-50/50 to-emerald-50 dark:from-[#112429] dark:via-[#0E1D24] dark:to-[#0B1A20] border-b border-amber-200/80 dark:border-amber-800/40 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3 text-xs sm:text-sm animate-fadeIn transition-colors flex-shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <span className="w-7 h-7 rounded-xl bg-amber-500 text-white flex items-center justify-center flex-shrink-0 shadow-xs">
+                <Sparkles className="w-4 h-4 text-white" />
+              </span>
+              <div className="min-w-0">
+                <span className="font-black text-[#0F6E6E] dark:text-cyan-300 block sm:inline">
+                  خصّص نصائحك في 10 ثوانٍ:
+                </span>{' '}
+                <span className="text-slate-700 dark:text-slate-300 text-xs font-medium">
+                  حدد حالة عملك ومعاليك لتفصيل توجيهات المستشارين بدقة تناسب ميزانيتك وظروفك الواقعية.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowContextModal(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0b5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-xs font-black shadow-xs transition-all cursor-pointer flex items-center gap-1.5"
+              >
+                <span>تخصيص الآن</span>
+                <ArrowLeft className="w-3.5 h-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={handleDismissBanner}
+                aria-label="إغلاق هذا التنبيه"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Assessment Progress Bar */}
         <div className="px-6 py-2.5 bg-[#F7F6F2] dark:bg-[#0B161C] border-b border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between gap-4 text-xs flex-shrink-0 transition-colors">
@@ -1644,35 +1731,44 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
         >
-          <div className="bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-right">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-[#0F6E6E] dark:text-cyan-400 flex items-center justify-center">
-                  <User className="w-4 h-4" />
+          <div className="bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 text-right animate-fadeIn">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-[#0F6E6E] dark:text-cyan-400 flex items-center justify-center flex-shrink-0 shadow-xs">
+                  <User className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-sm font-black text-[#0F172A] dark:text-white">
-                    سياق المستفيد وخلفيته (اختياري)
+                  <h3 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
+                    سياق المستفيد وخلفيته الحياتية
                   </h3>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    تساعد المستشارين في تخصيص النصائح بدقة وفق واقعك
+                  <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
+                    تساعد مستشاري وزان في تفصيل نصائح واقعية تراعي قدراتك وميزانيتك
                   </p>
                 </div>
               </div>
+
+              <button
+                type="button"
+                onClick={() => setShowContextModal(false)}
+                className="w-9 h-9 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
+                aria-label="إغلاق النافذة"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="space-y-3">
+            <div className="space-y-4">
               {/* 1. Work Status */}
               <div>
-                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
+                <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
                   حالة العمل
                 </label>
                 <select
                   value={workStatusInput}
                   onChange={(e) => setWorkStatusInput(e.target.value)}
-                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 transition-all cursor-pointer"
+                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border-2 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
                   dir="rtl"
                 >
                   <option value="">اختر حالة العمل (اختياري)...</option>
@@ -1687,13 +1783,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
               {/* 2. Age Group */}
               <div>
-                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
+                <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
                   الفئة العمرية
                 </label>
                 <select
                   value={ageGroupInput}
                   onChange={(e) => setAgeGroupInput(e.target.value)}
-                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 transition-all cursor-pointer"
+                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border-2 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
                   dir="rtl"
                 >
                   <option value="">اختر الفئة العمرية (اختياري)...</option>
@@ -1707,13 +1803,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
               {/* 3. Has Dependents */}
               <div>
-                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
+                <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
                   هل لديك معالون؟ (أسرة أو أطفال)
                 </label>
                 <select
                   value={hasDependentsInput}
                   onChange={(e) => setHasDependentsInput(e.target.value)}
-                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 transition-all cursor-pointer"
+                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border-2 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
                   dir="rtl"
                 >
                   <option value="">هل لديك معالون؟ (اختياري)...</option>
@@ -1723,18 +1819,18 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
               <button
                 type="button"
                 onClick={() => setShowContextModal(false)}
-                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                className="px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
               >
                 إغلاق
               </button>
               <button
                 type="button"
                 onClick={handleSaveContext}
-                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#0F6E6E] hover:bg-[#0b5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white transition-colors cursor-pointer shadow-xs"
+                className="px-6 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-black bg-[#0F6E6E] hover:bg-[#0b5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white transition-colors cursor-pointer shadow-md shadow-teal-900/10"
               >
                 حفظ التعديلات
               </button>
