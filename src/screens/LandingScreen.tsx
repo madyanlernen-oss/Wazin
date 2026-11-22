@@ -254,7 +254,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                   type="button"
                   onClick={() => handleScrollToSection(section.id)}
                   aria-current={isActive ? 'true' : undefined}
-                  className={`relative flex items-center justify-center px-3 sm:px-3.5 py-1.5 min-h-[40px] text-xs sm:text-sm font-extrabold transition-all duration-200 rounded-xl cursor-pointer select-none whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
+                  className={`relative flex items-center justify-center px-3.5 sm:px-4 py-2 min-h-[40px] text-xs sm:text-sm font-extrabold transition-all duration-200 rounded-xl cursor-pointer select-none whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
                     isActive
                       ? 'text-[#0F6E6E] dark:text-[#22D3EE] font-black'
                       : 'text-[#475569] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/50'
@@ -263,7 +263,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                   <span>{section.label}</span>
                   {isActive && (
                     <span
-                      className="absolute bottom-0 inset-x-2 h-[2.5px] rounded-full bg-[#0F6E6E] dark:bg-[#22D3EE] shadow-xs"
+                      className="absolute bottom-1 left-1/2 -translate-x-1/2 w-3/5 min-w-[20px] max-w-[42px] h-[2.5px] rounded-full bg-[#0F6E6E] dark:bg-[#22D3EE] transition-all shadow-xs"
                       aria-hidden="true"
                     />
                   )}
@@ -313,7 +313,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         {/* Main Centerpiece Frame with Generous Breathing Room */}
         <div id="hero" className="scroll-mt-36 relative max-w-4xl mx-auto pt-8 pb-14 px-6 sm:px-14 lg:px-16 text-center">
           {/* Luminous Oval Halo & Delicate Concentric Orbital Wireframes (SVG) */}
-          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center animate-hero-float">
             {/* Central Glassmorphic Frame (88%-92% Soft Ivory/White in Light Mode for WCAG AA Clarity) */}
             <div
               className={`w-full h-full max-w-3xl rounded-[3rem] border transition-all duration-500 ${
@@ -469,34 +469,40 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           {/* Foreground Hero Content (Completely static, crisp, and high-contrast) */}
           <div className="relative z-10 space-y-7">
             {/* Top Pill Badge */}
-            <div className="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-white/95 dark:bg-slate-900/85 border border-[#0B6E72]/20 dark:border-cyan-500/25 shadow-xs text-xs sm:text-sm font-extrabold text-[#0F172A] dark:text-cyan-300 transition-colors backdrop-blur-md">
-              <span className="text-[#0B6E72] dark:text-cyan-400">✳️</span>
+            <div className="inline-flex items-center gap-2.5 px-5 py-2 rounded-full bg-white/80 dark:bg-slate-900/75 border border-[#0F6E6E]/25 dark:border-cyan-500/30 shadow-xs text-xs sm:text-sm font-extrabold text-[#0F172A] dark:text-cyan-100 transition-colors backdrop-blur-md">
+              <span className="flex h-2 w-2 relative" aria-hidden="true">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-[#0F6E6E] dark:bg-cyan-400"></span>
+              </span>
               <span>نظام الذكاء الاصطناعي الأول لتناغم مجالات الحياة الثمانية</span>
             </div>
 
-            {/* Centerpiece Bold Headlines (Deep Slate #0F172A & Deep Teal #0B6E72) */}
-            <div className="space-y-2 pt-1">
-              <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0F172A] dark:text-white leading-tight transition-colors">
+            {/* Centerpiece Bold Headlines (Deep Slate #0F172A & Rich Petrol Emerald #0F6E6E) */}
+            <div className="space-y-3 pt-1">
+              <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-[#0F172A] dark:text-white leading-[1.25] sm:leading-[1.2] transition-colors">
                 لا تعش في جانب واحد..
               </h1>
-              <h2 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-[#0B6E72] dark:text-cyan-400 dark:drop-shadow-[0_0_24px_rgba(34,211,238,0.35)] leading-tight transition-colors">
+              <h2 className="text-3xl sm:text-5xl lg:text-6xl font-black text-[#0F6E6E] dark:text-[#22D3EE] leading-[1.25] sm:leading-[1.2] transition-colors">
                 وازن حياتك كاملة
               </h2>
             </div>
 
-            {/* Legible Body Paragraph (Dark Slate #334155 for >= 4.5:1 AA Contrast) */}
-            <p className="text-base sm:text-lg text-[#334155] dark:text-slate-300 leading-relaxed max-w-2xl mx-auto font-normal pt-2 transition-colors">
+            {/* Legible Body Paragraph with High Contrast */}
+            <p className="text-base sm:text-lg lg:text-xl text-[#1E293B] dark:text-slate-100 leading-relaxed max-w-2xl mx-auto font-medium pt-2 transition-colors">
               منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
             </p>
 
             {/* Primary Hero Conversion CTA Button */}
-            <div className="pt-4">
+            <div className="pt-4 sm:pt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
               <button
-                onClick={() => onNavigateToAuth('login')}
-                className="inline-flex items-center gap-3 px-9 py-4 rounded-full bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white text-base font-black shadow-lg shadow-[#0B6E72]/25 dark:shadow-cyan-950/50 border border-teal-600/30 dark:border-cyan-400/30 transition-all hover:scale-105 active:scale-95 cursor-pointer"
+                type="button"
+                onClick={() => onNavigateToAuth('signup')}
+                className="group relative inline-flex items-center justify-center gap-3 px-8 sm:px-10 py-4 rounded-full bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-base sm:text-lg font-black shadow-xl shadow-[#0F6E6E]/25 hover:shadow-2xl hover:shadow-[#0F6E6E]/40 dark:shadow-cyan-950/60 dark:hover:shadow-cyan-900/70 border border-teal-500/40 dark:border-cyan-400/40 transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] active:translate-y-0 active:scale-95 cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0F6E6E]/30 dark:focus-visible:ring-cyan-400/40"
               >
-                <span className="text-cyan-200 font-bold text-lg">&larr;</span>
-                <span>تسجيل الدخول إلى وزان</span>
+                {/* Shimmer sweep effect */}
+                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                <span>ابدأ فحص اتزانك التفاعلي مجاناً</span>
+                <span className="text-xl leading-none font-bold transition-transform duration-300 group-hover:-translate-x-1.5" aria-hidden="true">&larr;</span>
               </button>
             </div>
           </div>

@@ -10,6 +10,7 @@ import {
   LogIn,
   Sun,
   Moon,
+  Sparkles,
 } from 'lucide-react';
 import { Screen, UserProfile } from '../types/lifeBalance';
 import { WazanLogo } from './WazanLogo';
@@ -88,19 +89,33 @@ export const Navbar: React.FC<NavbarProps> = ({
         </button>
 
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Theme toggle with clean icon */}
           <ThemeToggle theme={theme} onToggleTheme={onToggleTheme} />
 
-          {/* Secondary CTA: Login Pill */}
+          {/* Secondary Outline CTA: تسجيل الدخول */}
           <button
             type="button"
             onClick={() => {
               if (onNavigateToAuth) onNavigateToAuth('login');
               else onNavigate('login');
             }}
-            className="flex items-center gap-2 px-4 sm:px-5 py-2 min-h-[44px] rounded-full bg-transparent hover:bg-[#0B6E72]/10 dark:hover:bg-cyan-950/40 text-[#0B6E72] dark:text-cyan-300 border border-[#0B6E72]/30 dark:border-cyan-500/35 hover:border-[#0B6E72]/60 dark:hover:border-cyan-400/60 text-xs sm:text-sm font-bold transition-all motion-safe:hover:scale-105 active:scale-95 cursor-pointer shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
+            className="flex items-center gap-1.5 px-3.5 sm:px-4 py-2 min-h-[42px] rounded-xl bg-transparent hover:bg-slate-100 dark:hover:bg-slate-800/60 text-[#0F172A] dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 text-xs sm:text-sm font-bold transition-all motion-safe:hover:scale-[1.02] active:scale-95 cursor-pointer shadow-2xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
           >
-            <LogIn className="w-3.5 h-3.5 text-[#0B6E72] dark:text-cyan-400" aria-hidden="true" />
+            <LogIn className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" aria-hidden="true" />
             <span>تسجيل الدخول</span>
+          </button>
+
+          {/* Primary Filled CTA: ابدأ الآن */}
+          <button
+            type="button"
+            onClick={() => {
+              if (onNavigateToAuth) onNavigateToAuth('signup');
+              else onNavigate('login');
+            }}
+            className="flex items-center gap-1.5 px-4 sm:px-5 py-2 min-h-[42px] rounded-xl bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-xs sm:text-sm font-black transition-all motion-safe:hover:scale-105 active:scale-95 cursor-pointer shadow-md shadow-teal-900/15 hover:shadow-lg hover:shadow-teal-900/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-200" aria-hidden="true" />
+            <span>ابدأ الآن</span>
           </button>
         </div>
       </HeaderShell>

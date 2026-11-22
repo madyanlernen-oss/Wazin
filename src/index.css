@@ -217,6 +217,21 @@ html.dark ::-webkit-scrollbar-thumb:hover {
     animation: ambientMeshDrift 20s ease-in-out infinite alternate;
     will-change: transform;
   }
+
+  /* Gentle Floating & Subtle Pulse for Hero Background Elements */
+  @keyframes heroFloating {
+    0%, 100% {
+      transform: translateY(0px) scale(1);
+    }
+    50% {
+      transform: translateY(-6px) scale(1.012);
+    }
+  }
+
+  .animate-hero-float {
+    animation: heroFloating 14s ease-in-out infinite;
+    will-change: transform;
+  }
 }
 
 @media print {
