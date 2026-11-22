@@ -13,6 +13,7 @@ export type Screen =
   | 'login'
   | 'onboarding'
   | 'dashboard'
+  | 'thirty_day_plan'
   | 'advisor_chat'
   | 'director_summary'
   | 'comparison'
@@ -163,4 +164,29 @@ export interface WeekData {
   wins: string[];
   challenges: string[];
 }
+
+export interface DayPlanTask {
+  dayNumber: number; // 1 to 30
+  domainId: LifeAreaId;
+  domainTitle: string;
+  domainIcon?: string;
+  weekNumber: number; // 1 to 5 (5: الختام)
+  weekTitle: string;
+  defaultSuggestions: string[]; // 3 smart suggestions
+  selectedTask: string;
+  customTask?: string;
+  isCustomSelected?: boolean;
+  isCompleted: boolean;
+  completedAt?: number;
+  estimatedMinutes?: number;
+}
+
+export interface ThirtyDayPlanState {
+  createdAt: number;
+  startDateStr: string;
+  focusDomains: LifeAreaId[]; // 3 priority domains
+  days: DayPlanTask[];
+  currentDay: number;
+}
+
 

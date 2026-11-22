@@ -15,6 +15,7 @@ import { AdvisorChatScreen } from './screens/AdvisorChatScreen';
 import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
 import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
+import { ThirtyDayPlanScreen } from './screens/ThirtyDayPlanScreen';
 import { Menu, Sun, Moon } from 'lucide-react';
 import { ADVISORS_LIST } from './data/advisorsData';
 import {
@@ -459,10 +460,19 @@ export default function App() {
               onSelectAdvisorChat={handleSelectAdvisorChat}
               onEditAdvisorEvaluation={handleEditAdvisorEvaluation}
               onNavigateToDirectorSummary={() => setActiveScreen('director_summary')}
+              onNavigateToThirtyDayPlan={() => setActiveScreen('thirty_day_plan')}
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
               onStartEvaluation={handleStartNewWeeklyAssessment}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
+              theme={theme}
+            />
+          )}
+
+          {activeScreen === 'thirty_day_plan' && (
+            <ThirtyDayPlanScreen
+              scores={appState.scores}
+              onNavigate={(screen) => setActiveScreen(screen)}
               theme={theme}
             />
           )}

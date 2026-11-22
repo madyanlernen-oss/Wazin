@@ -5,6 +5,7 @@ import {
   EisenhowerGoalItem,
   LifeAreaId,
   Screen,
+  ThirtyDayPlanState,
   UserProfile,
 } from '../types/lifeBalance';
 
@@ -21,6 +22,7 @@ export interface StoredAppState {
   directorReport: DirectorSummaryReport | null;
   lastActiveScreen: Screen;
   selectedAdvisorId: LifeAreaId;
+  thirtyDayPlan?: ThirtyDayPlanState | null;
 }
 
 export const PRIMARY_STORAGE_KEY = 'wazan_state_v1';
@@ -214,6 +216,7 @@ export const getDefaultInitialState = (): StoredAppState => {
     directorReport: null,
     lastActiveScreen: 'landing',
     selectedAdvisorId: 'spiritual',
+    thirtyDayPlan: null,
   };
 };
 

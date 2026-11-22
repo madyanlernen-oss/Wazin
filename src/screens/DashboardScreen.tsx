@@ -37,6 +37,7 @@ interface DashboardScreenProps {
   onSelectAdvisorChat: (advisorId: LifeAreaId) => void;
   onEditAdvisorEvaluation: (advisorId: LifeAreaId) => void;
   onNavigateToDirectorSummary: () => void;
+  onNavigateToThirtyDayPlan?: () => void;
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
   onStartEvaluation?: () => void;
@@ -54,6 +55,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onSelectAdvisorChat,
   onEditAdvisorEvaluation,
   onNavigateToDirectorSummary,
+  onNavigateToThirtyDayPlan,
   onAddGoal,
   onAddEisenhowerGoal,
   onStartEvaluation,
@@ -729,10 +731,11 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 </h4>
                 <button
                   type="button"
-                  onClick={onNavigateToDirectorSummary}
-                  className="text-[11px] font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline cursor-pointer"
+                  onClick={onNavigateToThirtyDayPlan || onNavigateToDirectorSummary}
+                  className="text-[11px] font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline cursor-pointer flex items-center gap-1"
                 >
-                  استعراض المهام التفاعلية الكاملة
+                  <span>فتح خطتي الذكية لـ 30 يوماً</span>
+                  <ArrowLeft className="w-3.5 h-3.5" />
                 </button>
               </div>
 
