@@ -18,6 +18,9 @@ import {
   RotateCcw,
   Stethoscope,
   X,
+  Square,
+  Undo2,
+  Pencil,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { AdvisorConfig, LifeAreaId, UserProfile } from '../types/lifeBalance';
@@ -580,6 +583,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   // Chat conversation state per advisor in memory only (never saved to localStorage across sessions)
   const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentRequestIdRef = useRef<string>('');
+  const lastSentUserTextRef = useRef<string>('');
+  const lastSentMsgIdRef = useRef<string>('');
+
+  useEffect(() => {
+    return () => {
+      if (abortControllerRef.current) abortControllerRef.current.abort();
+    };
+  }, []);
 
   // Proactively purge any residual evaluation caches from localStorage on mount & when uncompleted
   useEffect(() => {
@@ -758,6 +771,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const text = (textToSend || inputText).trim();
     if (!text || isAdvisorReplying) return;
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const reqId = Date.now().toString();
+    currentRequestIdRef.current = reqId;
+    lastSentUserTextRef.current = text;
+
     const advisorKey = currentAdvisor.id;
     const userMsg: EvaluationChatMessage = {
       id: `usr_${Date.now()}`,
@@ -765,6 +787,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       text,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
+    lastSentMsgIdRef.current = userMsg.id;
 
     setInputText('');
     const currentList = chatMessages[advisorKey] || [];
@@ -802,7 +825,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     setIsAdvisorReplying(true);
 
     try {
-      const history = currentList.slice(-6).map((m) => ({
+      const history = currentList.slice(-12).map((m) => ({
         role: m.sender === 'user' ? 'user' : 'model',
         content: m.text,
       }));
@@ -833,6 +856,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         const res = await fetch('/api/gemini/advisor-chat', {
           method: 'POST',
+          signal: controller.signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             advisor: currentAdvisor,
@@ -850,8 +874,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           }),
         });
 
+        if (controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+          return;
+        }
+
         if (res.ok) {
           const data = await res.json();
+          if (controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+            return;
+          }
           responseSource = data.source || 'gemini';
           reasoningContent = data.reasoning || '';
           summaryContent = data.summary || '';
@@ -894,8 +925,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             }
           }
         }
-      } catch (fetchErr) {
+      } catch (fetchErr: any) {
+        if (fetchErr?.name === 'AbortError' || controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+          console.log('[OnboardingScreen] تم إيقاف الطلب من قبل المستخدم.');
+          return;
+        }
         console.warn('API call failed or offline, activating client intelligence engine:', fetchErr);
+      }
+
+      if (controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+        return;
       }
 
       if (!replyContent) {
@@ -973,11 +1012,76 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         });
         setShowCelebration(true);
       }
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+        console.log('[OnboardingScreen] تم إيقاف الطلب من قبل المستخدم.');
+        return;
+      }
       console.error('Advisor chat error in onboarding:', err);
     } finally {
-      setIsAdvisorReplying(false);
+      if (currentRequestIdRef.current === reqId) {
+        setIsAdvisorReplying(false);
+        abortControllerRef.current = null;
+      }
     }
+  };
+
+  const handleStopAnswer = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsAdvisorReplying(false);
+    if (lastSentUserTextRef.current) {
+      setInputText(lastSentUserTextRef.current);
+    }
+    const sentId = lastSentMsgIdRef.current;
+    if (sentId) {
+      setChatMessages((prev) => ({
+        ...prev,
+        [currentAdvisor.id]: (prev[currentAdvisor.id] || []).filter((m) => m.id !== sentId),
+      }));
+    }
+    const isCrisis = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|الموت|بالموت|اموت|أموت|بموت)/i.test(lastSentUserTextRef.current);
+    if (!isCrisis) {
+      setStationTurnCount((prev) => ({
+        ...prev,
+        [currentAdvisor.id]: Math.max(0, (prev[currentAdvisor.id] || 1) - 1),
+      }));
+    }
+  };
+
+  const handleUndoLastAnswer = () => {
+    if (isCompleted || isAdvisorReplying) return;
+    const currentList = chatMessages[currentAdvisor.id] || [];
+    let lastUserIdx = -1;
+    for (let i = currentList.length - 1; i >= 0; i--) {
+      if (currentList[i].sender === 'user') {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    if (lastUserIdx === -1) return;
+
+    const undoneMsg = currentList[lastUserIdx];
+    setInputText(undoneMsg.text);
+
+    const isCrisis = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|الموت|بالموت|اموت|أموت|بموت)/i.test(undoneMsg.text);
+    if (!isCrisis) {
+      setStationTurnCount((prev) => ({
+        ...prev,
+        [currentAdvisor.id]: Math.max(0, (prev[currentAdvisor.id] || 1) - 1),
+      }));
+    }
+
+    setChatMessages((prev) => {
+      const list = prev[currentAdvisor.id] || [];
+      const filtered = list.filter((_, idx) => idx !== lastUserIdx && idx !== lastUserIdx + 1);
+      return {
+        ...prev,
+        [currentAdvisor.id]: filtered,
+      };
+    });
   };
 
   const currentAdvisorScore = calculateScoreForAdvisor(currentAdvisor, answers);
@@ -1368,59 +1472,86 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         {/* Messages Stream */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#F7F6F2]/60 dark:bg-[#071318]/90 transition-colors">
-          {activeConversation.map((msg) => {
-            const isAdvisor = msg.sender === 'advisor';
-            return (
-              <div
-                key={msg.id}
-                className={`flex gap-3 max-w-3xl ${isAdvisor ? 'mr-auto' : 'ml-auto flex-row-reverse'}`}
-              >
+          {(() => {
+            const lastUserMsgId = [...activeConversation].reverse().find((m) => m.sender === 'user')?.id;
+            return activeConversation.map((msg) => {
+              const isAdvisor = msg.sender === 'advisor';
+              return (
                 <div
-                  className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 border shadow-xs ${
-                    isAdvisor ? 'border-black/5 dark:border-white/10' : 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-transparent'
-                  }`}
-                  style={isAdvisor ? { backgroundColor: `${currentAdvisor.themeColor}20` } : {}}
+                  key={msg.id}
+                  className={`flex gap-3 max-w-3xl ${isAdvisor ? 'mr-auto' : 'ml-auto flex-row-reverse'}`}
                 >
-                  {isAdvisor ? currentAdvisor.avatarSvg : <User className="w-4 h-4" />}
-                </div>
-
-                <div className="max-w-[85%] sm:max-w-[75%] space-y-2">
                   <div
-                    className={`p-4 rounded-2xl shadow-xs border ${
-                      isAdvisor
-                        ? 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] text-[#0F172A] dark:text-[#F1F5F9] rounded-tr-xs'
-                        : 'bg-[#0F6E6E] dark:bg-[#0891B2] border-transparent text-white rounded-tl-xs'
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 border shadow-xs ${
+                      isAdvisor ? 'border-black/5 dark:border-white/10' : 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-transparent'
                     }`}
+                    style={isAdvisor ? { backgroundColor: `${currentAdvisor.themeColor}20` } : {}}
                   >
-                    {/* Render Formatted Bold text without raw ** markers */}
-                    <FormattedChatMessage text={msg.text} isAdvisor={isAdvisor} />
-
-                    {isAdvisor && msg.source === 'local-fallback' && (
-                      <div className="mt-1.5 flex items-center">
-                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                          رد احتياطي
-                        </span>
-                      </div>
-                    )}
-
-                    <span
-                      className={`block text-[10px] mt-2 font-mono ${
-                        isAdvisor ? 'text-[#64748B] dark:text-[#94A3B8]' : 'text-emerald-100/75'
-                      }`}
-                      dir="ltr"
-                    >
-                      {msg.timestamp}
-                    </span>
+                    {isAdvisor ? currentAdvisor.avatarSvg : <User className="w-4 h-4" />}
                   </div>
 
-                  {/* Render Crisis Support Card if crisis response detected */}
-                  {isAdvisor && (msg.isCrisis || isCrisisMessage(msg.text)) && (
-                    <CrisisSupportCard />
-                  )}
+                  <div className="max-w-[85%] sm:max-w-[75%] space-y-2">
+                    <div
+                      className={`p-4 rounded-2xl shadow-xs border ${
+                        isAdvisor
+                          ? 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] text-[#0F172A] dark:text-[#F1F5F9] rounded-tr-xs'
+                          : 'bg-[#0F6E6E] dark:bg-[#0891B2] border-transparent text-white rounded-tl-xs'
+                      }`}
+                    >
+                      {/* Render Formatted Bold text without raw ** markers */}
+                      <FormattedChatMessage text={msg.text} isAdvisor={isAdvisor} />
+
+                      {isAdvisor && msg.source === 'local-fallback' && (
+                        <div className="mt-1.5 flex items-center">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
+                            رد احتياطي
+                          </span>
+                        </div>
+                      )}
+
+                      <span
+                        className={`block text-[10px] mt-2 font-mono ${
+                          isAdvisor ? 'text-[#64748B] dark:text-[#94A3B8]' : 'text-emerald-100/75'
+                        }`}
+                        dir="ltr"
+                      >
+                        {msg.timestamp}
+                      </span>
+
+                      {/* Undo & Edit actions for last user message */}
+                      {!isAdvisor && msg.id === lastUserMsgId && !isCompleted && !isAdvisorReplying && (
+                        <div className="flex items-center gap-1.5 justify-end pt-1.5 border-t border-white/20 mt-2">
+                          <button
+                            type="button"
+                            onClick={handleUndoLastAnswer}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition-all border border-white/20 cursor-pointer shadow-xs"
+                            title="تراجع عن الرسالة وحذف رد المستشار وإعادة النص لخانة الإدخال"
+                          >
+                            <Undo2 className="w-3 h-3" />
+                            <span>تراجع</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleUndoLastAnswer}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition-all border border-white/20 cursor-pointer shadow-xs"
+                            title="تعديل الرسالة وحذف رد المستشار وإعادة النص لخانة الإدخال"
+                          >
+                            <Pencil className="w-3 h-3" />
+                            <span>تعديل</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Render Crisis Support Card if crisis response detected */}
+                    {isAdvisor && (msg.isCrisis || isCrisisMessage(msg.text)) && (
+                      <CrisisSupportCard />
+                    )}
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
 
           {isAdvisorReplying && (
             <div className="flex gap-3 max-w-3xl mr-auto items-center animate-pulse">
@@ -1533,8 +1664,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <button
                     key={num}
                     type="button"
+                    disabled={isAdvisorReplying}
                     onClick={() => handleSendAnswer(`تقييمي: ${num} من 10`)}
-                    className="min-w-[36px] sm:min-w-[40px] min-h-[36px] sm:min-h-[40px] px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] hover:bg-emerald-50/50 dark:hover:bg-cyan-950/30 text-xs sm:text-sm font-black transition-all shadow-xs cursor-pointer font-mono flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+                    className="min-w-[36px] sm:min-w-[40px] min-h-[36px] sm:min-h-[40px] px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] hover:bg-emerald-50/50 dark:hover:bg-cyan-950/30 text-xs sm:text-sm font-black transition-all shadow-xs cursor-pointer font-mono flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 disabled:opacity-40 disabled:pointer-events-none"
                     dir="ltr"
                   >
                     {num}
@@ -1548,8 +1680,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   <button
                     key={idx}
                     type="button"
+                    disabled={isAdvisorReplying}
                     onClick={() => handleSendAnswer(chip)}
-                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer"
+                    className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
                   >
                     {chip}
                   </button>
@@ -1588,18 +1721,31 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 }
                 className="flex-1 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
                 dir="rtl"
+                disabled={isAdvisorReplying}
               />
 
-              {/* Send Button */}
-              <button
-                type="submit"
-                disabled={!inputText.trim() || isAdvisorReplying}
-                className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
-                style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
-                title="إرسال"
-              >
-                <Send className="w-5 h-5 -rotate-90" />
-              </button>
+              {/* Send or Stop Button */}
+              {isAdvisorReplying ? (
+                <button
+                  type="button"
+                  onClick={handleStopAnswer}
+                  className="h-12 px-3.5 sm:px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 transition-all shadow-md flex-shrink-0 cursor-pointer font-bold text-xs"
+                  title="إيقاف انتظار الرد واسترجاع رسالتك"
+                >
+                  <Square className="w-4 h-4 fill-current" />
+                  <span>إيقاف ⏹</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!inputText.trim() || isAdvisorReplying}
+                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
+                  style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
+                  title="إرسال"
+                >
+                  <Send className="w-5 h-5 -rotate-90" />
+                </button>
+              )}
             </form>
 
             <div className="mt-2 flex items-center justify-between text-[11px] text-[#334155] dark:text-[#CBD5E1] px-1">

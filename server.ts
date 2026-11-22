@@ -1131,6 +1131,15 @@ function sanitizeAdvisorReply(
 
 // Endpoint: Advisor Chat
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
+  // 1) إلغاء استدعاءات الذكاء الاصطناعي فور إغلاق العميل للاتصال لتوفير الحصة
+  const clientAbortController = new AbortController();
+  req.on('close', () => {
+    if (!res.writableEnded) {
+      console.log('[Advisor Chat] أغلق العميل الاتصال، إلغاء استدعاءات Gemini/Groq الجارية لتوفير الحصة...');
+      clientAbortController.abort();
+    }
+  });
+
   if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
     return res.status(400).json({ error: 'بيانات الطلب غير صالحة، يجب أن تكون كائناً بصيغة JSON.' });
   }
@@ -1505,6 +1514,37 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       ? `\n- ${userContextLine}\n- 💡 تعليمة هامة لتخصيص الاستشارة: فصّل النصيحة حسب حالته (طالب: ميزانية صغيرة ومصروف؛ موظف: راتب والتزامات؛ صاحب عمل: تدفقات نقدية) ولا تفترض ما لم يُذكر.\n`
       : '';
 
+    // سابعاً: سياق المحطة الحالية - استخراج ملخص مقتضب من سطرين لأهم ما ذكره المستخدم في هذه المحطة لربط السياق والحديث
+    const userUtterancesInStation: string[] = [];
+    if (Array.isArray(history)) {
+      for (const h of history) {
+        if (!h) continue;
+        const role = h.role || h.sender;
+        if (role === 'user') {
+          let t = '';
+          if (typeof h === 'string') t = h;
+          else if (typeof h.content === 'string') t = h.content;
+          else if (typeof h.text === 'string') t = h.text;
+          t = t.trim();
+          if (t && t.length > 3 && !t.startsWith('مرحباً') && !t.startsWith('اهلا')) {
+            userUtterancesInStation.push(t);
+          }
+        }
+      }
+    }
+    if (message && message.trim().length > 3) {
+      userUtterancesInStation.push(message.trim());
+    }
+
+    let stationSummaryContextText = '';
+    if (userUtterancesInStation.length > 0) {
+      const summaryStatements = userUtterancesInStation.slice(-3).map((s) => {
+        const clean = s.length > 70 ? s.slice(0, 67) + '...' : s;
+        return `  * "${clean}"`;
+      });
+      stationSummaryContextText = `\n[ملخص سريع لما ذكره المستفيد في هذه المحطة لربط السياق]:\n${summaryStatements.slice(-2).join('\n')}\n`;
+    }
+
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
     systemInstruction = `
 ${agentRoleDescription}
@@ -1526,7 +1566,7 @@ ${evaluationSessionGuideline}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
 - إجابات التقييم: ${JSON.stringify(effectiveAnswers)}
-${pastStationsContextText}${userContextGuideline}
+${pastStationsContextText}${userContextGuideline}${stationSummaryContextText}
 [تذكير ختامي ملزم حول عدد التبادلات والمحطة]:
 - عدد التبادلات الحالية التي تمت في هذه المحطة (stationTurnCount): ${stationTurnCount}.
 ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التشخيص (station_completed: false حتماً): لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة"، واختم ردك بسؤال تشخيصي محدد واحد مرتبط بآخر ما قاله.` : ''}
@@ -1535,8 +1575,8 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     // تطهير وبناء تسلسل المحادثة التفاعلية بما يتوافق بدقة مع متطلبات Google GenAI
     const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
 
-    // 5) الاقتصار على آخر 6 رسائل من history لتقليل حجم الطلب وتسريع المعالجة
-    const recentHistory = Array.isArray(history) ? history.slice(-6) : [];
+    // 5) الاقتصار على آخر 12 رسالة من history لتعميق الذاكرة الحوارية وربط السياق
+    const recentHistory = Array.isArray(history) ? history.slice(-12) : [];
     for (const h of recentHistory) {
         if (!h) continue;
         const role: 'user' | 'model' =
@@ -1681,8 +1721,8 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     ): Promise<{ response: any; model: string; durationMs: number }> => {
       let attempt = 0;
       while (attempt <= 1) {
-        if (abortState.aborted) {
-          throw new Error(`تم تجاوز النموذج ${model} لسبق نموذج آخر`);
+        if (abortState.aborted || clientAbortController.signal.aborted) {
+          throw new Error(`تم تجاوز النموذج ${model} لسبق نموذج آخر أو إلغاء الطلب من العميل`);
         }
         const attemptStart = Date.now();
         let timeoutHandle: any;
@@ -1698,6 +1738,16 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             timeoutHandle = setTimeout(() => {
               reject(new Error(`تجاوزت مهلة الاستجابة (10 ثوانٍ) للنموذج: ${model}`));
             }, 10000);
+
+            const onClientAbort = () => {
+              clearTimeout(timeoutHandle);
+              reject(new Error('أغلق العميل الاتصال'));
+            };
+            if (clientAbortController.signal.aborted) {
+              onClientAbort();
+            } else {
+              clientAbortController.signal.addEventListener('abort', onClientAbort, { once: true });
+            }
           });
 
           const res = await Promise.race([apiCall, timeoutPromise]);
@@ -1715,7 +1765,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             err?.message || err
           );
 
-          if (abortState.aborted) {
+          if (abortState.aborted || clientAbortController.signal.aborted) {
             throw err;
           }
 
@@ -1750,14 +1800,27 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
         let completedCount = 0;
         let hasResolved = false;
 
+        const clientAbortHandler = () => {
+          if (!hasResolved) {
+            hasResolved = true;
+            abortState.aborted = true;
+            reject(new Error('أغلق العميل الاتصال'));
+          }
+        };
+        if (clientAbortController.signal.aborted) {
+          clientAbortHandler();
+        } else {
+          clientAbortController.signal.addEventListener('abort', clientAbortHandler, { once: true });
+        }
+
         const launchModel = (idx: number) => {
-          if (idx >= candidateModels.length || hasResolved) return;
+          if (idx >= candidateModels.length || hasResolved || clientAbortController.signal.aborted) return;
           const currentModel = candidateModels[idx];
           let nextLaunched = false;
           let sixSecondTimer: any;
 
           const triggerNext = () => {
-            if (!nextLaunched && idx + 1 < candidateModels.length && !hasResolved) {
+            if (!nextLaunched && idx + 1 < candidateModels.length && !hasResolved && !clientAbortController.signal.aborted) {
               nextLaunched = true;
               launchModel(idx + 1);
             }
@@ -1882,18 +1945,22 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     parsed.source = 'gemini';
     return res.json(parsed);
   } catch (error: any) {
+    if (clientAbortController.signal.aborted) {
+      console.log('[Advisor Chat] تم إيقاف الطلب بعد إغلاق اتصال العميل.');
+      return;
+    }
     console.warn('[Advisor Chat] تعذر إتمام الرد عبر Gemini، فحص مزود Groq الاحتياطي...', error?.message || error);
 
     // 1) استخدام متغيرات البيئة GROQ_API_KEY و GROQ_MODEL (الافتراضي llama-3.3-70b-versatile) دون كتابة أي مفتاح
     const groqApiKey = process.env.GROQ_API_KEY;
-    if (groqApiKey) {
+    if (groqApiKey && !clientAbortController.signal.aborted) {
       const groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
       const groqStart = Date.now();
 
       try {
         const groqMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
 
-        // 2) استدعاء Groq بنفس systemInstruction وآخر 6 رسائل من history، مع response_format: { type: "json_object" }
+        // 2) استدعاء Groq بنفس systemInstruction وآخر 12 رسالة من history، مع response_format: { type: "json_object" }
         const groqSystemPrompt = `${systemInstruction || ''}
 
 IMPORTANT: You must respond in valid JSON format with the following fields:
@@ -1913,7 +1980,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         groqMessages.push({ role: 'system', content: groqSystemPrompt });
 
-        const recentHistory = Array.isArray(history) ? history.slice(-6) : [];
+        const recentHistory = Array.isArray(history) ? history.slice(-12) : [];
         for (const h of recentHistory) {
           if (!h) continue;
           const role =
@@ -1941,6 +2008,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
+          signal: clientAbortController.signal,
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${groqApiKey}`,
@@ -1999,6 +2067,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
             const retryGroqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
               method: 'POST',
+              signal: clientAbortController.signal,
               headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${groqApiKey}`,
@@ -2072,6 +2141,11 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
         const durationMs = Date.now() - groqStart;
         console.error(`[Advisor Chat] فشل مزود Groq (${groqModel}) بعد ${durationMs}ms:`, groqErr?.message || groqErr);
       }
+    }
+
+    if (clientAbortController.signal.aborted) {
+      console.log('[Advisor Chat] ألغى العميل الاتصال، تم تخطي المحرك المحلي.');
+      return;
     }
 
     // 4) لا تستخدم المحرك المحلي إلا إذا فشل Gemini وGroq معاً

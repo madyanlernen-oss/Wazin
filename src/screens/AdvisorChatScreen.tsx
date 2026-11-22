@@ -18,6 +18,9 @@ import {
   CheckCircle2,
   X,
   ArrowLeft,
+  Square,
+  Undo2,
+  Pencil,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import {
@@ -150,10 +153,15 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const currentRequestIdRef = useRef<string>('');
+  const lastSentUserTextRef = useRef<string>('');
+  const lastSentMsgIdRef = useRef<string>('');
 
   useEffect(() => {
     return () => {
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, []);
 
@@ -218,6 +226,15 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     const text = (textToSend || inputMessage).trim();
     if (!text || isLoading) return;
 
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    const reqId = Date.now().toString();
+    currentRequestIdRef.current = reqId;
+    lastSentUserTextRef.current = text;
+
     setInputMessage('');
 
     const userMsg: ChatMessage = {
@@ -226,6 +243,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
       content: text,
       timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
     };
+    lastSentMsgIdRef.current = userMsg.id;
 
     setMessagesByAdvisor((prev) => ({
       ...prev,
@@ -235,9 +253,9 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     setIsLoading(true);
 
     try {
-      // Call server-side proxy route for Gemini API
+      // Call server-side proxy route for Gemini API (up to last 12 messages for richer context)
       const conversationHistory = (messagesByAdvisor[currentAdvisor.id] || [])
-        .slice(-8)
+        .slice(-12)
         .map((m) => ({
           role: m.sender === 'user' ? 'user' : 'model',
           content: m.content,
@@ -256,6 +274,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
       const res = await fetch('/api/gemini/advisor-chat', {
         method: 'POST',
+        signal: controller.signal,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -273,11 +292,19 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         }),
       });
 
+      if (controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+        return;
+      }
+
       if (!res.ok) {
         throw new Error('فشل الاتصال بمستشار الذكاء الاصطناعي');
       }
 
       const data = await res.json();
+
+      if (controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+        return;
+      }
 
       let parsedReasoning = data.reasoning || '';
       let parsedSummary = data.summary || '';
@@ -320,7 +347,11 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         ...prev,
         [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), advisorReply],
       }));
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError' || controller.signal.aborted || currentRequestIdRef.current !== reqId) {
+        console.log('[AdvisorChat] تم إلغاء الطلب من قبل المستخدم.');
+        return;
+      }
       console.error('Advisor chat error:', err);
       let fallbackText = `نصيحتي لك في مجال ${currentAdvisor.title}: التركيز على عادة واحدة صغيرة يومياً تصنع مع الوقت فارقاً هائلاً. استمر في تدوين تقدمك في عجلة الحياة.`;
       let fallbackReasoning = `تحليل استشاري معمق لواقع المستفيد في ${currentAdvisor.title}: استخلاص العادة المحورية الأكثر ملاءمة لقدراته وطاقته الحالية دون إجهاد.`;
@@ -432,8 +463,54 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), fallbackReply],
       }));
     } finally {
-      setIsLoading(false);
+      if (currentRequestIdRef.current === reqId) {
+        setIsLoading(false);
+        abortControllerRef.current = null;
+      }
     }
+  };
+
+  const handleStopMessage = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    if (lastSentUserTextRef.current) {
+      setInputMessage(lastSentUserTextRef.current);
+    }
+    const sentId = lastSentMsgIdRef.current;
+    if (sentId) {
+      setMessagesByAdvisor((prev) => ({
+        ...prev,
+        [currentAdvisor.id]: (prev[currentAdvisor.id] || []).filter((m) => m.id !== sentId),
+      }));
+    }
+  };
+
+  const handleUndoLastExchange = () => {
+    if (isLoading) return;
+    const currentList = messagesByAdvisor[currentAdvisor.id] || [];
+    let lastUserIdx = -1;
+    for (let i = currentList.length - 1; i >= 0; i--) {
+      if (currentList[i].sender === 'user') {
+        lastUserIdx = i;
+        break;
+      }
+    }
+    if (lastUserIdx === -1) return;
+
+    const userMsgToUndo = currentList[lastUserIdx];
+    setInputMessage(userMsgToUndo.content);
+
+    setMessagesByAdvisor((prev) => {
+      const list = prev[currentAdvisor.id] || [];
+      const filtered = list.filter((_, idx) => idx !== lastUserIdx && idx !== lastUserIdx + 1);
+      return {
+        ...prev,
+        [currentAdvisor.id]: filtered,
+      };
+    });
   };
 
   const handleAddActionToGoals = (actionText: string) => {
@@ -663,47 +740,73 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
           {/* Chat Messages Area */}
           <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F7F6F2]/50 dark:bg-[#071318]/90 transition-colors">
-            {activeMessages.map((msg) => {
-              const isUser = msg.sender === 'user';
+            {(() => {
+              const lastUserMsgId = [...activeMessages].reverse().find((m) => m.sender === 'user')?.id;
+              return activeMessages.map((msg) => {
+                const isUser = msg.sender === 'user';
 
-              return (
-                <div
-                  key={msg.id}
-                  className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-                >
-                  {/* Avatar */}
+                return (
                   <div
-                    className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 ${
-                      isUser
-                        ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white'
-                        : 'border border-black/5 dark:border-white/10'
-                    }`}
-                    style={!isUser ? { backgroundColor: `${currentAdvisor.themeColor}15` } : {}}
+                    key={msg.id}
+                    className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
                   >
-                    {isUser ? <User className="w-4 h-4" /> : currentAdvisor.avatarSvg}
-                  </div>
-
-                  {/* Bubble */}
-                  <div className={`max-w-[85%] sm:max-w-[75%] space-y-3`}>
+                    {/* Avatar */}
                     <div
-                      className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 ${
                         isUser
-                          ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white rounded-tr-none shadow-xs'
-                          : 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] rounded-tl-none shadow-xs'
+                          ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white'
+                          : 'border border-black/5 dark:border-white/10'
                       }`}
+                      style={!isUser ? { backgroundColor: `${currentAdvisor.themeColor}15` } : {}}
                     >
-                      <FormattedChatMessage text={msg.content} isAdvisor={!isUser} />
-                      {!isUser && msg.source === 'local-fallback' && (
-                        <div className="mt-1.5 flex items-center">
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                            رد احتياطي
-                          </span>
-                        </div>
-                      )}
-                      <span className="text-[10px] opacity-60 block mt-2 text-left" dir="ltr">
-                        {msg.timestamp}
-                      </span>
+                      {isUser ? <User className="w-4 h-4" /> : currentAdvisor.avatarSvg}
                     </div>
+
+                    {/* Bubble */}
+                    <div className={`max-w-[85%] sm:max-w-[75%] space-y-3`}>
+                      <div
+                        className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+                          isUser
+                            ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white rounded-tr-none shadow-xs'
+                            : 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] rounded-tl-none shadow-xs'
+                        }`}
+                      >
+                        <FormattedChatMessage text={msg.content} isAdvisor={!isUser} />
+                        {!isUser && msg.source === 'local-fallback' && (
+                          <div className="mt-1.5 flex items-center">
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
+                              رد احتياطي
+                            </span>
+                          </div>
+                        )}
+                        <span className="text-[10px] opacity-60 block mt-2 text-left" dir="ltr">
+                          {msg.timestamp}
+                        </span>
+
+                        {/* Undo & Edit actions for the last user message */}
+                        {isUser && msg.id === lastUserMsgId && !isLoading && (
+                          <div className="flex items-center gap-1.5 justify-end pt-1.5 border-t border-white/20 mt-2">
+                            <button
+                              type="button"
+                              onClick={handleUndoLastExchange}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition-all border border-white/20 cursor-pointer shadow-xs"
+                              title="تراجع عن الرسالة وحذف رد المستشار وإعادة النص لخانة الكتابة"
+                            >
+                              <Undo2 className="w-3 h-3" />
+                              <span>تراجع</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={handleUndoLastExchange}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition-all border border-white/20 cursor-pointer shadow-xs"
+                              title="تعديل الرسالة وحذف رد المستشار وإعادة النص لخانة الكتابة"
+                            >
+                              <Pencil className="w-3 h-3" />
+                              <span>تعديل</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
 
                     {/* Render Crisis Support Card if crisis response detected */}
                     {!isUser && (msg.isCrisis || isCrisisMessage(msg.content)) && (
@@ -769,7 +872,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                   </div>
                 </div>
               );
-            })}
+            });
+          })()}
 
             {isLoading && (
               <div className="flex gap-3 items-center text-xs text-[#475569] dark:text-[#94A3B8]">
@@ -801,7 +905,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 key={idx}
                 type="button"
                 onClick={() => handleSendMessage(qText)}
-                className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-[11px] transition-all shadow-xs cursor-pointer"
+                disabled={isLoading}
+                className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-[11px] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
               >
                 {qText}
               </button>
@@ -868,14 +973,28 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 disabled={isLoading}
               />
 
-              <button
-                type="submit"
-                disabled={isLoading || !inputMessage.trim()}
-                className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
-                style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
-              >
-                <Send className="w-5 h-5 -rotate-90" />
-              </button>
+              {/* Send or Stop Button */}
+              {isLoading ? (
+                <button
+                  type="button"
+                  onClick={handleStopMessage}
+                  className="h-12 px-3.5 sm:px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1.5 transition-all shadow-md flex-shrink-0 cursor-pointer font-bold text-xs"
+                  title="إيقاف انتظار الرد واسترجاع رسالتك"
+                >
+                  <Square className="w-4 h-4 fill-current" />
+                  <span>إيقاف ⏹</span>
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!inputMessage.trim()}
+                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
+                  style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
+                  title="إرسال"
+                >
+                  <Send className="w-5 h-5 -rotate-90" />
+                </button>
+              )}
             </form>
           </div>
         </div>
