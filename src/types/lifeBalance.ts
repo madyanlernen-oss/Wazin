@@ -96,6 +96,8 @@ export interface UserProfile {
   employmentStatus?: string; // e.g. 'طالب جامعي' | 'موظف' | 'صاحب عمل/مستقل' | 'متقاعد' | 'باحث عن عمل' | 'غير ذلك'
   workStatus?: string;
   hasDependents?: string; // e.g. 'نعم' | 'لا'
+  incomeSource?: string; // e.g. 'مصروف من الأسرة' | 'مكافأة جامعية/منحة' | 'عمل جزئي' | 'غير ذلك' (للطالب)
+  incomeStability?: string; // e.g. 'نعم (دخل ثابت)' | 'لا (دخل متغير)' (للموظف/صاحب العمل)
 }
 
 export interface KeystoneHabit {

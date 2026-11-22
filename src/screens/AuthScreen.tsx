@@ -77,6 +77,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [signupWorkStatus, setSignupWorkStatus] = useState('');
   const [signupAgeGroup, setSignupAgeGroup] = useState('');
   const [signupHasDependents, setSignupHasDependents] = useState('');
+  const [signupIncomeSource, setSignupIncomeSource] = useState('');
+  const [signupIncomeStability, setSignupIncomeStability] = useState('');
 
   // Forgot password form
   const [forgotEmail, setForgotEmail] = useState('');
@@ -252,6 +254,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
+    // التحقق الصارم من إلزامية حقول سياق المستفيد
+    if (!signupWorkStatus || !signupWorkStatus.trim()) {
+      setError('يرجى اختيار حالة العمل لإكمال التسجيل وتخصيص استشاراتك.');
+      return;
+    }
+    if (!signupAgeGroup || !signupAgeGroup.trim()) {
+      setError('يرجى اختيار الفئة العمرية لإكمال التسجيل وتخصيص استشاراتك.');
+      return;
+    }
+    if (!signupHasDependents || !signupHasDependents.trim()) {
+      setError('يرجى الإجابة عن سؤال المعالين لإكمال التسجيل وتخصيص استشاراتك.');
+      return;
+    }
+
+    const isStudent = signupWorkStatus === 'طالب جامعي' || signupWorkStatus.includes('طالب');
+    const isEmployeeOrBusiness =
+      signupWorkStatus === 'موظف' ||
+      signupWorkStatus === 'صاحب عمل/مستقل' ||
+      signupWorkStatus.includes('صاحب عمل') ||
+      signupWorkStatus.includes('مستقل');
+
+    if (isStudent && !signupIncomeSource.trim()) {
+      setError('يرجى اختيار مصدر دخلك الأساسي كطالب لإكمال التسجيل بدقة.');
+      return;
+    }
+    if (isEmployeeOrBusiness && !signupIncomeStability.trim()) {
+      setError('يرجى تحديد ما إذا كان دخلك ثابتاً أم متغيراً لإكمال خطتك بدقة.');
+      return;
+    }
+
     setIsSubmitting(true);
 
     const currentUsers = getStoredUsers();
@@ -276,10 +308,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       name,
       email,
       hasPassword: true,
-      ageGroup: signupAgeGroup || '25 - 34 سنة',
-      employmentStatus: signupWorkStatus || undefined,
-      workStatus: signupWorkStatus || undefined,
-      hasDependents: signupHasDependents || undefined,
+      ageGroup: signupAgeGroup,
+      employmentStatus: signupWorkStatus,
+      workStatus: signupWorkStatus,
+      hasDependents: signupHasDependents,
+      incomeSource: isStudent ? signupIncomeSource.trim() : undefined,
+      incomeStability: isEmployeeOrBusiness ? signupIncomeStability.trim() : undefined,
       currentFocus: 'تحقيق التوازن الشامل وتحديد الأولويات',
       registeredAt: new Date().toISOString(),
     };
@@ -577,14 +611,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 </div>
               </div>
 
-              {/* Optional User Context Fields for Tailored Advice */}
+              {/* Mandatory User Context Fields for Tailored Advice */}
               <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-[#0B6E72] dark:text-cyan-400">
-                    سياقك لتخصيص الاستشارات (اختياري)
+                  <span className="text-[11px] font-bold text-[#0B6E72] dark:text-cyan-400 flex items-center gap-1">
+                    <span>سياق المستفيد لتخصيص الاستشارات (إلزامي)</span>
+                    <span className="text-rose-500 font-bold">*</span>
                   </span>
-                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                    يمكنك تجاوزه
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+                    لتفصيل خطتك بدقة
                   </span>
                 </div>
 
@@ -594,16 +629,26 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     htmlFor="auth-signup-work"
                     className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1"
                   >
-                    حالة العمل
+                    حالة العمل <span className="text-rose-500">*</span>
                   </label>
                   <select
                     id="auth-signup-work"
+                    required
                     value={signupWorkStatus}
-                    onChange={(e) => setSignupWorkStatus(e.target.value)}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setSignupWorkStatus(val);
+                      if (val !== 'طالب جامعي' && !val.includes('طالب')) {
+                        setSignupIncomeSource('');
+                      }
+                      if (val !== 'موظف' && val !== 'صاحب عمل/مستقل' && !val.includes('صاحب عمل') && !val.includes('مستقل')) {
+                        setSignupIncomeStability('');
+                      }
+                    }}
                     className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer"
                     dir="rtl"
                   >
-                    <option value="">اختر حالة العمل (اختياري)...</option>
+                    <option value="">اختر حالة العمل...</option>
                     <option value="طالب جامعي">طالب جامعي</option>
                     <option value="موظف">موظف</option>
                     <option value="صاحب عمل/مستقل">صاحب عمل/مستقل</option>
@@ -613,22 +658,76 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   </select>
                 </div>
 
+                {/* Conditional Field: Student Primary Income Source */}
+                {(signupWorkStatus === 'طالب جامعي' || signupWorkStatus.includes('طالب')) && (
+                  <div className="p-3 rounded-xl bg-teal-50/70 dark:bg-cyan-950/30 border border-teal-200/80 dark:border-cyan-900/40 animate-fadeIn">
+                    <label
+                      htmlFor="auth-signup-income-source"
+                      className="block text-xs font-bold text-[#0B6E72] dark:text-cyan-300 mb-1"
+                    >
+                      مصدر دخلك الأساسي كطالب <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      id="auth-signup-income-source"
+                      required
+                      value={signupIncomeSource}
+                      onChange={(e) => setSignupIncomeSource(e.target.value)}
+                      className="w-full bg-white dark:bg-[#102033] border border-teal-300 dark:border-cyan-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer font-medium"
+                      dir="rtl"
+                    >
+                      <option value="">اختر مصدر الدخل الأساسي...</option>
+                      <option value="مصروف من الأسرة">مصروف من الأسرة</option>
+                      <option value="مكافأة جامعية/منحة">مكافأة جامعية/منحة</option>
+                      <option value="عمل جزئي">عمل جزئي</option>
+                      <option value="غير ذلك">غير ذلك</option>
+                    </select>
+                  </div>
+                )}
+
+                {/* Conditional Field: Employee / Business Owner Income Stability */}
+                {(signupWorkStatus === 'موظف' ||
+                  signupWorkStatus === 'صاحب عمل/مستقل' ||
+                  signupWorkStatus.includes('صاحب عمل') ||
+                  signupWorkStatus.includes('مستقل')) && (
+                  <div className="p-3 rounded-xl bg-teal-50/70 dark:bg-cyan-950/30 border border-teal-200/80 dark:border-cyan-900/40 animate-fadeIn">
+                    <label
+                      htmlFor="auth-signup-income-stability"
+                      className="block text-xs font-bold text-[#0B6E72] dark:text-cyan-300 mb-1"
+                    >
+                      هل دخلك ثابت؟ <span className="text-rose-500">*</span>
+                    </label>
+                    <select
+                      id="auth-signup-income-stability"
+                      required
+                      value={signupIncomeStability}
+                      onChange={(e) => setSignupIncomeStability(e.target.value)}
+                      className="w-full bg-white dark:bg-[#102033] border border-teal-300 dark:border-cyan-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer font-medium"
+                      dir="rtl"
+                    >
+                      <option value="">اختر طبيعة الدخل...</option>
+                      <option value="نعم (دخل ثابت)">نعم (دخل ثابت)</option>
+                      <option value="لا (دخل متغير)">لا (دخل متغير)</option>
+                    </select>
+                  </div>
+                )}
+
                 {/* 2. Age Group */}
                 <div>
                   <label
                     htmlFor="auth-signup-age"
                     className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1"
                   >
-                    الفئة العمرية
+                    الفئة العمرية <span className="text-rose-500">*</span>
                   </label>
                   <select
                     id="auth-signup-age"
+                    required
                     value={signupAgeGroup}
                     onChange={(e) => setSignupAgeGroup(e.target.value)}
                     className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer"
                     dir="rtl"
                   >
-                    <option value="">اختر الفئة العمرية (اختياري)...</option>
+                    <option value="">اختر الفئة العمرية...</option>
                     <option value="أقل من 20 سنة">أقل من 20 سنة</option>
                     <option value="20 - 29 سنة">20 - 29 سنة</option>
                     <option value="30 - 39 سنة">30 - 39 سنة</option>
@@ -643,16 +742,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                     htmlFor="auth-signup-dependents"
                     className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1"
                   >
-                    هل لديك معالون؟ (أسرة أو أطفال)
+                    هل لديك معالون؟ (أسرة أو أطفال) <span className="text-rose-500">*</span>
                   </label>
                   <select
                     id="auth-signup-dependents"
+                    required
                     value={signupHasDependents}
                     onChange={(e) => setSignupHasDependents(e.target.value)}
                     className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer"
                     dir="rtl"
                   >
-                    <option value="">هل لديك معالون؟ (اختياري)...</option>
+                    <option value="">اختر الإجابة...</option>
                     <option value="نعم">نعم</option>
                     <option value="لا">لا</option>
                   </select>

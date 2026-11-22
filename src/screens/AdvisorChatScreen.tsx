@@ -270,6 +270,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         ...(userProfile.employmentStatus?.trim() ? { employmentStatus: userProfile.employmentStatus.trim() } : {}),
         ...(userProfile.workStatus?.trim() ? { workStatus: userProfile.workStatus.trim() } : {}),
         ...(userProfile.hasDependents?.trim() ? { hasDependents: userProfile.hasDependents.trim() } : {}),
+        ...(userProfile.incomeSource?.trim() ? { incomeSource: userProfile.incomeSource.trim() } : {}),
+        ...(userProfile.incomeStability?.trim() ? { incomeStability: userProfile.incomeStability.trim() } : {}),
         ...(userProfile.currentFocus?.trim() ? { currentFocus: userProfile.currentFocus.trim() } : {}),
       } : undefined;
 

@@ -1245,11 +1245,45 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
   if (req.body.hasDependents !== undefined && req.body.hasDependents !== null && typeof req.body.hasDependents !== 'string' && typeof req.body.hasDependents !== 'boolean') {
     return res.status(400).json({ error: 'نوع حقل hasDependents غير صالح.' });
   }
+  if (req.body.incomeSource !== undefined && req.body.incomeSource !== null && typeof req.body.incomeSource !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل incomeSource غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (req.body.incomeStability !== undefined && req.body.incomeStability !== null && typeof req.body.incomeStability !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل incomeStability غير صالح، يجب أن يكون نصاً.' });
+  }
+
+  const effectiveUserProfile = userProfile || { name: userName || 'صديقنا' };
+
+  // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون، الدخل)
+  let workStatus = (
+    effectiveUserProfile?.employmentStatus ||
+    effectiveUserProfile?.workStatus ||
+    req.body?.workStatus ||
+    req.body?.employmentStatus ||
+    ''
+  ).trim();
+
+  const isDemoUser =
+    req.body?.isDemo === true ||
+    effectiveUserProfile?.email === 'demo@wazan.com' ||
+    effectiveUserProfile?.name === 'سعود المنصور' ||
+    req.body?.userName === 'سعود المنصور' ||
+    userName === 'سعود المنصور';
+
+  // الفالديشن: ارفض الطلب الذي لا يحتوي على employmentStatus بخطأ 400 واضح بالعربية، إلا في الدخول التجريبي فيُعامل كـ "غير محدد"
+  if (!workStatus) {
+    if (isDemoUser) {
+      workStatus = 'غير محدد';
+    } else {
+      return res.status(400).json({
+        error: 'حقل حالة العمل (employmentStatus) إلزامي في سياق المستفيد لتخصيص الاستشارة.',
+      });
+    }
+  }
 
     let systemInstruction = '';
     let advisorName = 'مستشار وزان';
 
-    const effectiveUserProfile = userProfile || { name: userName || 'صديقنا' };
     const effectiveAnswers = answers || userAnswers || {};
     const effectiveGoals = goals || userGoals || [];
     const historyMsgTexts = Array.isArray(history) ? history.map((h: any) => h.content || '') : [];
@@ -1473,15 +1507,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 `;
     }
 
-    // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون)
-    const workStatus = (
-      effectiveUserProfile?.employmentStatus ||
-      effectiveUserProfile?.workStatus ||
-      req.body?.workStatus ||
-      req.body?.employmentStatus ||
-      ''
-    ).trim();
-
+    // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون، ومصادر الدخل)
     const ageGroup = (
       effectiveUserProfile?.ageGroup ||
       req.body?.ageGroup ||
@@ -1494,25 +1520,37 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 
     let dependentsText = '';
     if (rawDependents === 'نعم' || rawDependents === true || rawDependents === 'yes') {
-      dependentsText = 'معالون: نعم';
+      dependentsText = 'نعم';
     } else if (rawDependents === 'لا' || rawDependents === false || rawDependents === 'no') {
-      dependentsText = 'معالون: لا';
+      dependentsText = 'لا';
     } else if (typeof rawDependents === 'string' && rawDependents.trim()) {
       dependentsText = rawDependents.trim();
     }
 
-    const contextParts: string[] = [];
-    if (workStatus) contextParts.push(workStatus);
-    if (ageGroup) contextParts.push(ageGroup);
-    if (dependentsText) contextParts.push(dependentsText);
+    const incomeSource = (
+      effectiveUserProfile?.incomeSource ||
+      req.body?.incomeSource ||
+      ''
+    ).trim();
 
-    const userContextLine = contextParts.length > 0
-      ? `المستفيد: ${contextParts.join('، ')}`
-      : '';
+    const incomeStability = (
+      effectiveUserProfile?.incomeStability ||
+      req.body?.incomeStability ||
+      ''
+    ).trim();
 
-    const userContextGuideline = contextParts.length > 0
-      ? `\n- ${userContextLine}\n- 💡 تعليمة هامة لتخصيص الاستشارة: فصّل النصيحة حسب حالته (طالب: ميزانية صغيرة ومصروف؛ موظف: راتب والتزامات؛ صاحب عمل: تدفقات نقدية) ولا تفترض ما لم يُذكر.\n`
-      : '';
+    const userContextBlock = `
+[سياق المستفيد وخلفيته الحياتية الأساسية 🎯]:
+- الاسم: ${effectiveUserProfile?.name || userName || 'صديقنا'}
+- حالة العمل: ${workStatus}
+${ageGroup ? `- الفئة العمرية: ${ageGroup}` : ''}
+${dependentsText ? `- المعالون: ${dependentsText}` : ''}
+${incomeSource ? `- مصدر الدخل الأساسي: ${incomeSource}` : ''}
+${incomeStability ? `- طبيعة واستقرار الدخل: ${incomeStability}` : ''}
+
+⛔ قاعدة صارمة وملزمة في تخصيص الحوار والأسئلة والنصائح:
+لا تطرح أي سؤال أو نصيحة لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تفترض دخلاً ثابتاً لمن دخله متغير أو باحث عن عمل، ولا تقدم نصائح ترقية وظيفية لمتقاعد أو طالب). وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في الحوار.
+`;
 
     // سابعاً: سياق المحطة الحالية - استخراج ملخص مقتضب من سطرين لأهم ما ذكره المستخدم في هذه المحطة لربط السياق والحديث
     const userUtterancesInStation: string[] = [];
@@ -1547,6 +1585,8 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
     systemInstruction = `
+${userContextBlock}
+
 ${agentRoleDescription}
 
 أنت الآن في محادثة استشارية حية بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة وزان.
@@ -1562,11 +1602,15 @@ ${evaluationSessionGuideline}
 
 سياق المستفيد من منصة وزان:
 - الاسم: ${effectiveUserProfile?.name || 'صديقنا'}
+- حالة العمل: ${workStatus}
+${ageGroup ? `- الفئة العمرية: ${ageGroup}` : ''}
+${incomeSource ? `- مصدر الدخل: ${incomeSource}` : ''}
+${incomeStability ? `- طبيعة الدخل: ${incomeStability}` : ''}
 - الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
 - إجابات التقييم: ${JSON.stringify(effectiveAnswers)}
-${pastStationsContextText}${userContextGuideline}${stationSummaryContextText}
+${pastStationsContextText}${stationSummaryContextText}
 [تذكير ختامي ملزم حول عدد التبادلات والمحطة]:
 - عدد التبادلات الحالية التي تمت في هذه المحطة (stationTurnCount): ${stationTurnCount}.
 ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التشخيص (station_completed: false حتماً): لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة"، واختم ردك بسؤال تشخيصي محدد واحد مرتبط بآخر ما قاله.` : ''}
@@ -2258,7 +2302,29 @@ app.post('/api/gemini/director-summary', async (req: Request, res: Response) => 
       return res.json(fallback);
     }
 
+    const workStatus = (userProfile?.employmentStatus || userProfile?.workStatus || 'غير محدد').trim();
+    const ageGroup = (userProfile?.ageGroup || 'غير محدد').trim();
+    const rawDependents = userProfile?.hasDependents;
+    const dependentsText = rawDependents === 'نعم' || rawDependents === true ? 'نعم' : rawDependents === 'لا' || rawDependents === false ? 'لا' : (typeof rawDependents === 'string' ? rawDependents.trim() : '');
+    const incomeSource = (userProfile?.incomeSource || '').trim();
+    const incomeStability = (userProfile?.incomeStability || '').trim();
+
+    const directorUserContext = `
+[سياق المستفيد وخلفيته الحياتية الأساسية 🎯]:
+- الاسم: ${userProfile?.name || 'المستخدم'}
+- حالة العمل: ${workStatus}
+- الفئة العمرية: ${ageGroup}
+${dependentsText ? `- المعالون: ${dependentsText}` : ''}
+${incomeSource ? `- مصدر الدخل الأساسي: ${incomeSource}` : ''}
+${incomeStability ? `- طبيعة واستقرار الدخل: ${incomeStability}` : ''}
+
+⛔ قاعدة صارمة وملزمة في تخصيص التقرير والخطط والعادات:
+لا تطرح أي سؤال أو نصيحة أو توصية لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تبنِ خططاً مهنية لمتقاعد أو باحث عن عمل كأنهم موظفون). وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في التحليل.
+`;
+
     const systemInstruction = `
+${directorUserContext}
+
 أنت "المنسق التكاملي العام (م. معتز)" في منصة "وزان" (Wazan).
 مهمتك النظر في حياة المستفيد كمنظومة واحدة متكاملة (Holistic Life Ecosystem) وليست جزراً منعزلة.
 أنت خبير في:
@@ -2271,9 +2337,14 @@ app.post('/api/gemini/director-summary', async (req: Request, res: Response) => 
 `;
 
     const prompt = `
+${directorUserContext}
+
 بيانات المستفيد الشاملة:
 - الاسم: ${userProfile?.name || 'المستخدم'}
-- العمر / المرحلة: ${userProfile?.ageGroup || 'غير محدد'}
+- حالة العمل: ${workStatus}
+- العمر / المرحلة: ${ageGroup}
+${incomeSource ? `- مصدر الدخل: ${incomeSource}` : ''}
+${incomeStability ? `- طبيعة الدخل: ${incomeStability}` : ''}
 - الأولوية الحالية: ${focusArea || 'تحقيق التوازن الشامل'}
 
 درجات مجالات الحياة الثمانية (من 10):
@@ -2399,7 +2470,24 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
 // Endpoint: Area Deep-Dive & AI Action Synthesis
 app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
   try {
-    const { advisorTitle, score, answers, goals } = req.body;
+    const { advisorTitle, score, answers, goals, userProfile } = req.body;
+
+    const deepdiveWorkStatus = (userProfile?.employmentStatus || userProfile?.workStatus || '').trim();
+    const deepdiveAgeGroup = (userProfile?.ageGroup || '').trim();
+    const deepdiveIncomeSource = (userProfile?.incomeSource || '').trim();
+    const deepdiveIncomeStability = (userProfile?.incomeStability || '').trim();
+
+    const deepdiveUserContext = `
+[سياق المستفيد الأساسي وتخصيص التحليل 🎯]:
+- الاسم: ${userProfile?.name || 'المستفيد'}
+${deepdiveWorkStatus ? `- حالة العمل: ${deepdiveWorkStatus}` : ''}
+${deepdiveAgeGroup ? `- الفئة العمرية: ${deepdiveAgeGroup}` : ''}
+${deepdiveIncomeSource ? `- مصدر الدخل: ${deepdiveIncomeSource}` : ''}
+${deepdiveIncomeStability ? `- طبيعة واستقرار الدخل: ${deepdiveIncomeStability}` : ''}
+
+⛔ قاعدة صارمة وملزمة في التحليل والتوصيات:
+لا تطرح أي سؤال أو نصيحة لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تفترض دواماً وظيفياً لمن هو طالب أو متقاعد أو باحث عن عمل). وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في الحوار.
+`;
 
     if (!apiKey) {
       const localDeepdive = {
@@ -2422,12 +2510,17 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
     }
 
     const systemInstruction = `
+${deepdiveUserContext}
+
 أنت خبير استشاري متقدم في مجال "${advisorTitle}".
-قم بتحليل إجابات المستخدم ودرجته (${score}/10) وأهدافه بدقة استشارية فائقة.
+قم بتحليل إجابات المستخدم ودرجته (${score}/10) وأهدافه بدقة استشارية فائقة وبما يطابق واقع حالته.
 قدم تحليلاً عملياً مشجعاً ومباشراً بصيغة JSON.
 `;
 
     const prompt = `
+${deepdiveUserContext}
+
+الجانب: ${advisorTitle}
 الدرجة الحالية: ${score}/10
 الإجابات المعطاة: ${JSON.stringify(answers || {})}
 الأهداف المحددة: ${JSON.stringify(goals || [])}
@@ -2557,19 +2650,41 @@ app.post('/api/gemini/eisenhower-suggestions', async (req: Request, res: Respons
       return res.json(getLocalSuggestions());
     }
 
+    const eisenhowerWorkStatus = (userProfile?.employmentStatus || userProfile?.workStatus || 'غير محدد').trim();
+    const eisenhowerAgeGroup = (userProfile?.ageGroup || '').trim();
+    const eisenhowerIncomeSource = (userProfile?.incomeSource || '').trim();
+    const eisenhowerIncomeStability = (userProfile?.incomeStability || '').trim();
+
+    const eisenhowerUserContext = `
+[سياق المستفيد الأساسي وتخصيص المهام المقترحة 🎯]:
+- الاسم: ${userProfile?.name || 'سعود'}
+- حالة العمل: ${eisenhowerWorkStatus}
+${eisenhowerAgeGroup ? `- الفئة العمرية: ${eisenhowerAgeGroup}` : ''}
+${eisenhowerIncomeSource ? `- مصدر الدخل: ${eisenhowerIncomeSource}` : ''}
+${eisenhowerIncomeStability ? `- طبيعة واستقرار الدخل: ${eisenhowerIncomeStability}` : ''}
+
+⛔ قاعدة صارمة وملزمة في اقتراح المهام والخطط:
+لا تقترح أي مهام أو خطط أو عادات تتعارض مع سياقه الحياتي وحالته (مثلاً لا تقترح مهام ترقية وظيفية أو دوام مكتبي لطالب أو متقاعد، ولا تقترح استثمارات مالية كبرى لطالب أو باحث عن عمل). وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه.
+`;
+
     const systemInstruction = `
+${eisenhowerUserContext}
+
 أنت "وكيل اقتراح الخطط في مصفوفة أيزنهاور (وكيل أهدافي 11)" في منصة "وزان" لتوازن الحياة.
-تستند حصرياً إلى مخرجات وكيل 9 (م. معتز التكاملي - محلل النظم وعنق الزجاجة) ووكيل 10 (د. هاني الموجه - رئيس الداشبورد وحامي المربع الثاني).
+تستند حصرياً إلى مخرجات وكيل 9 (م. معتز التكاملي - محلل النظم وعنق الزجاجة) ووكيل 10 (د. هاني الموجه - رئيس الداشبورد وحامي المربع الثاني) وبما يتوافق تماماً مع واقع وسياق المستفيد.
 قواعدك الأساسية:
-1. اقتراحات فقط (Suggestions Only): قدّم 3 إلى 5 اقتراحات مركزة وعملية للمربعات الأربعة.
+1. اقتراحات فقط (Suggestions Only): قدّم 3 إلى 5 اقتراحات مركزة وعملية للمربعات الأربعة تناسب واقع حالته.
 2. التركيز الأكبر على "المربع الثاني" (مهم وغير عاجل) كوقود للتوازن المستدام.
 3. الربط الصريح والواضح بسبب الاقتراح المشتق من تشخيص م. معتز (عنق الزجاجة، العادات المحورية) أو توجيه د. هاني.
 4. إخراج كائن JSON فقط وفق المخطط المطلوب.
 `;
 
     const prompt = `
+${eisenhowerUserContext}
+
 بيانات المستفيد ونتائج التحليل:
 - الاسم: ${userProfile?.name || 'سعود'}
+- حالة العمل: ${eisenhowerWorkStatus}
 - تقرير المنسق العام (وكيل 9 م. معتز):
   * عنق الزجاجة: ${JSON.stringify(directorReport?.criticalBottleneck || 'غير محدد')}
   * العادات المحورية: ${JSON.stringify(directorReport?.keystoneHabits || [])}
