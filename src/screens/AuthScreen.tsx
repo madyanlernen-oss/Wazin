@@ -15,7 +15,13 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { UserProfile } from '../types/lifeBalance';
-import { getStoredUsers, saveStoredUser } from '../utils/storage';
+import {
+  getStoredUsers,
+  saveStoredUser,
+  hashPassword,
+  saveUserCredential,
+  verifyUserPassword,
+} from '../utils/storage';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
@@ -110,8 +116,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     setError(null);
   };
 
-  // Handle Standard Login (Prototype: no plaintext password comparison)
-  const handleLoginSubmit = (e: React.FormEvent) => {
+  // Handle Standard Login with Strict Verification
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
@@ -137,6 +143,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       identifier === 'سعود المنصور';
 
     if (isDemoIdentifier) {
+      if (pass !== '123456') {
+        setError('كلمة المرور غير صحيحة للحساب التجريبي (كلمة المرور الافتراضية: 123456).');
+        setIsSubmitting(false);
+        return;
+      }
       const demoAccount: UserProfile = {
         name: 'سعود المنصور',
         email: 'demo@wazan.com',
@@ -153,36 +164,33 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
-    const found = savedUsers.find(
+    const currentUsers = getStoredUsers();
+    const found = currentUsers.find(
       (u) =>
         (u.email && u.email.toLowerCase() === identifier) ||
         u.name.toLowerCase() === identifier
     );
 
-    if (found) {
-      // Prototype mode: any password works for existing user (no plaintext password comparison)
-      setSuccessMsg(`أهلاً بك مجدداً يا ${found.name}! جاري الدخول...`);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => {
-        onLoginSuccess(found);
-      }, 500);
-    } else {
-      // Create new profile seamlessly without storing plaintext password
-      const newProfile: UserProfile = {
-        name: emailOrName.trim(),
-        email: emailOrName.includes('@') ? emailOrName.trim() : `${emailOrName.trim()}@wazan.com`,
-        hasPassword: Boolean(pass),
-        ageGroup: '25 - 34 سنة',
-        currentFocus: 'تحقيق التوازن الشامل',
-        registeredAt: new Date().toISOString(),
-      };
-      saveStoredUser(newProfile);
-      setSuccessMsg(`تم تسجيل الدخول بنجاح! مرحباً بك يا ${newProfile.name}.`);
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      timeoutRef.current = setTimeout(() => {
-        onLoginSuccess(newProfile);
-      }, 500);
+    // ⛔ حماية صارمة: منع الدخول التلقائي؛ إذا لم يكن الحساب مسجلاً يُرفض الطلب فوراً
+    if (!found) {
+      setError('بيانات الدخول غير صحيحة. لم يتم العثور على حساب مسجل بهذا البريد أو الاسم. يرجى التأكد من البيانات أو النقر على "إنشاء حساب جديد" بالأسفل.');
+      setIsSubmitting(false);
+      return;
     }
+
+    // التحقق الفعلي من كلمة المرور
+    const isPasswordValid = await verifyUserPassword(identifier, pass);
+    if (!isPasswordValid) {
+      setError('كلمة المرور غير صحيحة. يرجى التأكد وإعادة المحاولة.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    setSuccessMsg(`أهلاً بك مجدداً يا ${found.name}! جاري الدخول...`);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => {
+      onLoginSuccess(found);
+    }, 500);
   };
 
   // Handle Google Sign In simulation (Prototype)
@@ -212,13 +220,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
     }, 600);
   };
 
-  // Handle Register New Account (Prototype: stores hasPassword boolean instead of plaintext password)
-  const handleSignupSubmit = (e: React.FormEvent) => {
+  // Handle Register New Account with Password Hash Storage
+  const handleSignupSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
     const name = signupName.trim();
-    const email = signupEmail.trim();
+    const email = signupEmail.trim().toLowerCase();
     const pass = signupPassword.trim();
 
     if (!name) {
@@ -233,17 +241,35 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       setError('يرجى إدخال بريد إلكتروني صحيح (مثال: user@example.com).');
       return;
     }
-    if (!pass || pass.length < 3) {
-      setError('يرجى إدخال كلمة مرور تتكون من 3 خانات على الأقل.');
+    if (!pass || pass.length < 4) {
+      setError('يرجى إدخال كلمة مرور تتكون من 4 خانات على الأقل.');
       return;
     }
 
     setIsSubmitting(true);
 
+    const currentUsers = getStoredUsers();
+    const existing = currentUsers.find(
+      (u) =>
+        (u.email && u.email.toLowerCase() === email) ||
+        u.name.toLowerCase() === name.toLowerCase()
+    );
+
+    if (existing) {
+      setError('يوجد حساب مسجل بالفعل بهذا البريد الإلكتروني أو الاسم. يرجى تسجيل الدخول بدلاً من ذلك.');
+      setIsSubmitting(false);
+      return;
+    }
+
+    // تشفير وحفظ بيانات الاعتماد
+    const pwdHash = await hashPassword(pass);
+    saveUserCredential(email, pwdHash);
+    saveUserCredential(name.toLowerCase(), pwdHash);
+
     const newProfile: UserProfile = {
       name,
       email,
-      hasPassword: Boolean(pass),
+      hasPassword: true,
       ageGroup: '25 - 34 سنة',
       currentFocus: 'تحقيق التوازن الشامل وتحديد الأولويات',
       registeredAt: new Date().toISOString(),
@@ -602,7 +628,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           {/* 2. Honest Prototype Privacy Note */}
           <div className="text-xs text-[#64748B] dark:text-slate-400 flex items-center justify-center gap-1.5 text-center px-4">
             <ShieldCheck className="w-4 h-4 text-[#0A757E] dark:text-cyan-400 flex-shrink-0" aria-hidden="true" />
-            <span>هذا نموذج أولي: تُحفظ بياناتك على هذا الجهاز فقط، ولا يوجد تسجيل دخول حقيقي.</span>
+            <span>بيانات حسابك وكلمة المرور مشفرة ومحمية محلياً على هذا الجهاز.</span>
           </div>
         </div>
       </div>

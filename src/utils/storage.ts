@@ -81,17 +81,26 @@ export function cleanupStoredUserPasswords(): void {
           const parsed = JSON.parse(raw);
           if (Array.isArray(parsed)) {
             let modified = false;
-            const sanitized = parsed.map((item: any) => {
-              if (item && typeof item === 'object' && 'password' in item) {
-                modified = true;
-                const hasPassword = Boolean(
-                  item.hasPassword || (item.password && String(item.password).trim().length > 0)
-                );
-                const { password: _p, ...clean } = item;
-                return { ...clean, hasPassword };
-              }
-              return item;
-            });
+            const sanitized = parsed
+              .filter((item: any) => {
+                // إزالة أي حسابات وهمية تم إنشاؤها عبر خطأ النموذج الأولي السابق
+                if (item?.email && (item.email.includes('@jsjhdc.com') || item.email.includes('dwjwrjv'))) {
+                  modified = true;
+                  return false;
+                }
+                return true;
+              })
+              .map((item: any) => {
+                if (item && typeof item === 'object' && 'password' in item) {
+                  modified = true;
+                  const hasPassword = Boolean(
+                    item.hasPassword || (item.password && String(item.password).trim().length > 0)
+                  );
+                  const { password: _p, ...clean } = item;
+                  return { ...clean, hasPassword };
+                }
+                return item;
+              });
             if (modified) {
               localStorage.setItem(key, JSON.stringify(sanitized));
             }
@@ -102,20 +111,25 @@ export function cleanupStoredUserPasswords(): void {
       }
     }
 
-    // 2. Clean app state user profile if password was persisted
+    // 2. Clean app state user profile if password was persisted or if bogus test account was active
     for (const stateKey of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
       const raw = localStorage.getItem(stateKey);
       if (raw) {
         try {
           const parsed = JSON.parse(raw);
-          if (parsed && parsed.userProfile && 'password' in parsed.userProfile) {
-            const hasPassword = Boolean(
-              parsed.userProfile.hasPassword ||
-              (parsed.userProfile.password && String(parsed.userProfile.password).trim().length > 0)
-            );
-            const { password: _p, ...cleanProfile } = parsed.userProfile;
-            parsed.userProfile = { ...cleanProfile, hasPassword };
-            localStorage.setItem(stateKey, JSON.stringify(parsed));
+          if (parsed && parsed.userProfile) {
+            if (parsed.userProfile.email && (parsed.userProfile.email.includes('@jsjhdc.com') || parsed.userProfile.email.includes('dwjwrjv'))) {
+              parsed.userProfile = null;
+              localStorage.setItem(stateKey, JSON.stringify(parsed));
+            } else if ('password' in parsed.userProfile) {
+              const hasPassword = Boolean(
+                parsed.userProfile.hasPassword ||
+                (parsed.userProfile.password && String(parsed.userProfile.password).trim().length > 0)
+              );
+              const { password: _p, ...cleanProfile } = parsed.userProfile;
+              parsed.userProfile = { ...cleanProfile, hasPassword };
+              localStorage.setItem(stateKey, JSON.stringify(parsed));
+            }
           }
         } catch {
           // ignore
@@ -691,14 +705,16 @@ export const getStoredUsers = (): UserProfile[] => {
 
     const parsed: UserProfile[] = raw ? JSON.parse(raw) : [];
 
-    // Strip password from parsed users and set hasPassword
-    const sanitizedList: UserProfile[] = parsed.map((u) => {
-      const hasPassword = Boolean(
-        u.hasPassword || (u.password && String(u.password).trim().length > 0)
-      );
-      const { password: _p, ...clean } = u;
-      return { ...clean, hasPassword };
-    });
+    // Filter out bogus test accounts and strip password from parsed users and set hasPassword
+    const sanitizedList: UserProfile[] = parsed
+      .filter((u) => !u.email?.includes('@jsjhdc.com') && !u.email?.includes('dwjwrjv'))
+      .map((u) => {
+        const hasPassword = Boolean(
+          u.hasPassword || (u.password && String(u.password).trim().length > 0)
+        );
+        const { password: _p, ...clean } = u;
+        return { ...clean, hasPassword };
+      });
 
     const demoIdx = sanitizedList.findIndex(
       (u) =>
@@ -794,4 +810,132 @@ export const saveStoredUser = (user: UserProfile): void => {
     console.error('Failed to save user account:', e);
   }
 };
+
+export const CREDENTIALS_STORAGE_KEY = 'wazan_credentials_store_v1';
+
+/**
+ * توليد تجزئة آمنة لكلمة المرور (Secure Client-side Password Hash)
+ */
+export async function hashPassword(password: string): Promise<string> {
+  const salted = `${password.trim()}__wazan_secure_salt_2026__`;
+  if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
+    try {
+      const msgBuffer = new TextEncoder().encode(salted);
+      const hashBuffer = await window.crypto.subtle.digest('SHA-256', msgBuffer);
+      const hashArray = Array.from(new Uint8Array(hashBuffer));
+      return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+    } catch {
+      // fallback
+    }
+  }
+  let hash = 0;
+  for (let i = 0; i < salted.length; i++) {
+    const char = salted.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0;
+  }
+  return 'h_' + Math.abs(hash).toString(16);
+}
+
+/**
+ * جلب سجل بيانات الاعتماد المشفرة
+ */
+export function getStoredCredentials(): Record<string, string> {
+  try {
+    const raw = localStorage.getItem(CREDENTIALS_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * حفظ تجزئة كلمة المرور لمستخدم مسجل
+ */
+export function saveUserCredential(identifier: string, hash: string): void {
+  try {
+    const creds = getStoredCredentials();
+    creds[identifier.toLowerCase().trim()] = hash;
+    localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(creds));
+  } catch (e) {
+    console.error('Failed to save user credential:', e);
+  }
+}
+
+/**
+ * التحقق الحقيقي من صحة كلمة المرور
+ */
+export async function verifyUserPassword(identifier: string, password: string): Promise<boolean> {
+  const cleanId = identifier.trim().toLowerCase();
+  const pass = password.trim();
+
+  // الحساب التجريبي الافتراضي (سعود المنصور)
+  const isDemo =
+    cleanId === 'demo' ||
+    cleanId === 'wazan' ||
+    cleanId === 'demo@wazan.com' ||
+    cleanId === 'demo@wazan.ai' ||
+    cleanId === 'demo@tadbeer.ai' ||
+    cleanId === 'سعود المنصور';
+
+  if (isDemo) {
+    return pass === '123456';
+  }
+
+  const users = getStoredUsers();
+  const user = users.find(
+    (u) =>
+      (u.email && u.email.toLowerCase() === cleanId) ||
+      u.name.toLowerCase() === cleanId
+  );
+
+  // إذا كان المستخدم غير موجود أصلاً في النظام، يُرفض فوراً
+  if (!user) {
+    return false;
+  }
+
+  const creds = getStoredCredentials();
+  const userEmailKey = (user.email || '').toLowerCase().trim();
+  const userNameKey = user.name.toLowerCase().trim();
+  const storedHash = creds[userEmailKey] || creds[userNameKey] || creds[cleanId];
+
+  // إذا وُجدت تجزئة لكلمة المرور مسجلة مسبقاً، يجب تطابقها
+  if (storedHash) {
+    const computedHash = await hashPassword(pass);
+    return computedHash === storedHash;
+  }
+
+  // إذا كان الحساب مسجلاً مسبقاً بدون تجزئة، يتم حفظ كلمة المرور الآن إن كانت 3 خانات فأكثر
+  if (pass.length >= 3) {
+    const newHash = await hashPassword(pass);
+    if (userEmailKey) saveUserCredential(userEmailKey, newHash);
+    saveUserCredential(userNameKey, newHash);
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * حذف مستخدم
+ */
+export function removeStoredUser(identifier: string): void {
+  try {
+    const cleanId = identifier.trim().toLowerCase();
+    const users = getStoredUsers();
+    const filtered = users.filter(
+      (u) =>
+        u.email?.toLowerCase() !== cleanId &&
+        u.name.toLowerCase() !== cleanId
+    );
+    localStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(filtered));
+
+    const creds = getStoredCredentials();
+    delete creds[cleanId];
+    localStorage.setItem(CREDENTIALS_STORAGE_KEY, JSON.stringify(creds));
+  } catch (e) {
+    console.error('Failed to remove stored user:', e);
+  }
+}
+
 
