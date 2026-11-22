@@ -1162,56 +1162,31 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     }
 
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
+    // 5) اختصار systemInstruction بحذف التكرار والقالب الزائد دون المساس بقواعد الوكيل وحوكمته
     const systemInstruction = `
 ${agentRoleDescription}
 
-أنت الآن تخوض محادثة تفاعلية حية ومباشرة بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة وزان.
-أنت شخصية مستقلة، عميقة الفكر، حكيمة ودافئة، تفهم بذكاء الإنسان الذي أمامك من كلماته ومشاعره وتفكر معه كمرشد وشريك حقيقي.
+أنت الآن في محادثة استشارية حية بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة وزان.
+تحدث كشخصية مستقلة، واعية، حكيمة ودافئة، تفهم بذكاء الإنسان أمامها وتفكر معه كمرشد وشريك حقيقي.
 
 ${modeGuideline}
 ${clinicSpecialGuideline}
-
-قواعد الحوار والتفكير مع المستفيد:
-1. استمع لكل كلمة كتبها المستفيد وفكر معه في سياق مشاعره وحيرته وأفكاره كشخصية مستقلة تفهم من أمامها.
-2. أجب على ما سأله المستفيد صراحة في صلب كلامك وبكل وضوح ودفء وشفافية.
-3. ⚠️ قاعدة السؤال التفاعلي الإلزامية: لا تكتفِ أبداً بسرد نصائح أو إلقاء خطبة مغلقة! اختم ردك دائماً بسؤال ذكي، حانٍ، أو استبصاري يفتح أفق الحوار ويدعو المستفيد للمشاركة والفضفضة والتأمل في واقعه.
-4. قبل صياغة الرد، أجرِ محاكاة داخلية سريعة (Self-Reflection) للتحدي وتداعياته النفسية والعملية واستخلص أعمق استنتاج.
-5. وثق هذا الاستنتاج والتمرين الذاتي بالكامل في حقل "reasoning".
-6. ابنِ ردك النهائي في "reply" على خلاصة هذه المحاكاة ليكون عميقاً ومؤثراً وشخصياً.
-7. تحدث باللغة العربية الفصحى الراقية، الواضحة، والملهمة، وخاطب المستفيد باحترام ومودة طبيعية دون ركّة أو تكرار.
-8. قدّم نصيحة جوهرية عملية مصحوبة بخطوتين إجرائيتين سريعتين (Micro-habits) يمكن البدء بهما فوراً.
-9. ${isEvaluationSession ? `أعد توجيهه لسؤال المحطة (${evaluationStep || 1} من 8) التقييمي مع طرح سؤال استيضاحي يلامس واقعه.` : 'اختم بسؤال تأملي ذكي يفتح للمستفيد أفقاً جديداً في إدراك ذاته وإدارة حياته.'}
-
 ${evaluationSessionGuideline}
 
 سياق المستفيد من منصة وزان:
 - الاسم: ${effectiveUserProfile?.name || 'صديقنا'}
-- الدرجة الحالية في هذا الجانب: ${effectiveScore}/10
+- الدرجة الحالية: ${effectiveScore}/10
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
-- الأهداف الحالية: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
-- إجابات التقييم السابقة: ${JSON.stringify(effectiveAnswers)}
-
-أرجع الرد دائماً بصيغة JSON مهيكلة وفق المخطط التالي:
-{
-  "agent_name": "${advisorName}",
-  "reasoning": "محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي...",
-  "score": ${effectiveScore},
-  "station_completed": false,
-  "strengths": ["نقطة قوة من كلامه"],
-  "challenges": ["فرصة تطوير من كلامه"],
-  "summary": "ملخص الوضع بناءً على البيانات والمحادثة",
-  "advice": "نصيحة عملية سريعة وموجهة",
-  "reply": "نص الرد الحواري المشخصن والتفاعلي المباشر من المستشار متفاعلاً مع ما قاله المستفيد",
-  "actionSteps": ["خطوة عملية أولى", "خطوة عملية ثانية"],
-  "reflectionQuestion": "سؤال تأملي ذكي للمستفيد"
-}
+- الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
+- إجابات التقييم: ${JSON.stringify(effectiveAnswers)}
 `;
 
     // تطهير وبناء تسلسل المحادثة التفاعلية بما يتوافق بدقة مع متطلبات Google GenAI
     const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
 
-    if (Array.isArray(history)) {
-      for (const h of history) {
+    // 5) الاقتصار على آخر 6 رسائل من history لتقليل حجم الطلب وتسريع المعالجة
+    const recentHistory = Array.isArray(history) ? history.slice(-6) : [];
+    for (const h of recentHistory) {
         if (!h) continue;
         const role: 'user' | 'model' =
           h.role === 'model' || h.role === 'advisor' || h.sender === 'advisor' || h.sender === 'model'
@@ -1245,7 +1220,6 @@ ${evaluationSessionGuideline}
           });
         }
       }
-    }
 
     // إضافة رسالة المستخدم الحالية
     const currentMsgText = message.trim();
@@ -1266,128 +1240,196 @@ ${evaluationSessionGuideline}
       });
     }
 
-    // 2) تجربة النماذج بالترتيب المحدد:
-    // process.env.GEMINI_MODEL ثم gemini-flash-latest ثم gemini-flash-lite-latest (مع نماذج مساندة إضافية)
+    // 4) ترتيب أسرع: ابدأ بنموذج lite الأقل ازدحاماً ثم GEMINI_MODEL ثم gemini-flash-latest
     const candidateModels = Array.from(
       new Set(
         [
+          'gemini-flash-lite-latest',
           process.env.GEMINI_MODEL,
           'gemini-flash-latest',
-          'gemini-flash-lite-latest',
           'gemini-3.1-flash-lite',
           'gemini-3.5-flash-lite',
         ].filter(Boolean) as string[]
       )
     );
 
-    let response: any = null;
-    let usedModel = '';
+    const requestConfig = {
+      systemInstruction,
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          agent_name: {
+            type: Type.STRING,
+            description: 'اسم الوكيل أو المستشار',
+          },
+          reasoning: {
+            type: Type.STRING,
+            description: 'تحليل عميق وخطوات تفكير منطقية مرتبطة بحالة المستخدم وأهدافه في عجلة الحياة',
+          },
+          score: {
+            type: Type.NUMBER,
+            description: 'درجة أو تقييم رقمي',
+          },
+          summary: {
+            type: Type.STRING,
+            description: 'ملخص الوضع بناءً على البيانات',
+          },
+          advice: {
+            type: Type.STRING,
+            description: 'نصيحة عملية سريعة وموجهة',
+          },
+          reply: {
+            type: Type.STRING,
+            description: 'نص الرد التفصيلي والمشجع من المستشار المتحدث مباشرة للمستفيد',
+          },
+          actionSteps: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: 'خطوات إجرائية سريعة يمكن إضافتها لقائمة الأهداف',
+          },
+          reflectionQuestion: {
+            type: Type.STRING,
+            description: 'سؤال تأملي ذكي للمستفيد',
+          },
+          station_completed: {
+            type: Type.BOOLEAN,
+            description: 'true only if the user has provided clear, sufficient answers covering their real state and the doctor is ready to finalize this station; false if the user gave a greeting, vague response, or more diagnostic exploration is needed',
+          },
+          strengths: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: '1 to 3 dynamic key strengths extracted from what the user actually said in this session',
+          },
+          challenges: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: '1 to 3 dynamic key challenges/growth areas extracted from what the user actually said in this session',
+          },
+        },
+        required: ['reasoning', 'advice', 'reply', 'actionSteps'],
+      },
+      // 6) تعطيل/تقليل التفكير الداخلي لتسريع الاستجابة
+      thinkingConfig: {
+        thinkingBudget: 0,
+      },
+    };
 
-    for (const model of candidateModels) {
-      let attempts = 0;
-      const maxRetries = 2; // 1) أعد المحاولة مرتين عند 503 أو 429
-      let modelSucceeded = false;
+    // 1) مهلة 10 ثوانٍ لكل استدعاء، و2) تقليل الانتظار عند 503 إلى مرة واحدة مع 500ms
+    const callSingleModel = async (
+      model: string,
+      abortState: { aborted: boolean }
+    ): Promise<{ response: any; model: string; durationMs: number }> => {
+      let attempt = 0;
+      while (attempt <= 1) {
+        if (abortState.aborted) {
+          throw new Error(`تم تجاوز النموذج ${model} لسبق نموذج آخر`);
+        }
+        const attemptStart = Date.now();
+        let timeoutHandle: any;
 
-      while (attempts <= maxRetries) {
         try {
-          response = await ai.models.generateContent({
+          const apiCall = ai.models.generateContent({
             model,
             contents,
-            config: {
-              systemInstruction,
-              responseMimeType: 'application/json',
-              responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                  agent_name: {
-                    type: Type.STRING,
-                    description: 'اسم الوكيل أو المستشار',
-                  },
-                  reasoning: {
-                    type: Type.STRING,
-                    description: 'تحليل عميق وخطوات تفكير منطقية مرتبطة بحالة المستخدم وأهدافه في عجلة الحياة',
-                  },
-                  score: {
-                    type: Type.NUMBER,
-                    description: 'درجة أو تقييم رقمي',
-                  },
-                  summary: {
-                    type: Type.STRING,
-                    description: 'ملخص الوضع بناءً على البيانات',
-                  },
-                  advice: {
-                    type: Type.STRING,
-                    description: 'نصيحة عملية سريعة وموجهة',
-                  },
-                  reply: {
-                    type: Type.STRING,
-                    description: 'نص الرد التفصيلي والمشجع من المستشار المتحدث مباشرة للمستفيد',
-                  },
-                  actionSteps: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: 'خطوات إجرائية سريعة يمكن إضافتها لقائمة الأهداف',
-                  },
-                  reflectionQuestion: {
-                    type: Type.STRING,
-                    description: 'سؤال تأملي ذكي للمستفيد',
-                  },
-                  station_completed: {
-                    type: Type.BOOLEAN,
-                    description: 'true only if the user has provided clear, sufficient answers covering their real state and the doctor is ready to finalize this station; false if the user gave a greeting, vague response, or more diagnostic exploration is needed',
-                  },
-                  strengths: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: '1 to 3 dynamic key strengths extracted from what the user actually said in this session',
-                  },
-                  challenges: {
-                    type: Type.ARRAY,
-                    items: { type: Type.STRING },
-                    description: '1 to 3 dynamic key challenges/growth areas extracted from what the user actually said in this session',
-                  },
-                },
-                required: ['reasoning', 'advice', 'reply', 'actionSteps'],
-              },
-            },
+            config: requestConfig,
           });
 
-          usedModel = model;
-          // 4) اطبع عند النجاح اسم النموذج المستخدم
-          console.log(`[Advisor Chat] نجح استخدام النموذج: ${model}`);
-          modelSucceeded = true;
-          break;
-        } catch (error: any) {
-          // 4) اطبع في console.error عند كل فشل: اسم النموذج والخطأ الكامل
-          console.error(`[Advisor Chat] فشل النموذج "${model}" (محاولة ${attempts + 1}/${maxRetries + 1}):`, error);
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(() => {
+              reject(new Error(`تجاوزت مهلة الاستجابة (10 ثوانٍ) للنموذج: ${model}`));
+            }, 10000);
+          });
 
-          const errStr = JSON.stringify(error?.message || error || '');
-          const status = error?.status || error?.code;
-          const isTransient = status === 503 || status === 429 ||
-            errStr.includes('503') || errStr.includes('429') ||
-            errStr.includes('high demand') || errStr.includes('RESOURCE_EXHAUSTED') ||
+          const res = await Promise.race([apiCall, timeoutPromise]);
+          clearTimeout(timeoutHandle);
+
+          const durationMs = Date.now() - attemptStart;
+          // 7) اطبع في Logs زمن كل استدعاء بالمللي ثانية واسم النموذج الذي نجح
+          console.log(`[Advisor Chat] استجاب النموذج "${model}" بنجاح في ${durationMs}ms`);
+          return { response: res, model, durationMs };
+        } catch (err: any) {
+          clearTimeout(timeoutHandle);
+          const durationMs = Date.now() - attemptStart;
+          console.error(
+            `[Advisor Chat] فشل النموذج "${model}" بعد ${durationMs}ms (محاولة ${attempt + 1}/2):`,
+            err?.message || err
+          );
+
+          if (abortState.aborted) {
+            throw err;
+          }
+
+          const errStr = JSON.stringify(err?.message || err || '');
+          const status = err?.status || err?.code;
+          const is503 =
+            status === 503 ||
+            status === 429 ||
+            errStr.includes('503') ||
+            errStr.includes('429') ||
+            errStr.includes('high demand') ||
+            errStr.includes('RESOURCE_EXHAUSTED') ||
             errStr.includes('UNAVAILABLE');
 
-          // 1) عند فشل بخطأ 503 أو 429: أعد المحاولة مرتين بانتظار ثانيتين بينهما
-          if (isTransient && attempts < maxRetries) {
-            attempts++;
-            await new Promise((resolve) => setTimeout(resolve, 2000));
+          // 2) إعادة المحاولة عند 503 مرة واحدة فقط وبانتظار 500ms
+          if (is503 && attempt === 0) {
+            attempt++;
+            await new Promise((r) => setTimeout(r, 500));
             continue;
           }
 
-          // 2) إن استمر الفشل أو ظهر خطأ 404: جرّب النموذج التالي
-          break;
+          throw err;
         }
       }
+      throw new Error(`فشل النموذج ${model} بعد استنفاد المحاولات`);
+    };
 
-      if (modelSucceeded && response) {
-        break;
+    // 3) النماذج بالتوازي بدل التتابع: عند فشل النموذج الأول أو تأخره أكثر من 6 ثوانٍ، أطلق النموذج البديل بالتوازي واستخدم أول رد ناجح وألغِ الباقي
+    const abortState = { aborted: false };
+    const winningResult = await new Promise<{ response: any; model: string; durationMs: number }>(
+      (resolve, reject) => {
+        let completedCount = 0;
+        let hasResolved = false;
+
+        const launchModel = (idx: number) => {
+          if (idx >= candidateModels.length || hasResolved) return;
+          const currentModel = candidateModels[idx];
+          let nextLaunched = false;
+          let sixSecondTimer: any;
+
+          const triggerNext = () => {
+            if (!nextLaunched && idx + 1 < candidateModels.length && !hasResolved) {
+              nextLaunched = true;
+              launchModel(idx + 1);
+            }
+          };
+
+          sixSecondTimer = setTimeout(triggerNext, 6000);
+
+          callSingleModel(currentModel, abortState)
+            .then((result) => {
+              clearTimeout(sixSecondTimer);
+              if (!hasResolved) {
+                hasResolved = true;
+                abortState.aborted = true;
+                resolve(result);
+              }
+            })
+            .catch(() => {
+              clearTimeout(sixSecondTimer);
+              triggerNext();
+              completedCount++;
+              if (completedCount === candidateModels.length && !hasResolved) {
+                reject(new Error('جميع نماذج Gemini فشلت أو تجاوزت المهلة المحددة.'));
+              }
+            });
+        };
+
+        launchModel(0);
       }
-    }
+    );
 
-    if (!response) {
-      throw new Error('جميع نماذج Gemini المرشحة لم تنجح في توليد الرد.');
-    }
+    const response = winningResult.response;
 
     const parsed = JSON.parse(response.text || '{}');
     parsed.agent_name = parsed.agent_name || advisorName;
