@@ -241,6 +241,7 @@ export default function App() {
 
   // Handler: Start a fresh new weekly assessment cycle
   const handleStartNewWeeklyAssessment = () => {
+    setSelectedAdvisorId('spiritual');
     setAppState((prev) => {
       const resetScores: Record<string, number> = {};
       ADVISORS_LIST.forEach((adv) => {
@@ -255,6 +256,7 @@ export default function App() {
         answers: {},
         scores: resetScores,
         directorReport: null,
+        selectedAdvisorId: 'spiritual',
       };
     });
 
@@ -459,22 +461,7 @@ export default function App() {
               onNavigateToDirectorSummary={() => setActiveScreen('director_summary')}
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
-              onStartEvaluation={() => {
-                setAppState((prev) => ({
-                  ...prev,
-                  completedAdvisors: [],
-                  completedDates: {},
-                  answers: {},
-                }));
-                try {
-                  localStorage.removeItem('wazan_eval_chats');
-                  localStorage.removeItem('wazan_eval_insights');
-                  localStorage.removeItem('wazan_current_eval_advisor');
-                } catch {
-                  // ignore
-                }
-                setActiveScreen('onboarding');
-              }}
+              onStartEvaluation={handleStartNewWeeklyAssessment}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               theme={theme}
             />

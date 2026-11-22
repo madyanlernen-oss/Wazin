@@ -536,14 +536,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     }
   }, []);
 
-  useEffect(() => {
-    if (completedAdvisors.length === 0) {
-      setChatMessages({});
-      setStationInsights({});
-      setStationTurnCount({});
-    }
-  }, [completedAdvisors.length]);
-
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
   const stationNumber = currentAdvisorIndex + 1; // 1 to 8
 
@@ -606,15 +598,31 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     };
   };
 
-  // Initialize welcoming message for station
+  useEffect(() => {
+    if (completedAdvisors.length === 0) {
+      const firstAdvisor = ADVISORS_LIST[0];
+      const firstStationConfig = STATION_ASSESSMENT_CONFIG[firstAdvisor.id] || currentStationConfig;
+      const initialOpeningMsg = getOpeningMessage(firstAdvisor, firstStationConfig, 1);
+      setChatMessages({ [firstAdvisor.id]: [initialOpeningMsg] });
+      setStationInsights({});
+      setStationTurnCount({ [firstAdvisor.id]: 0 });
+      setCurrentAdvisorIndex(0);
+    }
+  }, [completedAdvisors.length]);
+
+  // 1) Initialize welcoming message for station (مع مراقبة chatMessages[currentAdvisor.id] وحماية من الحلقات اللانهائية)
   useEffect(() => {
     const advisorKey = currentAdvisor.id;
-    if (!chatMessages[advisorKey] || chatMessages[advisorKey].length === 0) {
+    const currentMsgs = chatMessages[advisorKey];
+    if (!currentMsgs || currentMsgs.length === 0) {
       const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, stationNumber);
-      setChatMessages((prev) => ({ ...prev, [advisorKey]: [openingMsg] }));
+      setChatMessages((prev) => {
+        if (prev[advisorKey] && prev[advisorKey].length > 0) return prev;
+        return { ...prev, [advisorKey]: [openingMsg] };
+      });
       setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
     }
-  }, [currentAdvisorIndex, currentAdvisor]);
+  }, [currentAdvisorIndex, currentAdvisor, chatMessages[currentAdvisor.id]]);
 
   // Auto scroll down
   useEffect(() => {
@@ -1169,9 +1177,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
               <button
                 type="button"
                 onClick={() => {
-                  setChatMessages({});
+                  const firstAdvisor = ADVISORS_LIST[0];
+                  const firstStationConfig = STATION_ASSESSMENT_CONFIG[firstAdvisor.id] || currentStationConfig;
+                  const initialOpeningMsg = getOpeningMessage(firstAdvisor, firstStationConfig, 1);
+                  setChatMessages({ [firstAdvisor.id]: [initialOpeningMsg] });
                   setStationInsights({});
-                  setStationTurnCount({});
+                  setStationTurnCount({ [firstAdvisor.id]: 0 });
                   setCurrentAdvisorIndex(0);
                   try {
                     localStorage.removeItem('wazan_eval_chats');
@@ -1180,7 +1191,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   } catch {
                     // ignore
                   }
-                  onStartNewWeeklyAssessment();
+                  if (onStartNewWeeklyAssessment) {
+                    onStartNewWeeklyAssessment();
+                  }
                 }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7F6F2] dark:bg-[#162734] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all shadow-xs cursor-pointer"
                 title="بدء دورة تقييم أسبوعي جديدة لكافة الأبعاد"
