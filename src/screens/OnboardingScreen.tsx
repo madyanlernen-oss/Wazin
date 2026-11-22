@@ -40,7 +40,7 @@ interface EvaluationChatMessage {
   summary?: string;
   advice?: string;
   isCrisis?: boolean;
-  source?: 'gemini' | 'local-fallback';
+  source?: 'gemini' | 'groq' | 'local-fallback';
 }
 
 interface StationDynamicInsights {
@@ -753,7 +753,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       let earnedScore = calculateSemanticScore(text, historyTextsArray, detectedScore || undefined);
       let dynamicStrengths: string[] = [];
       let dynamicChallenges: string[] = [];
-      let responseSource: 'gemini' | 'local-fallback' = 'gemini';
+      let responseSource: 'gemini' | 'groq' | 'local-fallback' = 'gemini';
 
       try {
         const res = await fetch('/api/gemini/advisor-chat', {

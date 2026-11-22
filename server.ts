@@ -954,8 +954,7 @@ function generateLocalAgentResponse(
 
 // Endpoint: Advisor Chat
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
-  try {
-    const {
+  const {
       advisor,
       userProfile,
       answers,
@@ -977,6 +976,9 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
     if (!message) {
       return res.status(400).json({ error: 'الرسالة مطلوبة' });
     }
+
+    let systemInstruction = '';
+    let advisorName = 'مستشار وزان';
 
     const effectiveUserProfile = userProfile || { name: userName || 'صديقنا' };
     const effectiveAnswers = answers || userAnswers || {};
@@ -1030,29 +1032,11 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
       agentRoleDescription = rawDoc.replace(/يجب أن تكون إجابتك دائماً بصيغة JSON[\s\S]*/, '').trim();
     }
 
-    const advisorName = (advisor && typeof advisor === 'object' && advisor.name) ? advisor.name : defaultMeta.name;
+    advisorName = (advisor && typeof advisor === 'object' && advisor.name) ? advisor.name : defaultMeta.name;
     const advisorRole = (advisor && typeof advisor === 'object' && (advisor.role || advisor.title)) ? (advisor.role || advisor.title) : defaultMeta.role;
 
     const msgLower = message.toLowerCase().trim();
     const isCrisisOrDeath = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(msgLower);
-
-    // إذا لم يكن مفتاح Gemini متوفراً في البيئة، نستخدم محرك الاستجابة الذكي المدمج المعتمد على مواصفات الوكلاء
-    if (!apiKey) {
-      const localResponse = generateLocalAgentResponse(
-        agentKey,
-        message,
-        effectiveUserProfile?.name || 'صديقنا',
-        advisor,
-        effectiveScore,
-        isCrisisOrDeath ? false : isEvaluationSession,
-        evaluationStep,
-        evaluationQuestionTitle,
-        assessmentMode,
-        stationTurnCount
-      );
-      (localResponse as any).source = 'local-fallback';
-      return res.json(localResponse);
-    }
 
     // تحديد توجيهات النمط المختار من Gemini (سريع، متوازن، أو تفكير عميق استراتيجي)
     let modeGuideline = '';
@@ -1163,7 +1147,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
     // 5) اختصار systemInstruction بحذف التكرار والقالب الزائد دون المساس بقواعد الوكيل وحوكمته
-    const systemInstruction = `
+    systemInstruction = `
 ${agentRoleDescription}
 
 أنت الآن في محادثة استشارية حية بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة وزان.
@@ -1240,15 +1224,23 @@ ${evaluationSessionGuideline}
       });
     }
 
+    try {
+      if (!apiKey) {
+        throw new Error('مفتاح GEMINI_API_KEY غير متوفر في متغيرات البيئة.');
+      }
+
     // 4) ترتيب أسرع: ابدأ بنموذج lite الأقل ازدحاماً ثم GEMINI_MODEL ثم gemini-flash-latest
+    const userGeminiModel = process.env.GEMINI_MODEL;
+    const validUserModel = userGeminiModel && !userGeminiModel.includes('2.5') ? userGeminiModel : undefined;
+
     const candidateModels = Array.from(
       new Set(
         [
           'gemini-flash-lite-latest',
-          process.env.GEMINI_MODEL,
+          validUserModel,
           'gemini-flash-latest',
-          'gemini-3.1-flash-lite',
-          'gemini-3.5-flash-lite',
+          'gemini-2.0-flash',
+          'gemini-2.0-flash-lite',
         ].filter(Boolean) as string[]
       )
     );
@@ -1457,24 +1449,130 @@ ${evaluationSessionGuideline}
     parsed.source = 'gemini';
     return res.json(parsed);
   } catch (error: any) {
-    console.error('Advisor Chat Final Fallback error:', error?.message || error);
-    const {
-      advisor,
-      userProfile,
-      message,
-      userName,
-      userScore,
-      isEvaluationSession,
-      evaluationStep,
-      evaluationQuestionTitle,
-      assessmentMode = 'weekly_checkin',
-      stationTurnCount = 0,
-    } = req.body;
+    console.warn('[Advisor Chat] تعذر إتمام الرد عبر Gemini، فحص مزود Groq الاحتياطي...', error?.message || error);
+
+    // 1) استخدام متغيرات البيئة GROQ_API_KEY و GROQ_MODEL (الافتراضي llama-3.3-70b-versatile) دون كتابة أي مفتاح
+    const groqApiKey = process.env.GROQ_API_KEY;
+    if (groqApiKey) {
+      const groqModel = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';
+      const groqStart = Date.now();
+
+      try {
+        const groqMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+
+        // 2) استدعاء Groq بنفس systemInstruction وآخر 6 رسائل من history، مع response_format: { type: "json_object" }
+        const groqSystemPrompt = `${systemInstruction || ''}
+
+IMPORTANT: You must respond in valid JSON format with the following fields:
+{
+  "agent_name": "${advisorName}",
+  "reasoning": "تحليل واستبصار عميق وخطوات تفكير منطقية",
+  "score": ${effectiveScore},
+  "summary": "ملخص الوضع",
+  "advice": "نصيحة عملية سريعة وموجهة",
+  "reply": "نص الرد الحواري المشخصن والتفاعلي المباشر من المستشار",
+  "actionSteps": ["خطوة عملية أولى", "خطوة عملية ثانية"],
+  "reflectionQuestion": "سؤال تأملي ذكي للمستفيد",
+  "station_completed": false,
+  "strengths": ["نقاط القوة"],
+  "challenges": ["فرصة تطوير من كلامه"]
+}`;
+
+        groqMessages.push({ role: 'system', content: groqSystemPrompt });
+
+        const recentHistory = Array.isArray(history) ? history.slice(-6) : [];
+        for (const h of recentHistory) {
+          if (!h) continue;
+          const role =
+            h.role === 'model' || h.role === 'advisor' || h.sender === 'advisor' || h.sender === 'model'
+              ? 'assistant'
+              : 'user';
+
+          let text = '';
+          if (typeof h === 'string') text = h;
+          else if (typeof h.content === 'string') text = h.content;
+          else if (typeof h.text === 'string') text = h.text;
+          else if (Array.isArray(h.parts) && h.parts.length > 0) {
+            text = h.parts
+              .map((p: any) => (typeof p === 'string' ? p : p?.text || ''))
+              .filter(Boolean)
+              .join('\n');
+          }
+          text = text.trim();
+          if (!text) continue;
+
+          groqMessages.push({ role, content: text });
+        }
+
+        groqMessages.push({ role: 'user', content: String(message || '').trim() });
+
+        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${groqApiKey}`,
+          },
+          body: JSON.stringify({
+            model: groqModel,
+            messages: groqMessages,
+            response_format: { type: 'json_object' },
+            temperature: 0.6,
+          }),
+        });
+
+        if (!groqRes.ok) {
+          const errText = await groqRes.text();
+          throw new Error(`Groq API error ${groqRes.status}: ${errText}`);
+        }
+
+        const groqData = await groqRes.json();
+        const contentStr = groqData.choices?.[0]?.message?.content || '{}';
+        const parsed = JSON.parse(contentStr);
+
+        const durationMs = Date.now() - groqStart;
+        // 5) اطبع في Logs اسم المزوّد وزمن الاستجابة بالمللي ثانية
+        console.log(`[Advisor Chat] استجاب مزود Groq (${groqModel}) بنجاح في ${durationMs}ms`);
+
+        // 3) تحويل الرد إلى نفس الشكل المتوقع
+        parsed.agent_name = parsed.agent_name || advisorName;
+        parsed.reasoning = parsed.reasoning || '';
+        parsed.summary = parsed.summary || '';
+        parsed.advice = parsed.advice || '';
+        parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
+        parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
+
+        const isUserAsking = /[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(message);
+        if (isEvaluationSession && (stationTurnCount < 4 || isUserAsking)) {
+          parsed.station_completed = false;
+        }
+
+        parsed.strengths = Array.isArray(parsed.strengths) ? parsed.strengths : [];
+        parsed.challenges = Array.isArray(parsed.challenges) ? parsed.challenges : [];
+        if (!parsed.reply && (parsed.advice || parsed.summary)) {
+          parsed.reply = parsed.advice || parsed.summary;
+        }
+        if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
+          if (parsed.advice) parsed.actionSteps = [parsed.advice];
+          else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
+          else parsed.actionSteps = [];
+        }
+
+        // 3) أضف source: "groq"
+        parsed.source = 'groq';
+        return res.json(parsed);
+      } catch (groqErr: any) {
+        const durationMs = Date.now() - groqStart;
+        console.error(`[Advisor Chat] فشل مزود Groq (${groqModel}) بعد ${durationMs}ms:`, groqErr?.message || groqErr);
+      }
+    }
+
+    // 4) لا تستخدم المحرك المحلي إلا إذا فشل Gemini وGroq معاً
+    console.warn('[Advisor Chat] تم اللجوء إلى المحرك المحلي بعد تعذر Gemini وGroq.');
     const agentKey = req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'));
     const localFallback = generateLocalAgentResponse(
       agentKey,
       message || '',
-      userProfile?.name || userName || 'صديقنا',
+      effectiveUserProfile?.name || userName || 'صديقنا',
       advisor,
       userScore || 5,
       isEvaluationSession,
@@ -1603,7 +1701,7 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
 `;
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+      model: (process.env.GEMINI_MODEL && !process.env.GEMINI_MODEL.includes('2.5') ? process.env.GEMINI_MODEL : 'gemini-flash-lite-latest'),
       contents: prompt,
       config: {
         systemInstruction,
@@ -1751,7 +1849,7 @@ app.post('/api/gemini/area-deepdive', async (req: Request, res: Response) => {
 `;
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+      model: (process.env.GEMINI_MODEL && !process.env.GEMINI_MODEL.includes('2.5') ? process.env.GEMINI_MODEL : 'gemini-flash-lite-latest'),
       contents: prompt,
       config: {
         systemInstruction,
@@ -1898,7 +1996,7 @@ app.post('/api/gemini/eisenhower-suggestions', async (req: Request, res: Respons
 `;
 
     const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+      model: (process.env.GEMINI_MODEL && !process.env.GEMINI_MODEL.includes('2.5') ? process.env.GEMINI_MODEL : 'gemini-flash-lite-latest'),
       contents: prompt,
       config: {
         systemInstruction,
