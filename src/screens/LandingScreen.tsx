@@ -12,6 +12,7 @@ import {
   AlertCircle,
   Loader2,
   ArrowUp,
+  Check,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LifeDimensionsGuide } from '../components/LifeDimensionsGuide';
@@ -166,6 +167,42 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   const [isVideoLoading, setIsVideoLoading] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [hasStartedPlaying, setHasStartedPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [selectedQuality, setSelectedQuality] = useState('1080p HD');
+  const [showQualityMenu, setShowQualityMenu] = useState(false);
+
+  const formatVideoTime = (secs: number) => {
+    if (!secs || isNaN(secs)) return '00:00';
+    const m = Math.floor(secs / 60);
+    const s = Math.floor(secs % 60);
+    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  };
+
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      setCurrentTime(videoRef.current.currentTime);
+    }
+  };
+
+  const handleLoadedMetadata = () => {
+    if (videoRef.current) {
+      setDuration(videoRef.current.duration || 0);
+    }
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    if (!videoRef.current || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+    const targetTime = ratio * duration;
+    videoRef.current.currentTime = targetTime;
+    setCurrentTime(targetTime);
+  };
+
+  const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   const handleTogglePlay = () => {
     if (!videoRef.current) return;
@@ -524,9 +561,9 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           </div>
 
           {/* Video Player Frame Container with Design System Rounded Corners and Dark Glass Frame */}
-          <div className="relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border border-slate-200/90 dark:border-cyan-500/25 bg-white/60 dark:bg-slate-900/60 backdrop-blur-md shadow-2xl transition-all duration-500 group">
+          <div className="relative rounded-3xl sm:rounded-[2.5rem] overflow-hidden border border-slate-200/90 dark:border-teal-500/25 bg-[#0c1419] backdrop-blur-md shadow-2xl transition-all duration-500 group">
             {/* 16:9 Aspect Ratio Frame */}
-            <div className="relative aspect-video w-full overflow-hidden bg-gradient-to-br from-[#0c242c] via-[#091823] to-[#1c122e]">
+            <div className="relative aspect-video w-full overflow-hidden bg-[#0c1419]">
               {/* HTML5 Video Element */}
               <video
                 ref={videoRef}
@@ -543,6 +580,9 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 onWaiting={() => setIsVideoLoading(true)}
                 onPlaying={() => setIsVideoLoading(false)}
                 onCanPlay={() => setIsVideoLoading(false)}
+                onTimeUpdate={handleTimeUpdate}
+                onLoadedMetadata={handleLoadedMetadata}
+                onDurationChange={handleLoadedMetadata}
                 onError={() => {
                   setVideoError(true);
                   setIsVideoLoading(false);
@@ -552,19 +592,21 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 aria-label="الفيديو التعريفي لمنظومة وزان"
               />
 
-              {/* Subtle overlay when paused/before play to enhance central play button contrast */}
-              {!isPlaying && !videoError && (
-                <div
-                  className="absolute inset-0 bg-black/30 pointer-events-none z-10 transition-opacity duration-300"
-                  aria-hidden="true"
-                />
-              )}
+              {/* 4. Cinematic Subtle Vignette & Gradient Overlay on Hover (#0c1419 aesthetic) */}
+              <div
+                className="absolute inset-0 pointer-events-none z-10 opacity-70 group-hover:opacity-100 transition-opacity duration-500"
+                style={{
+                  background:
+                    'radial-gradient(ellipse 95% 85% at 50% 50%, rgba(12, 20, 25, 0.1) 0%, rgba(12, 20, 25, 0.45) 60%, rgba(12, 20, 25, 0.92) 100%)',
+                }}
+                aria-hidden="true"
+              />
 
               {/* Loading State Overlay */}
               {isVideoLoading && !videoError && (
-                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 backdrop-blur-xs pointer-events-none animate-fadeIn">
-                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-black/75 border border-white/10 text-white text-xs font-bold shadow-lg">
-                    <Loader2 className="w-4 h-4 animate-spin text-cyan-400" />
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0c1419]/60 backdrop-blur-xs pointer-events-none animate-fadeIn">
+                  <div className="flex items-center gap-2.5 px-4 py-2 rounded-xl bg-[#0c1419]/90 border border-[#14b8a6]/30 text-white text-xs font-bold shadow-lg">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#14b8a6]" />
                     <span>جارٍ تحميل المقطع...</span>
                   </div>
                 </div>
@@ -572,7 +614,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
 
               {/* Fallback Error State Overlay */}
               {videoError && (
-                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 bg-slate-900/90 backdrop-blur-md text-white text-center space-y-3 animate-fadeIn">
+                <div className="absolute inset-0 z-30 flex flex-col items-center justify-center p-6 bg-[#0c1419]/95 backdrop-blur-md text-white text-center space-y-3 animate-fadeIn">
                   <div className="w-12 h-12 rounded-2xl bg-amber-500/20 text-amber-300 border border-amber-400/30 flex items-center justify-center shadow-inner">
                     <AlertCircle className="w-6 h-6" />
                   </div>
@@ -585,7 +627,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                   <button
                     type="button"
                     onClick={handleRetryVideo}
-                    className="min-h-[44px] min-w-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0B6E72] hover:bg-[#09575A] text-white text-xs font-bold transition-all shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-300 cursor-pointer"
+                    className="min-h-[44px] min-w-[44px] inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0B5454] text-white text-xs font-bold transition-all shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6] cursor-pointer"
                   >
                     <RotateCcw className="w-4 h-4" />
                     <span>إعادة المحاولة</span>
@@ -593,82 +635,221 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 </div>
               )}
 
-              {/* Perfectly Centered Glowing Play Button Overlay */}
-              {!isPlaying && !videoError && (
+              {/* 1 & 2. Video Thumbnail Cover (Before Play): Text Lifted Up + Clear Breathing Room + Glowing Play Button */}
+              {!hasStartedPlaying && !videoError && (
                 <div
-                  className="absolute inset-0 z-20 flex items-center justify-center pointer-events-none"
-                  style={{
-                    position: 'absolute',
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: '100%',
-                    height: '100%',
-                  }}
+                  className="absolute inset-0 z-20 flex flex-col items-center justify-center p-4 sm:p-6 bg-gradient-to-b from-[#0c1419]/85 via-[#0c1419]/70 to-[#0c1419]/90 backdrop-blur-[2px] transition-all duration-300 cursor-pointer"
+                  onClick={handleTogglePlay}
                 >
-                  <button
-                    type="button"
-                    onClick={handleTogglePlay}
-                    style={{ margin: 'auto' }}
-                    className="pointer-events-auto w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0B6E72] to-cyan-400 text-white flex items-center justify-center shadow-[0_0_35px_rgba(11,110,114,0.55)] dark:shadow-[0_0_35px_rgba(6,182,212,0.55)] hover:scale-110 active:scale-95 transition-all duration-300 group-hover:shadow-[0_0_50px_rgba(11,110,114,0.7)] dark:group-hover:shadow-[0_0_50px_rgba(6,182,212,0.7)] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-400 focus-visible:ring-offset-2 focus-visible:ring-offset-slate-900 cursor-pointer min-h-[44px] min-w-[44px]"
-                    aria-label="تشغيل الفيديو التعريفي"
-                    title="تشغيل الفيديو التعريفي"
-                  >
-                    <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform" />
-                  </button>
+                  {/* Lifted Headline with clear breathing room */}
+                  <div className="text-center space-y-1.5 sm:space-y-2 mb-5 sm:mb-8 pointer-events-none transition-transform duration-300 group-hover:-translate-y-1">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#14b8a6]/15 border border-[#14b8a6]/30 text-[#14b8a6] text-[11px] sm:text-xs font-bold shadow-xs backdrop-blur-md">
+                      <Sparkles className="w-3.5 h-3.5 text-[#14b8a6]" />
+                      <span>عرض تقديمي تفاعلي</span>
+                    </div>
+                    <h4 className="text-xl sm:text-3xl font-black text-white leading-snug drop-shadow-md">
+                      لا تعش في جانب واحد..{' '}
+                      <span className="text-[#14b8a6] drop-shadow-[0_0_14px_rgba(20,184,166,0.55)]">
+                        وازن حياتك كاملة
+                      </span>
+                    </h4>
+                    <p className="text-xs sm:text-sm text-slate-300/90 font-medium max-w-md mx-auto leading-relaxed drop-shadow-xs">
+                      شاهد في 90 ثانية كيف يعيد الذكاء الاصطناعي ضبط تناغم مجالاتك الحياتية
+                    </p>
+                  </div>
+
+                  {/* Central Glowing Play Button with pulse ring & smooth hover scale */}
+                  <div className="relative flex items-center justify-center pointer-events-auto">
+                    {/* Outer Ping Ring */}
+                    <span
+                      className="absolute -inset-4 sm:-inset-5 rounded-full bg-[#14b8a6]/25 animate-ping pointer-events-none"
+                      aria-hidden="true"
+                    />
+                    {/* Outer Breathing Pulse Ring */}
+                    <span
+                      className="absolute -inset-2.5 sm:-inset-3.5 rounded-full border border-[#14b8a6]/50 animate-pulse pointer-events-none"
+                      aria-hidden="true"
+                    />
+                    {/* The Play Button */}
+                    <button
+                      type="button"
+                      onClick={handleTogglePlay}
+                      className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0F6E6E] via-[#14b8a6] to-[#2dd4bf] text-white flex items-center justify-center shadow-[0_0_35px_rgba(20,184,166,0.65)] hover:shadow-[0_0_60px_rgba(20,184,166,0.95)] hover:scale-110 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#14b8a6] cursor-pointer min-h-[44px] min-w-[44px]"
+                      aria-label="تشغيل الفيديو التعريفي"
+                      title="تشغيل الفيديو التعريفي"
+                    >
+                      <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform drop-shadow" />
+                    </button>
+                  </div>
+
+                  {/* Hint below button */}
+                  <span className="mt-4 text-[11px] font-bold text-slate-400/90 tracking-wide pointer-events-none">
+                    انقر للمشاهدة
+                  </span>
                 </div>
               )}
 
-              {/* Player Bottom Control Bar (Arabic-Ready Presentation) */}
-              <div className="absolute bottom-0 inset-x-0 p-3 sm:p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent flex flex-wrap items-center justify-between gap-2 text-white text-xs z-20">
-                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <button
-                    type="button"
-                    onClick={handleTogglePlay}
-                    className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-white hover:text-cyan-300 hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 cursor-pointer"
-                    aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-                    title={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
-                  >
-                    {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleToggleMute}
-                    className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-white hover:text-cyan-300 hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 cursor-pointer"
-                    aria-label={isMuted ? 'تشغيل الصوت' : 'كتم الصوت'}
-                    title={isMuted ? 'تشغيل الصوت' : 'كتم الصوت'}
-                  >
-                    {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
-                  </button>
-                  <div className="flex items-center gap-1.5 font-bold truncate">
-                    <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping flex-shrink-0" />
-                    <span className="text-white/95 text-xs truncate">تجربة وزان: التناغم الحياتي بالذكاء الاصطناعي</span>
+              {/* Paused State Overlay (Clean, no text overlaying frame, only the centered glowing play button) */}
+              {hasStartedPlaying && !isPlaying && !videoError && (
+                <div
+                  className="absolute inset-0 z-20 flex items-center justify-center bg-[#0c1419]/40 backdrop-blur-[1px] transition-all duration-300 cursor-pointer"
+                  onClick={handleTogglePlay}
+                >
+                  <div className="relative flex items-center justify-center pointer-events-auto">
+                    {/* Outer Ping Ring */}
+                    <span
+                      className="absolute -inset-4 sm:-inset-5 rounded-full bg-[#14b8a6]/25 animate-ping pointer-events-none"
+                      aria-hidden="true"
+                    />
+                    {/* Outer Breathing Pulse Ring */}
+                    <span
+                      className="absolute -inset-2.5 sm:-inset-3.5 rounded-full border border-[#14b8a6]/50 animate-pulse pointer-events-none"
+                      aria-hidden="true"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleTogglePlay}
+                      className="relative z-10 w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-tr from-[#0F6E6E] via-[#14b8a6] to-[#2dd4bf] text-white flex items-center justify-center shadow-[0_0_35px_rgba(20,184,166,0.65)] hover:shadow-[0_0_60px_rgba(20,184,166,0.95)] hover:scale-110 active:scale-95 transition-all duration-300 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#14b8a6] cursor-pointer min-h-[44px] min-w-[44px]"
+                      aria-label="استئناف تشغيل الفيديو"
+                      title="استئناف التشغيل"
+                    >
+                      <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform drop-shadow" />
+                    </button>
                   </div>
                 </div>
+              )}
 
-                <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-semibold text-slate-200">
-                  <span
-                    className="px-2.5 py-1 rounded-md bg-white/15 backdrop-blur-xs border border-white/15 flex items-center gap-1 font-mono text-xs font-bold text-white"
-                    dir="ltr"
-                  >
-                    00:10
-                  </span>
-                  <span className="px-2.5 py-1 rounded-md bg-cyan-500/25 text-cyan-200 border border-cyan-400/30 font-bold">
-                    HD 720p
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleToggleFullscreen}
-                    className="min-h-[44px] min-w-[44px] rounded-xl flex items-center justify-center text-slate-200 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400 cursor-pointer"
-                    aria-label="ملء الشاشة"
-                    title="ملء الشاشة"
-                  >
-                    <Maximize className="w-4 h-4" />
-                  </button>
+              {/* 3. Player Bottom Control Bar with Frosted Glass & Progress Bar */}
+              <div
+                className="absolute bottom-0 inset-x-0 bg-[#0c1419]/85 dark:bg-[#0c1419]/95 backdrop-blur-md border-t border-white/10 flex flex-col text-white text-xs z-20 transition-all duration-300"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Interactive Progress Bar with Scrubber */}
+                <div
+                  className="group/progress relative w-full h-2 cursor-pointer py-1 flex items-center px-0 -mt-1 select-none"
+                  onClick={handleSeek}
+                  role="slider"
+                  aria-label="شريط تقدم الفيديو"
+                  aria-valuemin={0}
+                  aria-valuemax={duration || 100}
+                  aria-valuenow={currentTime}
+                  dir="ltr"
+                >
+                  {/* Background Track */}
+                  <div className="w-full h-1 group-hover/progress:h-2 rounded-full bg-white/20 transition-all duration-150 relative overflow-hidden">
+                    {/* Filled Progress */}
+                    <div
+                      className="h-full bg-gradient-to-r from-teal-500 via-[#14b8a6] to-cyan-400 rounded-full transition-[width] duration-75 ease-linear"
+                      style={{ width: `${progressPercent}%` }}
+                    />
+                  </div>
+
+                  {/* Scrubber Thumb */}
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-3.5 h-3.5 rounded-full bg-white border-2 border-[#14b8a6] shadow-[0_0_10px_rgba(20,184,166,0.95)] opacity-0 group-hover/progress:opacity-100 transition-opacity duration-150 pointer-events-none -ml-1.5"
+                    style={{ left: `${progressPercent}%` }}
+                  />
+                </div>
+
+                {/* Controls & Metadata Row */}
+                <div className="px-3 sm:px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                  {/* Left / Right (in RTL): Play/Pause, Mute, Title */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
+                    <button
+                      type="button"
+                      onClick={handleTogglePlay}
+                      className="min-h-[40px] min-w-[40px] rounded-xl flex items-center justify-center text-white hover:text-[#14b8a6] hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6] cursor-pointer"
+                      aria-label={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
+                      title={isPlaying ? 'إيقاف مؤقت' : 'تشغيل'}
+                    >
+                      {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current" />}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleToggleMute}
+                      className="min-h-[40px] min-w-[40px] rounded-xl flex items-center justify-center text-white hover:text-[#14b8a6] hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6] cursor-pointer"
+                      aria-label={isMuted ? 'تشغيل الصوت' : 'كتم الصوت'}
+                      title={isMuted ? 'تشغيل الصوت' : 'كتم الصوت'}
+                    >
+                      {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+                    </button>
+
+                    {/* Video Title */}
+                    <div className="flex items-center gap-1.5 font-bold truncate">
+                      <span className="w-2 h-2 rounded-full bg-[#14b8a6] animate-ping flex-shrink-0" />
+                      <span className="text-white/95 text-xs truncate">تجربة وزان: التناغم الحياتي بالذكاء الاصطناعي</span>
+                    </div>
+                  </div>
+
+                  {/* Time, 1080p HD Quality Selector, Fullscreen */}
+                  <div className="flex items-center gap-2 sm:gap-3 text-[11px] font-semibold text-slate-200">
+                    {/* Time Display */}
+                    <span
+                      className="px-2.5 py-1 rounded-md bg-white/10 backdrop-blur-xs border border-white/10 flex items-center gap-1 font-mono text-xs font-bold text-white select-none"
+                      dir="ltr"
+                    >
+                      <span>{formatVideoTime(currentTime)}</span>
+                      <span className="text-white/40">/</span>
+                      <span className="text-white/70">{formatVideoTime(duration || 10)}</span>
+                    </span>
+
+                    {/* Quality Badge & Menu (1080p HD) */}
+                    <div className="relative">
+                      <button
+                        type="button"
+                        onClick={() => setShowQualityMenu(!showQualityMenu)}
+                        className="px-2.5 py-1 rounded-md bg-[#14b8a6]/20 hover:bg-[#14b8a6]/30 text-teal-200 border border-[#14b8a6]/40 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6]"
+                        aria-label="تحديد دقة الفيديو"
+                        title="دقة الفيديو"
+                      >
+                        <span>{selectedQuality}</span>
+                        <span className="text-[9px] opacity-70">▼</span>
+                      </button>
+
+                      {/* Quality Menu Dropdown */}
+                      {showQualityMenu && (
+                        <div
+                          className="absolute bottom-full mb-2 end-0 py-1.5 px-1 bg-[#0c1419]/95 border border-[#14b8a6]/30 rounded-xl shadow-2xl backdrop-blur-xl z-30 min-w-[125px] space-y-0.5 animate-fadeIn"
+                          dir="rtl"
+                        >
+                          {['1080p HD', '720p HD', '480p', 'تلقائي (Auto)'].map((q) => {
+                            const isSelected =
+                              selectedQuality === q || (q.startsWith('تلقائي') && selectedQuality === 'تلقائي');
+                            return (
+                              <button
+                                key={q}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedQuality(q.replace(' (Auto)', ''));
+                                  setShowQualityMenu(false);
+                                }}
+                                className={`w-full text-right px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-between ${
+                                  isSelected
+                                    ? 'bg-[#14b8a6]/25 text-teal-300'
+                                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                                }`}
+                              >
+                                <span>{q}</span>
+                                {isSelected && <Check className="w-3.5 h-3.5 text-[#14b8a6]" />}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Fullscreen Button */}
+                    <button
+                      type="button"
+                      onClick={handleToggleFullscreen}
+                      className="min-h-[40px] min-w-[40px] rounded-xl flex items-center justify-center text-slate-200 hover:text-white hover:bg-white/10 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#14b8a6] cursor-pointer"
+                      aria-label="ملء الشاشة"
+                      title="ملء الشاشة"
+                    >
+                      <Maximize className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
