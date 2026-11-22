@@ -1,4 +1,5 @@
 import express, { Request, Response } from 'express';
+import { rateLimit } from 'express-rate-limit';
 import { GoogleGenAI, Type } from '@google/genai';
 import dotenv from 'dotenv';
 import path from 'path';
@@ -13,18 +14,82 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 
-// Universal CORS & Preflight headers for cross-origin access (Cloudflare, Render, etc.)
+// Trust reverse proxy (Render, Cloudflare, etc.) to ensure accurate IP rate limiting
+app.set('trust proxy', 1);
+
+// Allowed origins for CORS (controlled via ALLOWED_ORIGINS env var, defaults to Render & localhost)
+const DEFAULT_ALLOWED_ORIGINS = [
+  'https://wazin-9j3w.onrender.com',
+  'http://localhost:5173',
+  'http://localhost:3000',
+  'http://localhost:4173',
+  'http://localhost:10000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:4173',
+  'http://127.0.0.1:10000',
+];
+
+const allowedOrigins: string[] = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map((o) => o.trim().replace(/\/+$/, '')).filter(Boolean)
+  : DEFAULT_ALLOWED_ORIGINS;
+
 app.use((req: Request, res: Response, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
+  const requestOrigin = req.headers.origin ? req.headers.origin.replace(/\/+$/, '') : undefined;
+
+  if (requestOrigin && allowedOrigins.includes(requestOrigin)) {
+    res.header('Access-Control-Allow-Origin', requestOrigin);
+  } else if (!requestOrigin) {
+    // Non-browser or same-origin direct request
+    res.header('Access-Control-Allow-Origin', allowedOrigins[0]);
+  }
+
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
+
   if (req.method === 'OPTIONS') {
+    if (requestOrigin && !allowedOrigins.includes(requestOrigin)) {
+      return res.status(403).json({ error: 'النطاق المصدر غير مصرح به (Origin Not Allowed)' });
+    }
     return res.sendStatus(200);
   }
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
+// Reduce request body limit from 10mb to 200kb
+app.use(express.json({ limit: '200kb' }));
+
+// Graceful handler for oversized payloads and malformed JSON
+app.use((err: any, req: Request, res: Response, next: any) => {
+  if (err) {
+    if (err.type === 'entity.too.large') {
+      return res.status(413).json({
+        error: 'حجم الطلب يتجاوز الحد الأقصى المسموح به (200 كيلوبايت).',
+      });
+    }
+    if (err instanceof SyntaxError && 'body' in err) {
+      return res.status(400).json({
+        error: 'صيغة البيانات المرسلة غير صالحة (JSON غير صحيح).',
+      });
+    }
+  }
+  next(err);
+});
+
+// Rate limiting for /api/gemini/* (20 requests per minute per IP)
+const geminiRateLimiter = rateLimit({
+  windowMs: 60 * 1000, // دقيقة واحدة
+  max: 20, // 20 طلباً في الدقيقة لكل IP
+  standardHeaders: true, // ترويسات RateLimit-* المعيارية
+  legacyHeaders: false, // تعطيل ترويسات X-RateLimit-* القديمة
+  statusCode: 429,
+  message: {
+    error: 'تجاوزت الحد المسموح به من الطلبات (20 طلباً في الدقيقة). يرجى الانتظار قليلاً ثم إعادة المحاولة.',
+  },
+});
+
+app.use('/api/gemini', geminiRateLimiter);
 
 // Initialize GoogleGenAI SDK
 const apiKey = process.env.GEMINI_API_KEY || '';
@@ -1066,28 +1131,99 @@ function sanitizeAdvisorReply(
 
 // Endpoint: Advisor Chat
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
-  const {
-      advisor,
-      userProfile,
-      answers,
-      goals,
-      message,
-      history,
-      userName,
-      userScore,
-      userGoals,
-      userAnswers,
-      aiMode,
-      isEvaluationSession,
-      evaluationStep,
-      evaluationQuestionTitle,
-      assessmentMode = 'weekly_checkin',
-      stationTurnCount = 0,
-    } = req.body;
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'بيانات الطلب غير صالحة، يجب أن تكون كائناً بصيغة JSON.' });
+  }
 
-    if (!message) {
-      return res.status(400).json({ error: 'الرسالة مطلوبة' });
+  const {
+    advisor,
+    agentKey: rawAgentKey,
+    userProfile,
+    answers,
+    goals,
+    message,
+    history,
+    userName,
+    userScore,
+    userGoals,
+    userAnswers,
+    aiMode,
+    isEvaluationSession,
+    evaluationStep,
+    evaluationQuestionTitle,
+    assessmentMode = 'weekly_checkin',
+    stationTurnCount = 0,
+  } = req.body;
+
+  // 1) التحقق من صحة حقل message (نص بطول بين 1 و 2000 حرف)
+  if (typeof message !== 'string' || message.trim().length < 1 || message.length > 2000) {
+    return res.status(400).json({
+      error: 'حقل الرسالة (message) مطلوب ويجب أن يكون نصاً بطول يتراوح بين 1 و2000 حرف.',
+    });
+  }
+
+  // 2) التحقق من صحة حقل history (مصفوفة أقصاها 20 عنصراً)
+  if (history !== undefined && history !== null) {
+    if (!Array.isArray(history) || history.length > 20) {
+      return res.status(400).json({
+        error: 'سجل المحادثة (history) يجب أن يكون مصفوفة لا تتجاوز 20 عنصراً.',
+      });
     }
+    for (const item of history) {
+      if (!item || typeof item !== 'object') {
+        return res.status(400).json({
+          error: 'عناصر سجل المحادثة (history) يجب أن تكون كائنات صالحة.',
+        });
+      }
+    }
+  }
+
+  // 3) التحقق من أنواع بقية الحقول ورفض أي نوع غير متوقع برد 400
+  if (advisor !== undefined && advisor !== null && typeof advisor !== 'string' && (typeof advisor !== 'object' || Array.isArray(advisor))) {
+    return res.status(400).json({ error: 'نوع حقل advisor غير صالح، يجب أن يكون نصاً أو كائناً.' });
+  }
+  if (rawAgentKey !== undefined && rawAgentKey !== null && typeof rawAgentKey !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل agentKey غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (userProfile !== undefined && userProfile !== null && (typeof userProfile !== 'object' || Array.isArray(userProfile))) {
+    return res.status(400).json({ error: 'نوع حقل userProfile غير صالح، يجب أن يكون كائناً.' });
+  }
+  if (userName !== undefined && userName !== null && typeof userName !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل userName غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (answers !== undefined && answers !== null && (typeof answers !== 'object' || Array.isArray(answers))) {
+    return res.status(400).json({ error: 'نوع حقل answers غير صالح، يجب أن يكون كائناً.' });
+  }
+  if (userAnswers !== undefined && userAnswers !== null && (typeof userAnswers !== 'object' || Array.isArray(userAnswers))) {
+    return res.status(400).json({ error: 'نوع حقل userAnswers غير صالح، يجب أن يكون كائناً.' });
+  }
+  if (goals !== undefined && goals !== null && typeof goals !== 'object') {
+    return res.status(400).json({ error: 'نوع حقل goals غير صالح، يجب أن يكون مصفوفة أو كائناً.' });
+  }
+  if (userGoals !== undefined && userGoals !== null && typeof userGoals !== 'object') {
+    return res.status(400).json({ error: 'نوع حقل userGoals غير صالح، يجب أن يكون مصفوفة أو كائناً.' });
+  }
+  if (userScore !== undefined && userScore !== null && typeof userScore !== 'number') {
+    return res.status(400).json({ error: 'نوع حقل userScore غير صالح، يجب أن يكون رقماً.' });
+  }
+  if (aiMode !== undefined && aiMode !== null && typeof aiMode !== 'string' && typeof aiMode !== 'boolean') {
+    return res.status(400).json({ error: 'نوع حقل aiMode غير صالح.' });
+  }
+  if (isEvaluationSession !== undefined && isEvaluationSession !== null && typeof isEvaluationSession !== 'boolean') {
+    return res.status(400).json({ error: 'نوع حقل isEvaluationSession غير صالح، يجب أن يكون قيمة منطقية.' });
+  }
+  if (evaluationStep !== undefined && evaluationStep !== null && typeof evaluationStep !== 'number') {
+    return res.status(400).json({ error: 'نوع حقل evaluationStep غير صالح، يجب أن يكون رقماً.' });
+  }
+  if (evaluationQuestionTitle !== undefined && evaluationQuestionTitle !== null && typeof evaluationQuestionTitle !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل evaluationQuestionTitle غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (assessmentMode !== undefined && assessmentMode !== null && typeof assessmentMode !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل assessmentMode غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (stationTurnCount !== undefined && stationTurnCount !== null && typeof stationTurnCount !== 'number') {
+    return res.status(400).json({ error: 'نوع حقل stationTurnCount غير صالح، يجب أن يكون رقماً.' });
+  }
 
     let systemInstruction = '';
     let advisorName = 'مستشار وزان';
@@ -1985,6 +2121,9 @@ function generateFallbackDirectorReport(_userProfile: any, scores: any, _advisor
 // Endpoint: Director Summary (Cross-Domain Insights & Master Action Plan)
 app.post('/api/gemini/director-summary', async (req: Request, res: Response) => {
   try {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      return res.status(400).json({ error: 'بيانات الطلب غير صالحة، يجب أن تكون كائناً بصيغة JSON.' });
+    }
     const { userProfile, scores, advisorSummaries, focusArea } = req.body;
 
     if (!apiKey) {
