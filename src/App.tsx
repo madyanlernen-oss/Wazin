@@ -170,6 +170,24 @@ export default function App() {
     setActiveScreen('dashboard');
   };
 
+  // Handler: Update user profile context fields
+  const handleUpdateUserProfile = (updated: Partial<UserProfile>) => {
+    setAppState((prev) => {
+      if (!prev.userProfile) return prev;
+      const nextProfile: UserProfile = {
+        ...prev.userProfile,
+        ...updated,
+      };
+      saveStoredUser(nextProfile);
+      const nextState = {
+        ...prev,
+        userProfile: nextProfile,
+      };
+      saveStoredState(nextState);
+      return nextState;
+    });
+  };
+
   // Handler: Sign Out (تسجيل الخروج)
   const handleSignOut = () => {
     setAppState((prev) => ({
@@ -481,6 +499,8 @@ export default function App() {
             <OnboardingScreen
               initialAdvisorId={selectedAdvisorId}
               answers={appState.answers}
+              userProfile={appState.userProfile}
+              onUpdateProfile={handleUpdateUserProfile}
               onSaveAnswer={handleSaveAnswer}
               onFinishAdvisor={handleFinishAdvisor}
               onResetAdvisor={handleResetAdvisorStation}

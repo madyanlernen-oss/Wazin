@@ -839,6 +839,9 @@ export const SAMPLE_USER_PROFILE = {
   email: 'demo@wazan.com',
   password: '123456',
   ageGroup: '30 - 39 سنة',
+  employmentStatus: 'موظف',
+  workStatus: 'موظف',
+  hasDependents: 'نعم',
   currentFocus: 'تحقيق التوازن الشامل والارتقاء بالأداء المهني والصحي',
   registeredAt: '2026-01-01T00:00:00.000Z',
 };

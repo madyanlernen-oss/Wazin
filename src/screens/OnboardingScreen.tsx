@@ -19,7 +19,7 @@ import {
   Stethoscope,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
-import { AdvisorConfig, LifeAreaId } from '../types/lifeBalance';
+import { AdvisorConfig, LifeAreaId, UserProfile } from '../types/lifeBalance';
 import {
   STATION_ASSESSMENT_CONFIG,
   StationAssessmentConfig,
@@ -52,6 +52,8 @@ interface StationDynamicInsights {
 interface OnboardingScreenProps {
   initialAdvisorId?: LifeAreaId;
   answers: Record<string, any>;
+  userProfile?: UserProfile | null;
+  onUpdateProfile?: (updated: Partial<UserProfile>) => void;
   onSaveAnswer: (advisorId: LifeAreaId, questionId: string, value: any) => void;
   onFinishAdvisor: (advisorId: LifeAreaId, score: number) => void;
   onResetAdvisor?: (advisorId: LifeAreaId) => void;
@@ -481,6 +483,8 @@ export function getClientAdvisorResponse(
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   initialAdvisorId = 'spiritual',
   answers,
+  userProfile,
+  onUpdateProfile,
   onSaveAnswer,
   onFinishAdvisor,
   onResetAdvisor,
@@ -513,6 +517,32 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     return 'balanced';
   });
   const [showModeDropdown, setShowModeDropdown] = useState(false);
+
+  // User Context Modal states (سياق المستفيد)
+  const [showContextModal, setShowContextModal] = useState(false);
+  const [workStatusInput, setWorkStatusInput] = useState(userProfile?.employmentStatus || userProfile?.workStatus || '');
+  const [ageGroupInput, setAgeGroupInput] = useState(userProfile?.ageGroup || '');
+  const [hasDependentsInput, setHasDependentsInput] = useState(userProfile?.hasDependents || '');
+
+  useEffect(() => {
+    if (userProfile) {
+      setWorkStatusInput(userProfile.employmentStatus || userProfile.workStatus || '');
+      setAgeGroupInput(userProfile.ageGroup || '');
+      setHasDependentsInput(userProfile.hasDependents || '');
+    }
+  }, [userProfile]);
+
+  const handleSaveContext = () => {
+    if (onUpdateProfile) {
+      onUpdateProfile({
+        employmentStatus: workStatusInput || undefined,
+        workStatus: workStatusInput || undefined,
+        ageGroup: ageGroupInput || undefined,
+        hasDependents: hasDependentsInput || undefined,
+      });
+    }
+    setShowContextModal(false);
+  };
 
   const handleSelectAiMode = (mode: AiModelMode) => {
     setAiMode(mode);
@@ -769,6 +799,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             advisor: currentAdvisor,
+            userName: userProfile?.name || 'صديقنا',
+            userProfile: userProfile || undefined,
             message: text,
             history,
             answers,
@@ -1157,6 +1189,21 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 </>
               )}
             </div>
+
+            {/* Optional User Context Button */}
+            <button
+              type="button"
+              onClick={() => setShowContextModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all shadow-xs cursor-pointer"
+              title="تخصيص سياق المستفيد (حالة العمل، الفئة العمرية، المعالون)"
+            >
+              <User className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
+              <span className="hidden sm:inline">سياق المستفيد</span>
+              <span className="sm:hidden">سياقي</span>
+              {(userProfile?.employmentStatus || userProfile?.workStatus) && (
+                <span className="w-1.5 h-1.5 rounded-full bg-[#0F6E6E] dark:bg-[#22D3EE]" />
+              )}
+            </button>
 
             {/* Reopen station button if completed */}
             {isCompleted && (
@@ -1586,6 +1633,110 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                     ? '🎉 عرض خريطتي المتكاملة (الداشبورد)'
                     : 'المحطة التالية ←'}
                 </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* User Context Dialog Modal (سياق المستفيد) */}
+      {showContextModal && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs"
+        >
+          <div className="bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 text-right">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-[#0F6E6E] dark:text-cyan-400 flex items-center justify-center">
+                  <User className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black text-[#0F172A] dark:text-white">
+                    سياق المستفيد وخلفيته (اختياري)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    تساعد المستشارين في تخصيص النصائح بدقة وفق واقعك
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {/* 1. Work Status */}
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
+                  حالة العمل
+                </label>
+                <select
+                  value={workStatusInput}
+                  onChange={(e) => setWorkStatusInput(e.target.value)}
+                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 transition-all cursor-pointer"
+                  dir="rtl"
+                >
+                  <option value="">اختر حالة العمل (اختياري)...</option>
+                  <option value="طالب جامعي">طالب جامعي</option>
+                  <option value="موظف">موظف</option>
+                  <option value="صاحب عمل/مستقل">صاحب عمل/مستقل</option>
+                  <option value="متقاعد">متقاعد</option>
+                  <option value="باحث عن عمل">باحث عن عمل</option>
+                  <option value="غير ذلك">غير ذلك</option>
+                </select>
+              </div>
+
+              {/* 2. Age Group */}
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
+                  الفئة العمرية
+                </label>
+                <select
+                  value={ageGroupInput}
+                  onChange={(e) => setAgeGroupInput(e.target.value)}
+                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 transition-all cursor-pointer"
+                  dir="rtl"
+                >
+                  <option value="">اختر الفئة العمرية (اختياري)...</option>
+                  <option value="أقل من 20 سنة">أقل من 20 سنة</option>
+                  <option value="20 - 29 سنة">20 - 29 سنة</option>
+                  <option value="30 - 39 سنة">30 - 39 سنة</option>
+                  <option value="40 - 49 سنة">40 - 49 سنة</option>
+                  <option value="50 سنة فأكثر">50 سنة فأكثر</option>
+                </select>
+              </div>
+
+              {/* 3. Has Dependents */}
+              <div>
+                <label className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1">
+                  هل لديك معالون؟ (أسرة أو أطفال)
+                </label>
+                <select
+                  value={hasDependentsInput}
+                  onChange={(e) => setHasDependentsInput(e.target.value)}
+                  className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 text-xs text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 transition-all cursor-pointer"
+                  dir="rtl"
+                >
+                  <option value="">هل لديك معالون؟ (اختياري)...</option>
+                  <option value="نعم">نعم</option>
+                  <option value="لا">لا</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowContextModal(false)}
+                className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                إغلاق
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveContext}
+                className="px-4 py-2 rounded-xl text-xs font-bold bg-[#0F6E6E] hover:bg-[#0b5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white transition-colors cursor-pointer shadow-xs"
+              >
+                حفظ التعديلات
               </button>
             </div>
           </div>

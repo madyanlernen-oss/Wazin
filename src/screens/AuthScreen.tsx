@@ -74,6 +74,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
   const [signupName, setSignupName] = useState('');
   const [signupEmail, setSignupEmail] = useState('');
   const [signupPassword, setSignupPassword] = useState('');
+  const [signupWorkStatus, setSignupWorkStatus] = useState('');
+  const [signupAgeGroup, setSignupAgeGroup] = useState('');
+  const [signupHasDependents, setSignupHasDependents] = useState('');
 
   // Forgot password form
   const [forgotEmail, setForgotEmail] = useState('');
@@ -153,6 +156,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
         email: 'demo@wazan.com',
         hasPassword: true,
         ageGroup: '30 - 39 سنة',
+        employmentStatus: 'موظف',
+        workStatus: 'موظف',
+        hasDependents: 'نعم',
         currentFocus: 'تحقيق التوازن الشامل والارتقاء بالأداء المهني والصحي',
         registeredAt: '2026-01-01T00:00:00.000Z',
       };
@@ -270,7 +276,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       name,
       email,
       hasPassword: true,
-      ageGroup: '25 - 34 سنة',
+      ageGroup: signupAgeGroup || '25 - 34 سنة',
+      employmentStatus: signupWorkStatus || undefined,
+      workStatus: signupWorkStatus || undefined,
+      hasDependents: signupHasDependents || undefined,
       currentFocus: 'تحقيق التوازن الشامل وتحديد الأولويات',
       registeredAt: new Date().toISOString(),
     };
@@ -565,6 +574,88 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                       <Eye className="w-4 h-4" aria-hidden="true" />
                     )}
                   </button>
+                </div>
+              </div>
+
+              {/* Optional User Context Fields for Tailored Advice */}
+              <div className="pt-3 border-t border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-[#0B6E72] dark:text-cyan-400">
+                    سياقك لتخصيص الاستشارات (اختياري)
+                  </span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                    يمكنك تجاوزه
+                  </span>
+                </div>
+
+                {/* 1. Work Status */}
+                <div>
+                  <label
+                    htmlFor="auth-signup-work"
+                    className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1"
+                  >
+                    حالة العمل
+                  </label>
+                  <select
+                    id="auth-signup-work"
+                    value={signupWorkStatus}
+                    onChange={(e) => setSignupWorkStatus(e.target.value)}
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer"
+                    dir="rtl"
+                  >
+                    <option value="">اختر حالة العمل (اختياري)...</option>
+                    <option value="طالب جامعي">طالب جامعي</option>
+                    <option value="موظف">موظف</option>
+                    <option value="صاحب عمل/مستقل">صاحب عمل/مستقل</option>
+                    <option value="متقاعد">متقاعد</option>
+                    <option value="باحث عن عمل">باحث عن عمل</option>
+                    <option value="غير ذلك">غير ذلك</option>
+                  </select>
+                </div>
+
+                {/* 2. Age Group */}
+                <div>
+                  <label
+                    htmlFor="auth-signup-age"
+                    className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1"
+                  >
+                    الفئة العمرية
+                  </label>
+                  <select
+                    id="auth-signup-age"
+                    value={signupAgeGroup}
+                    onChange={(e) => setSignupAgeGroup(e.target.value)}
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer"
+                    dir="rtl"
+                  >
+                    <option value="">اختر الفئة العمرية (اختياري)...</option>
+                    <option value="أقل من 20 سنة">أقل من 20 سنة</option>
+                    <option value="20 - 29 سنة">20 - 29 سنة</option>
+                    <option value="30 - 39 سنة">30 - 39 سنة</option>
+                    <option value="40 - 49 سنة">40 - 49 سنة</option>
+                    <option value="50 سنة فأكثر">50 سنة فأكثر</option>
+                  </select>
+                </div>
+
+                {/* 3. Has Dependents */}
+                <div>
+                  <label
+                    htmlFor="auth-signup-dependents"
+                    className="block text-xs font-bold text-[#0F172A] dark:text-white mb-1"
+                  >
+                    هل لديك معالون؟ (أسرة أو أطفال)
+                  </label>
+                  <select
+                    id="auth-signup-dependents"
+                    value={signupHasDependents}
+                    onChange={(e) => setSignupHasDependents(e.target.value)}
+                    className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer"
+                    dir="rtl"
+                  >
+                    <option value="">هل لديك معالون؟ (اختياري)...</option>
+                    <option value="نعم">نعم</option>
+                    <option value="لا">لا</option>
+                  </select>
                 </div>
               </div>
 

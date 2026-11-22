@@ -1224,6 +1224,18 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
   if (stationTurnCount !== undefined && stationTurnCount !== null && typeof stationTurnCount !== 'number') {
     return res.status(400).json({ error: 'نوع حقل stationTurnCount غير صالح، يجب أن يكون رقماً.' });
   }
+  if (req.body.workStatus !== undefined && req.body.workStatus !== null && typeof req.body.workStatus !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل workStatus غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (req.body.employmentStatus !== undefined && req.body.employmentStatus !== null && typeof req.body.employmentStatus !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل employmentStatus غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (req.body.ageGroup !== undefined && req.body.ageGroup !== null && typeof req.body.ageGroup !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل ageGroup غير صالح، يجب أن يكون نصاً.' });
+  }
+  if (req.body.hasDependents !== undefined && req.body.hasDependents !== null && typeof req.body.hasDependents !== 'string' && typeof req.body.hasDependents !== 'boolean') {
+    return res.status(400).json({ error: 'نوع حقل hasDependents غير صالح.' });
+  }
 
     let systemInstruction = '';
     let advisorName = 'مستشار وزان';
@@ -1452,6 +1464,47 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
 `;
     }
 
+    // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون)
+    const workStatus = (
+      effectiveUserProfile?.employmentStatus ||
+      effectiveUserProfile?.workStatus ||
+      req.body?.workStatus ||
+      req.body?.employmentStatus ||
+      ''
+    ).trim();
+
+    const ageGroup = (
+      effectiveUserProfile?.ageGroup ||
+      req.body?.ageGroup ||
+      ''
+    ).trim();
+
+    const rawDependents =
+      effectiveUserProfile?.hasDependents ??
+      req.body?.hasDependents;
+
+    let dependentsText = '';
+    if (rawDependents === 'نعم' || rawDependents === true || rawDependents === 'yes') {
+      dependentsText = 'معالون: نعم';
+    } else if (rawDependents === 'لا' || rawDependents === false || rawDependents === 'no') {
+      dependentsText = 'معالون: لا';
+    } else if (typeof rawDependents === 'string' && rawDependents.trim()) {
+      dependentsText = rawDependents.trim();
+    }
+
+    const contextParts: string[] = [];
+    if (workStatus) contextParts.push(workStatus);
+    if (ageGroup) contextParts.push(ageGroup);
+    if (dependentsText) contextParts.push(dependentsText);
+
+    const userContextLine = contextParts.length > 0
+      ? `المستفيد: ${contextParts.join('، ')}`
+      : '';
+
+    const userContextGuideline = contextParts.length > 0
+      ? `\n- ${userContextLine}\n- 💡 تعليمة هامة لتخصيص الاستشارة: فصّل النصيحة حسب حالته (طالب: ميزانية صغيرة ومصروف؛ موظف: راتب والتزامات؛ صاحب عمل: تدفقات نقدية) ولا تفترض ما لم يُذكر.\n`
+      : '';
+
     // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
     systemInstruction = `
 ${agentRoleDescription}
@@ -1473,7 +1526,7 @@ ${evaluationSessionGuideline}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
 - إجابات التقييم: ${JSON.stringify(effectiveAnswers)}
-${pastStationsContextText}
+${pastStationsContextText}${userContextGuideline}
 [تذكير ختامي ملزم حول عدد التبادلات والمحطة]:
 - عدد التبادلات الحالية التي تمت في هذه المحطة (stationTurnCount): ${stationTurnCount}.
 ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التشخيص (station_completed: false حتماً): لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة"، واختم ردك بسؤال تشخيصي محدد واحد مرتبط بآخر ما قاله.` : ''}

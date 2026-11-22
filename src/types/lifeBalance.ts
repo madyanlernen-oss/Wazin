@@ -93,6 +93,9 @@ export interface UserProfile {
   ageGroup: string;
   currentFocus: string;
   registeredAt: string;
+  employmentStatus?: string; // e.g. 'طالب جامعي' | 'موظف' | 'صاحب عمل/مستقل' | 'متقاعد' | 'باحث عن عمل' | 'غير ذلك'
+  workStatus?: string;
+  hasDependents?: string; // e.g. 'نعم' | 'لا'
 }
 
 export interface KeystoneHabit {

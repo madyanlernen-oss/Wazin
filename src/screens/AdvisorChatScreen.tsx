@@ -252,6 +252,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
           advisor: currentAdvisor,
           userScore: currentScore,
           userName: userProfile?.name || 'صديقنا',
+          userProfile: userProfile || undefined,
           userGoals: currentGoals,
           userAnswers: answers,
           message: text,
