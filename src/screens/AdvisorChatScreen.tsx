@@ -42,37 +42,37 @@ export const AI_MODES: {
   badge: string;
   desc: string;
 }[] = [
-  {
-    id: 'fast',
-    title: 'الوضع السريع ⚡',
-    shortTitle: 'سريع ⚡',
-    icon: Zap,
-    color: '#0284c7',
-    bgColor: '#f0f9ff',
-    badge: 'استجابة سريعة',
-    desc: 'إجابات فورية، مباشرة، وموجزة للأسئلة والحلول السريعة',
-  },
-  {
-    id: 'balanced',
-    title: 'الوضع المتوازن ⚖️',
-    shortTitle: 'متوازن ⚖️',
-    icon: Scale,
-    color: '#1b605b',
-    bgColor: '#ecfdf5',
-    badge: 'موصى به',
-    desc: 'توازن ذكي بين سرعة التفاعل وعمق التوجيه الإرشادي',
-  },
-  {
-    id: 'deep',
-    title: 'التحليل العميق 🧠',
-    shortTitle: 'تفكير عميق 🧠',
-    icon: Brain,
-    color: '#7c3aed',
-    bgColor: '#f5f3ff',
-    badge: 'تفكير استراتيجي',
-    desc: 'تفكيك جذري للتحديات، تحليل الدوافع النفسية، وخطط استراتيجية شاملة',
-  },
-];
+    {
+      id: 'fast',
+      title: 'الوضع السريع ⚡',
+      shortTitle: 'سريع ⚡',
+      icon: Zap,
+      color: '#0284c7',
+      bgColor: '#f0f9ff',
+      badge: 'استجابة سريعة',
+      desc: 'إجابات فورية، مباشرة، وموجزة للأسئلة والحلول السريعة',
+    },
+    {
+      id: 'balanced',
+      title: 'الوضع المتوازن ⚖️',
+      shortTitle: 'متوازن ⚖️',
+      icon: Scale,
+      color: '#1b605b',
+      bgColor: '#ecfdf5',
+      badge: 'موصى به',
+      desc: 'توازن ذكي بين سرعة التفاعل وعمق التوجيه الإرشادي',
+    },
+    {
+      id: 'deep',
+      title: 'التحليل العميق 🧠',
+      shortTitle: 'تفكير عميق 🧠',
+      icon: Brain,
+      color: '#7c3aed',
+      bgColor: '#f5f3ff',
+      badge: 'تفكير استراتيجي',
+      desc: 'تفكيك جذري للتحديات، تحليل الدوافع النفسية، وخطط استراتيجية شاملة',
+    },
+  ];
 
 interface AdvisorChatScreenProps {
   currentAdvisorId: LifeAreaId;
@@ -579,11 +579,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                 <button
                   key={advisor.id}
                   onClick={() => onSelectAdvisor(advisor.id)}
-                  className={`w-full text-right p-3 rounded-2xl transition-all duration-200 flex items-center justify-between border cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
-                    isSelected
-                      ? 'bg-[#F7F6F2] dark:bg-[#112028] border-[#0F6E6E] dark:border-[#0891B2] shadow-xs'
-                      : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#0F172A] dark:text-[#F1F5F9]'
-                  }`}
+                  className={`w-full text-right p-3 rounded-2xl transition-all duration-200 flex items-center justify-between border cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${isSelected
+                    ? 'bg-[#F7F6F2] dark:bg-[#112028] border-[#0F6E6E] dark:border-[#0891B2] shadow-xs'
+                    : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#0F172A] dark:text-[#F1F5F9]'
+                    }`}
                   style={isSelected ? { borderRightColor: advisor.themeColor, borderRightWidth: '4px' } : {}}
                 >
                   <div className="flex items-center gap-3">
@@ -693,11 +692,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                                 handleSelectAiMode(mode.id);
                                 setShowModeDropdown(false);
                               }}
-                              className={`w-full text-right p-2.5 rounded-xl transition-all flex items-start gap-2.5 border cursor-pointer ${
-                                isSelected
-                                  ? 'border-[#0F6E6E] dark:border-[#22D3EE] shadow-xs'
-                                  : 'border-transparent hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
-                              }`}
+                              className={`w-full text-right p-2.5 rounded-xl transition-all flex items-start gap-2.5 border cursor-pointer ${isSelected
+                                ? 'border-[#0F6E6E] dark:border-[#22D3EE] shadow-xs'
+                                : 'border-transparent hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
+                                }`}
                               style={isSelected ? { backgroundColor: mode.bgColor } : {}}
                             >
                               <div
@@ -752,11 +750,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                   >
                     {/* Avatar */}
                     <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 ${
-                        isUser
-                          ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white'
-                          : 'border border-black/5 dark:border-white/10'
-                      }`}
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 ${isUser
+                        ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white'
+                        : 'border border-black/5 dark:border-white/10'
+                        }`}
                       style={!isUser ? { backgroundColor: `${currentAdvisor.themeColor}15` } : {}}
                     >
                       {isUser ? <User className="w-4 h-4" /> : currentAdvisor.avatarSvg}
@@ -765,11 +762,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                     {/* Bubble */}
                     <div className={`max-w-[85%] sm:max-w-[75%] space-y-3`}>
                       <div
-                        className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${
-                          isUser
-                            ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white rounded-tr-none shadow-xs'
-                            : 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] rounded-tl-none shadow-xs'
-                        }`}
+                        className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${isUser
+                          ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white rounded-tr-none shadow-xs'
+                          : 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] rounded-tl-none shadow-xs'
+                          }`}
                       >
                         <FormattedChatMessage text={msg.content} isAdvisor={!isUser} />
                         {!isUser && msg.source === 'local-fallback' && (
@@ -808,72 +804,71 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                         )}
                       </div>
 
-                    {/* Render Crisis Support Card if crisis response detected */}
-                    {!isUser && (msg.isCrisis || isCrisisMessage(msg.content)) && (
-                      <CrisisSupportCard />
-                    )}
+                      {/* Render Crisis Support Card if crisis response detected */}
+                      {!isUser && (msg.isCrisis || isCrisisMessage(msg.content)) && (
+                        <CrisisSupportCard />
+                      )}
 
-                    {/* Actionable Steps suggested by advisor */}
-                    {!isUser && msg.actionSteps && msg.actionSteps.length > 0 && (
-                      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-3.5 space-y-2 shadow-xs transition-colors">
-                        <span className="text-[11px] font-bold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
-                          <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
-                          خطوات عملية مقترحة من المستشار:
-                        </span>
-                        <div className="space-y-1.5">
-                          {msg.actionSteps.map((step, sIdx) => {
-                            const isAdded = addedGoals[step];
-                            return (
-                              <div
-                                key={sIdx}
-                                className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9]"
-                              >
-                                <span>{isolateNumbersInText(step)}</span>
-                                <button
-                                  type="button"
-                                  onClick={() => handleAddActionToGoals(step)}
-                                  className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all flex-shrink-0 shadow-xs cursor-pointer ${
-                                    isAdded
+                      {/* Actionable Steps suggested by advisor */}
+                      {!isUser && msg.actionSteps && msg.actionSteps.length > 0 && (
+                        <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-3.5 space-y-2 shadow-xs transition-colors">
+                          <span className="text-[11px] font-bold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
+                            خطوات عملية مقترحة من المستشار:
+                          </span>
+                          <div className="space-y-1.5">
+                            {msg.actionSteps.map((step, sIdx) => {
+                              const isAdded = addedGoals[step];
+                              return (
+                                <div
+                                  key={sIdx}
+                                  className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9]"
+                                >
+                                  <span>{isolateNumbersInText(step)}</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleAddActionToGoals(step)}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all flex-shrink-0 shadow-xs cursor-pointer ${isAdded
                                       ? 'bg-emerald-700 text-white'
                                       : 'bg-white dark:bg-[#0E1D24] text-[#0F6E6E] dark:text-[#22D3EE] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
-                                  }`}
-                                >
-                                  {isAdded ? (
-                                    <>
-                                      <Check className="w-3 h-3" />
-                                      <span>أُضيفت لمصفوفة أيزنهاور</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Plus className="w-3 h-3" />
-                                      <span>إضافة لمصفوفة أيزنهاور (المربع 2)</span>
-                                    </>
-                                  )}
-                                </button>
-                              </div>
-                            );
-                          })}
+                                      }`}
+                                  >
+                                    {isAdded ? (
+                                      <>
+                                        <Check className="w-3 h-3" />
+                                        <span>أُضيفت لمصفوفة أيزنهاور</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="w-3 h-3" />
+                                        <span>إضافة لمصفوفة أيزنهاور (المربع 2)</span>
+                                      </>
+                                    )}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
 
-                    {/* Reflection Question */}
-                    {!isUser && msg.reflectionQuestion && (
-                      <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl p-3 text-xs text-[#8A5A00] dark:text-[#FBBF24] flex items-start gap-2 shadow-xs">
-                        <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <span className="font-bold text-[#8A5A00] dark:text-[#FBBF24] block mb-0.5">
-                            سؤال للتأمل الذاتي:
-                          </span>
-                          <span>{isolateNumbersInText(msg.reflectionQuestion)}</span>
+                      {/* Reflection Question */}
+                      {!isUser && msg.reflectionQuestion && (
+                        <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl p-3 text-xs text-[#8A5A00] dark:text-[#FBBF24] flex items-start gap-2 shadow-xs">
+                          <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
+                          <div>
+                            <span className="font-bold text-[#8A5A00] dark:text-[#FBBF24] block mb-0.5">
+                              سؤال للتأمل الذاتي:
+                            </span>
+                            <span>{isolateNumbersInText(msg.reflectionQuestion)}</span>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
-                </div>
-              );
-            });
-          })()}
+                );
+              });
+            })()}
 
             {isLoading && (
               <div className="flex gap-3 items-center text-xs text-[#475569] dark:text-[#94A3B8]">
@@ -928,11 +923,10 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                         key={m.id}
                         type="button"
                         onClick={() => handleSelectAiMode(m.id)}
-                        className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
-                          isSelected
-                            ? 'bg-white dark:bg-[#0E1D24] shadow-xs'
-                            : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
-                        }`}
+                        className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${isSelected
+                          ? 'bg-white dark:bg-[#0E1D24] shadow-xs'
+                          : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
+                          }`}
                         style={isSelected ? { color: m.color } : {}}
                         title={m.desc}
                       >
