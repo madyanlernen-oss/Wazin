@@ -301,6 +301,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         actionSteps: data.actionSteps || (parsedAdvice ? [parsedAdvice] : []),
         reflectionQuestion: data.reflectionQuestion,
         isCrisis: isCrisisMessage(cleanContent) || isCrisisMessage(text),
+        source: data.source || 'gemini',
       };
 
       setMessagesByAdvisor((prev) => ({
@@ -320,7 +321,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
       const isFatwaOrReligiousRuling = !isCrisisOrDeath && /(فتوى|افتي|أفتني|حكم شرعي|حلال ولا حرام|حلال ام حرام|طلاق بائن|فتاوى|مذهب|طائفة|تكفير|تبديع)/i.test(lowerText);
       const isClinicalPsychology = !isCrisisOrDeath && /(علاج نفسي سريري|علاج اكتئاب سريري|جلسات تحليل نفسي|فصام|ذهان|اضطراب ثنائي القطب|جلسات علاجية سريرية)/i.test(lowerText);
       const isLegalMaritalDispute = !isCrisisOrDeath && /(خلع|فسخ عقد نكاح|دعوى طلاق|حكم القاضي في الطلاق|حقوق حضانة قضائية|قضية نفقة)/i.test(lowerText);
-      const isGriefOrExhaustion = !isCrisisOrDeath && !isMedicalPrescriptionOrDiagnosis && !isStockOrCryptoSpeculation && !isFatwaOrReligiousRuling && !isClinicalPsychology && !isLegalMaritalDispute && /(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)/i.test(lowerText);
+      const isGriefOrExhaustion = !isCrisisOrDeath && !isMedicalPrescriptionOrDiagnosis && !isStockOrCryptoSpeculation && !isFatwaOrReligiousRuling && !isClinicalPsychology && !isLegalMaritalDispute && /(?<![\u0600-\u06FF])(?:[وفبلك]|ال|وال|فال|بال|كال|لل)?(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)(?![\u0600-\u06FF])/i.test(lowerText);
       const isCurseOrAnger = !isCrisisOrDeath && !isGriefOrExhaustion && /(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(lowerText);
       const isAskingHowAdvisorIs = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(lowerText);
       const isSimpleGreeting = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && !isAskingHowAdvisorIs && /(^|\s)(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)(\s|$)/i.test(lowerText);
@@ -411,6 +412,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         actionSteps: fallbackActionSteps,
         reflectionQuestion: fallbackReflectionQuestion,
         isCrisis: isCrisisMessage(fallbackText) || isCrisisMessage(text),
+        source: 'local-fallback',
       };
 
       setMessagesByAdvisor((prev) => ({
@@ -679,6 +681,13 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
                       }`}
                     >
                       <FormattedChatMessage text={msg.content} isAdvisor={!isUser} />
+                      {!isUser && msg.source === 'local-fallback' && (
+                        <div className="mt-1.5 flex items-center">
+                          <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
+                            رد احتياطي
+                          </span>
+                        </div>
+                      )}
                       <span className="text-[10px] opacity-60 block mt-2 text-left" dir="ltr">
                         {msg.timestamp}
                       </span>

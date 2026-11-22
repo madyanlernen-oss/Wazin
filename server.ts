@@ -136,8 +136,8 @@ function generateLocalAgentResponse(
   const isPersonalDistress = /(ثقتي بنفسي ضعيفة|ما عندي ثقة|احس اني فاشل|اكره نفسي|جلد الذات|اقارن نفسي بالناس|دونية|خجل شديد|خوف من الفشل|اسوف|تسويف|كسل|مشتت|ما اقدر التزم|ما عندي ارادة|ما عندي شغف|هدفي ضائع|فوضى في حياتي|حساس زيادة|ما اقدر اتحكم بمشاعري|عصبية|بكاء مستمر)/i.test(msg);
   const isSocialDistress = /(وحيد|ما عندي اصدقاء|ما عندي ربع|معزول|عزلة اجتماعية|ما احد يسال عني|احس بالوحدة|ما عندي اصحاب|رهاب اجتماعي|اخاف من الناس|اخجل اتكلم|ارتبك في التجمعات|ما اعرف اسولف|انطوائي زيادة|اصدقائي استغلوني|خيانة صديق|غدر|ناس سامين|صداقة مزيفة)/i.test(msg);
 
-  // 2. مشاعر التعب الشديد والحزن والضيق والفضفضة النفسية (Exhaustion & Grief)
-  const isGriefOrExhaustion = !isCrisisOrDeath && /(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)/i.test(msg);
+  // 2. مشاعر التعب الشديد والحزن والضيق والفضفضة النفسية (Exhaustion & Grief) مع حدود الكلمات العربية
+  const isGriefOrExhaustion = !isCrisisOrDeath && /(?<![\u0600-\u06FF])(?:[وفبلك]|ال|وال|فال|بال|كال|لل)?(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)(?![\u0600-\u06FF])/i.test(msg);
 
   // 3. مشاعر الغضب والسب ولعن الحياة (مع مراعاة حدود الكلمات لعدم تطابق "أسبوع" أو "أسباب")
   const isCurseOrAnger = !isCrisisOrDeath && !isGriefOrExhaustion && /(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(msg);
@@ -229,6 +229,7 @@ function generateLocalAgentResponse(
       station_completed: Boolean(isEvaluationSession) && Boolean(data.station_completed),
       strengths: data.strengths || [],
       challenges: data.challenges || [],
+      source: 'local-fallback' as const,
     };
   };
 
@@ -1049,6 +1050,7 @@ app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
         assessmentMode,
         stationTurnCount
       );
+      (localResponse as any).source = 'local-fallback';
       return res.json(localResponse);
     }
 
@@ -1264,67 +1266,128 @@ ${evaluationSessionGuideline}
       });
     }
 
-    const response = await ai.models.generateContent({
-      model: process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
-      contents,
-      config: {
-        systemInstruction,
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            agent_name: {
-              type: Type.STRING,
-              description: 'اسم الوكيل أو المستشار',
+    // 2) تجربة النماذج بالترتيب المحدد:
+    // process.env.GEMINI_MODEL ثم gemini-flash-latest ثم gemini-flash-lite-latest (مع نماذج مساندة إضافية)
+    const candidateModels = Array.from(
+      new Set(
+        [
+          process.env.GEMINI_MODEL,
+          'gemini-flash-latest',
+          'gemini-flash-lite-latest',
+          'gemini-3.1-flash-lite',
+          'gemini-3.5-flash-lite',
+        ].filter(Boolean) as string[]
+      )
+    );
+
+    let response: any = null;
+    let usedModel = '';
+
+    for (const model of candidateModels) {
+      let attempts = 0;
+      const maxRetries = 2; // 1) أعد المحاولة مرتين عند 503 أو 429
+      let modelSucceeded = false;
+
+      while (attempts <= maxRetries) {
+        try {
+          response = await ai.models.generateContent({
+            model,
+            contents,
+            config: {
+              systemInstruction,
+              responseMimeType: 'application/json',
+              responseSchema: {
+                type: Type.OBJECT,
+                properties: {
+                  agent_name: {
+                    type: Type.STRING,
+                    description: 'اسم الوكيل أو المستشار',
+                  },
+                  reasoning: {
+                    type: Type.STRING,
+                    description: 'تحليل عميق وخطوات تفكير منطقية مرتبطة بحالة المستخدم وأهدافه في عجلة الحياة',
+                  },
+                  score: {
+                    type: Type.NUMBER,
+                    description: 'درجة أو تقييم رقمي',
+                  },
+                  summary: {
+                    type: Type.STRING,
+                    description: 'ملخص الوضع بناءً على البيانات',
+                  },
+                  advice: {
+                    type: Type.STRING,
+                    description: 'نصيحة عملية سريعة وموجهة',
+                  },
+                  reply: {
+                    type: Type.STRING,
+                    description: 'نص الرد التفصيلي والمشجع من المستشار المتحدث مباشرة للمستفيد',
+                  },
+                  actionSteps: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: 'خطوات إجرائية سريعة يمكن إضافتها لقائمة الأهداف',
+                  },
+                  reflectionQuestion: {
+                    type: Type.STRING,
+                    description: 'سؤال تأملي ذكي للمستفيد',
+                  },
+                  station_completed: {
+                    type: Type.BOOLEAN,
+                    description: 'true only if the user has provided clear, sufficient answers covering their real state and the doctor is ready to finalize this station; false if the user gave a greeting, vague response, or more diagnostic exploration is needed',
+                  },
+                  strengths: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: '1 to 3 dynamic key strengths extracted from what the user actually said in this session',
+                  },
+                  challenges: {
+                    type: Type.ARRAY,
+                    items: { type: Type.STRING },
+                    description: '1 to 3 dynamic key challenges/growth areas extracted from what the user actually said in this session',
+                  },
+                },
+                required: ['reasoning', 'advice', 'reply', 'actionSteps'],
+              },
             },
-            reasoning: {
-              type: Type.STRING,
-              description: 'تحليل عميق وخطوات تفكير منطقية مرتبطة بحالة المستخدم وأهدافه في عجلة الحياة',
-            },
-            score: {
-              type: Type.NUMBER,
-              description: 'درجة أو تقييم رقمي',
-            },
-            summary: {
-              type: Type.STRING,
-              description: 'ملخص الوضع بناءً على البيانات',
-            },
-            advice: {
-              type: Type.STRING,
-              description: 'نصيحة عملية سريعة وموجهة',
-            },
-            reply: {
-              type: Type.STRING,
-              description: 'نص الرد التفصيلي والمشجع من المستشار المتحدث مباشرة للمستفيد',
-            },
-            actionSteps: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: 'خطوات إجرائية سريعة يمكن إضافتها لقائمة الأهداف',
-            },
-            reflectionQuestion: {
-              type: Type.STRING,
-              description: 'سؤال تأملي ذكي للمستفيد',
-            },
-            station_completed: {
-              type: Type.BOOLEAN,
-              description: 'true only if the user has provided clear, sufficient answers covering their real state and the doctor is ready to finalize this station; false if the user gave a greeting, vague response, or more diagnostic exploration is needed',
-            },
-            strengths: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: '1 to 3 dynamic key strengths extracted from what the user actually said in this session',
-            },
-            challenges: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: '1 to 3 dynamic key challenges/growth areas extracted from what the user actually said in this session',
-            },
-          },
-          required: ['reasoning', 'advice', 'reply', 'actionSteps'],
-        },
-      },
-    });
+          });
+
+          usedModel = model;
+          // 4) اطبع عند النجاح اسم النموذج المستخدم
+          console.log(`[Advisor Chat] نجح استخدام النموذج: ${model}`);
+          modelSucceeded = true;
+          break;
+        } catch (error: any) {
+          // 4) اطبع في console.error عند كل فشل: اسم النموذج والخطأ الكامل
+          console.error(`[Advisor Chat] فشل النموذج "${model}" (محاولة ${attempts + 1}/${maxRetries + 1}):`, error);
+
+          const errStr = JSON.stringify(error?.message || error || '');
+          const status = error?.status || error?.code;
+          const isTransient = status === 503 || status === 429 ||
+            errStr.includes('503') || errStr.includes('429') ||
+            errStr.includes('high demand') || errStr.includes('RESOURCE_EXHAUSTED') ||
+            errStr.includes('UNAVAILABLE');
+
+          // 1) عند فشل بخطأ 503 أو 429: أعد المحاولة مرتين بانتظار ثانيتين بينهما
+          if (isTransient && attempts < maxRetries) {
+            attempts++;
+            await new Promise((resolve) => setTimeout(resolve, 2000));
+            continue;
+          }
+
+          // 2) إن استمر الفشل أو ظهر خطأ 404: جرّب النموذج التالي
+          break;
+        }
+      }
+
+      if (modelSucceeded && response) {
+        break;
+      }
+    }
+
+    if (!response) {
+      throw new Error('جميع نماذج Gemini المرشحة لم تنجح في توليد الرد.');
+    }
 
     const parsed = JSON.parse(response.text || '{}');
     parsed.agent_name = parsed.agent_name || advisorName;
@@ -1348,9 +1411,11 @@ ${evaluationSessionGuideline}
       else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
       else parsed.actionSteps = [];
     }
+    // 3) إضافة حقل source: "gemini"
+    parsed.source = 'gemini';
     return res.json(parsed);
   } catch (error: any) {
-    console.error('Advisor Chat Gemini error:', error?.message || error);
+    console.error('Advisor Chat Final Fallback error:', error?.message || error);
     const {
       advisor,
       userProfile,
@@ -1376,6 +1441,8 @@ ${evaluationSessionGuideline}
       assessmentMode,
       stationTurnCount
     );
+    // 3) إضافة حقل source: "local-fallback"
+    (localFallback as any).source = 'local-fallback';
     return res.json(localFallback);
   }
 });

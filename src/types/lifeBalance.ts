@@ -139,6 +139,7 @@ export interface ChatMessage {
   summary?: string;
   advice?: string;
   isCrisis?: boolean;
+  source?: 'gemini' | 'local-fallback';
 }
 
 export interface MonthData {

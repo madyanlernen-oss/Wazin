@@ -40,6 +40,7 @@ interface EvaluationChatMessage {
   summary?: string;
   advice?: string;
   isCrisis?: boolean;
+  source?: 'gemini' | 'local-fallback';
 }
 
 interface StationDynamicInsights {
@@ -752,6 +753,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       let earnedScore = calculateSemanticScore(text, historyTextsArray, detectedScore || undefined);
       let dynamicStrengths: string[] = [];
       let dynamicChallenges: string[] = [];
+      let responseSource: 'gemini' | 'local-fallback' = 'gemini';
 
       try {
         const res = await fetch('/api/gemini/advisor-chat', {
@@ -773,6 +775,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         if (res.ok) {
           const data = await res.json();
+          responseSource = data.source || 'gemini';
           reasoningContent = data.reasoning || '';
           summaryContent = data.summary || '';
           adviceContent = data.advice || '';
@@ -819,6 +822,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }
 
       if (!replyContent) {
+        responseSource = 'local-fallback';
         const local = getClientAdvisorResponse(
           currentAdvisor,
           text,
@@ -854,6 +858,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         advice: adviceContent,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isCrisis: isCrisisMessage(replyContent) || isCrisisMessage(text),
+        source: responseSource,
       };
 
       setChatMessages((prev) => ({
@@ -1242,6 +1247,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                   >
                     {/* Render Formatted Bold text without raw ** markers */}
                     <FormattedChatMessage text={msg.text} isAdvisor={isAdvisor} />
+
+                    {isAdvisor && msg.source === 'local-fallback' && (
+                      <div className="mt-1.5 flex items-center">
+                        <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
+                          رد احتياطي
+                        </span>
+                      </div>
+                    )}
 
                     <span
                       className={`block text-[10px] mt-2 font-mono ${
