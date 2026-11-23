@@ -567,7 +567,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               {/* HTML5 Video Element */}
               <video
                 ref={videoRef}
-                src="/videos/wazan-intro.mp4"
+                src="/videos/wazan.mp4"
                 playsInline
                 preload="auto"
                 className="absolute inset-0 w-full h-full object-cover cursor-pointer z-0"
@@ -654,7 +654,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                       </span>
                     </h4>
                     <p className="text-xs sm:text-sm text-slate-300/90 font-medium max-w-md mx-auto leading-relaxed drop-shadow-xs">
-                      شاهد في 90 ثانية كيف يعيد الذكاء الاصطناعي ضبط تناغم مجالاتك الحياتية
+                      شاهد كيف يعيد الذكاء الاصطناعي ضبط تناغم مجالاتك الحياتية خطوة بخطوة
                     </p>
                   </div>
 
@@ -791,7 +791,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                     >
                       <span>{formatVideoTime(currentTime)}</span>
                       <span className="text-white/40">/</span>
-                      <span className="text-white/70">{formatVideoTime(duration || 10)}</span>
+                      <span className="text-white/70">{formatVideoTime(duration || 20)}</span>
                     </span>
 
                     {/* Quality Badge & Menu (1080p HD) */}
