@@ -1133,7 +1133,7 @@ function sanitizeAdvisorReply(
 app.post('/api/gemini/advisor-chat', async (req: Request, res: Response) => {
   // 1) إلغاء استدعاءات الذكاء الاصطناعي فور إغلاق العميل للاتصال لتوفير الحصة
   const clientAbortController = new AbortController();
-  req.on('close', () => {
+  res.on('close', () => {
     if (!res.writableEnded) {
       console.log('[Advisor Chat] أغلق العميل الاتصال، إلغاء استدعاءات Gemini/Groq الجارية لتوفير الحصة...');
       clientAbortController.abort();
