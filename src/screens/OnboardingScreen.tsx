@@ -400,6 +400,24 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       }
     }
 
+    // إذا كان المستخدم يطلب صراحة اعتماد التقييم الحالي وكان هناك تقييم معروض في آخر رسالة للمستشار
+    const isExplicitAdoption = /(اعتمد\s+التقييم|اعتماد\s+التقييم|اعتمدها|موافق|نعم\s+اعتمد|اعتماد)/i.test(text.trim());
+    let pendingOfferedScore: number | null = null;
+    if (isExplicitAdoption) {
+      const lastAdvisorMsg = [...currentList].reverse().find((m) => m.sender === 'advisor');
+      if (lastAdvisorMsg) {
+        const offeredMatch = lastAdvisorMsg.text.match(/(?:بدرجة|درجة|تقييمك|وضعك\s+الحالي\s+بدرجة)\s*[:(]?\s*([1-9]|10(?:\.\d+)?|\d+\.\d+)\s*(?:\/|\s*من\s*)\s*10/i)
+          || lastAdvisorMsg.text.match(/([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10/i);
+        if (offeredMatch) {
+          const val = parseFloat(offeredMatch[1]);
+          if (!isNaN(val) && val >= 1 && val <= 10) {
+            pendingOfferedScore = val;
+            detectedScore = val;
+          }
+        }
+      }
+    }
+
     // Save answer turn in state
     if (detectedScore !== null) {
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, detectedScore);
@@ -564,8 +582,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         if (local.challenges && local.challenges.length > 0) dynamicChallenges = local.challenges;
       }
 
+      if (pendingOfferedScore !== null) {
+        earnedScore = pendingOfferedScore;
+      }
+
       // If station completed by AI advisor:
       if (isStationCompleted) {
+        if (pendingOfferedScore !== null) {
+          earnedScore = pendingOfferedScore;
+        }
         const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
         if (!replyContent.includes('تم اعتماد تقييم المحطة')) {
           const isSpiritual = currentAdvisor.id === 'spiritual';
@@ -716,6 +741,74 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const staticFallbackInsights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
   const activeConversation = chatMessages[currentAdvisor.id] || [];
 
+  // فحص ما إذا كانت آخر رسالة للمستشار تحتوي على درجة مقترحة للاعتماد
+  let lastOfferedScore: number | null = null;
+  const lastAdvisorMessage = [...activeConversation].reverse().find((m) => m.sender === 'advisor');
+  if (lastAdvisorMessage && !isCompleted) {
+    const scoreInMsgMatch = lastAdvisorMessage.text.match(/(?:بدرجة|درجة|تقييمك|وضعك\s+الحالي\s+بدرجة)\s*[:(]?\s*([1-9]|10(?:\.\d+)?|\d+\.\d+)\s*(?:\/|\s*من\s*)\s*10/i)
+      || lastAdvisorMessage.text.match(/([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10/i);
+    if (scoreInMsgMatch) {
+      const val = parseFloat(scoreInMsgMatch[1]);
+      if (!isNaN(val) && val >= 1 && val <= 10) {
+        lastOfferedScore = val;
+      }
+    }
+  }
+
+  // معالج الاعتماد المباشر للدرجة وإتمام المحطة
+  const handleAdoptScoreAndComplete = (scoreToAdopt: number) => {
+    const finalScore = Number(scoreToAdopt.toFixed(1));
+    onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, finalScore);
+    
+    const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+    if (onAddEisenhowerGoal) {
+      onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
+    }
+
+    const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, finalScore, answers);
+    setStationInsights((prev) => ({
+      ...prev,
+      [currentAdvisor.id]: {
+        score: finalScore,
+        strengths: fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب'],
+        challenges: fallbackInsights?.challenges || ['بناء عادة يومية مستدامة لحماية اتزانك'],
+      },
+    }));
+
+    // إضافة رسالة تأكيد الاعتماد في المحادثة
+    const isSpiritual = currentAdvisor.id === 'spiritual';
+    const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
+    const spiritualNote = isSpiritual ? '\n(تقدير لشعورك الحالي وليس حكماً على التزامك)' : '';
+    const completionReply = `✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\n${scoreLabel}: (${finalScore.toFixed(1)} من 10).${spiritualNote}\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
+
+    const userConfirmationMsg: EvaluationChatMessage = {
+      id: `user_confirm_${Date.now()}`,
+      sender: 'user',
+      text: `اعتمد التقييم بدرجة ${finalScore} من 10`,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    const advisorConfirmationMsg: EvaluationChatMessage = {
+      id: `advisor_confirm_${Date.now()}`,
+      sender: 'advisor',
+      text: completionReply,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setChatMessages((prev) => ({
+      ...prev,
+      [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), userConfirmationMsg, advisorConfirmationMsg],
+    }));
+
+    onFinishAdvisor(currentAdvisor.id, finalScore);
+    confetti({
+      particleCount: 70,
+      spread: 70,
+      origin: { y: 0.7 },
+    });
+    setShowCelebration(true);
+  };
+
   const currentActiveInsights = stationInsights[currentAdvisor.id] || {
     score: currentAdvisorScore > 0 ? currentAdvisorScore : 7.5,
     strengths: (staticFallbackInsights?.strengths || []).slice(0, 2),
@@ -783,6 +876,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           currentActiveInsights={currentActiveInsights}
           currentStationConfig={currentStationConfig}
           currentAdvisorIndex={currentAdvisorIndex}
+          offeredScore={lastOfferedScore}
+          onAdoptScoreAndComplete={handleAdoptScoreAndComplete}
           onChangeInput={setInputText}
           onSendAnswer={handleSendAnswer}
           onStopAnswer={handleStopAnswer}
