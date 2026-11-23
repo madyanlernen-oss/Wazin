@@ -589,8 +589,10 @@ ${specificQuestion}
       }
     }
 
+    // إذا كان المستخدم يطلب صراحة مواصلة الحوار أو الاستمرار أو إطالة الاستكشاف (عدم إنهاء المحطة)
+    const isExplicitContinue = /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار)/i.test(text.trim()) && !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل)/i.test(text.trim());
     // إذا كان المستخدم يطلب صراحة اعتماد التقييم الحالي وكان هناك تقييم معروض في آخر رسالة للمستشار
-    const isExplicitAdoption = /(اعتمد\s+التقييم|اعتماد\s+التقييم|اعتمدها|موافق|نعم\s+اعتمد|اعتماد)/i.test(text.trim());
+    const isExplicitAdoption = !isExplicitContinue && /(اعتمد\s+التقييم|اعتماد\s+التقييم|اعتمدها|نعم\s+اعتمد|اعتماد)/i.test(text.trim());
     let pendingOfferedScore: number | null = null;
     if (isExplicitAdoption) {
       const lastAdvisorMsg = [...currentList].reverse().find((m) => m.sender === 'advisor');
@@ -772,7 +774,9 @@ ${specificQuestion}
         if (local.challenges && local.challenges.length > 0) dynamicChallenges = local.challenges;
       }
 
-      if (isExplicitAdoption) {
+      if (isExplicitContinue) {
+        isStationCompleted = false;
+      } else if (isExplicitAdoption) {
         isStationCompleted = true;
         if (pendingOfferedScore !== null) {
           earnedScore = pendingOfferedScore;

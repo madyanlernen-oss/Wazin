@@ -201,12 +201,15 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   advisorName = (advisor && typeof advisor === 'object' && advisor.name) ? advisor.name : defaultMeta.name;
   const advisorRole = (advisor && typeof advisor === 'object' && (advisor.role || advisor.title)) ? (advisor.role || advisor.title) : defaultMeta.role;
 
+  // فحص ما إذا كان المستخدم يطلب صراحة مواصلة الحوار، التعمق، أو إطالة النقاش (عدم إنهاء المحطة)
+  const isContinueIntent = /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار|المزيد|فهم\s*أكثر|فهم\s*اكثر|تقييم\s*أدق|تقييم\s*ادق)/i.test(message) && !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل\s*للمحطة|ننتقل\s*للتالية|المحطة التالية)/i.test(message);
+
   // فحص ما إذا كان المستخدم يطلب المضي قدماً أو يقدم التزاماً/خطوة عملية
-  const isMoveForwardOrCommitment = /(نصف\s+ساعة|ساعة|دقائق|دقيقة|خطوة|أمشي|امشي|مشي|تأمل|تامل|جاهز|ننتقل|نكمل|المحطة التالية|اعتمد|اعتماد|تمام|حسنا|موافق|اتفقنا|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول)/i.test(message);
+  const isMoveForwardOrCommitment = !isContinueIntent && /(نصف\s+ساعة|ساعة|دقائق|دقيقة|خطوة|أمشي|امشي|مشي|تأمل|تامل|جاهز|ننتقل|المحطة التالية|اعتمد|اعتماد|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول)/i.test(message);
   // فحص ما إذا كان المستخدم يطلب صراحة اعتماد التقييم وإنهاء المحطة
-  const isAdoptionIntent = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|ننتقل|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|موافق|نعم اعتمد)/i.test(message);
+  const isAdoptionIntent = !isContinueIntent && /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(message);
   // فحص ما إذا كان المستخدم يوافق على الخطوة الميكروية المقترحة
-  const isAcceptingMicroStep = /(حسنا|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|موافق|تمام|اتفقنا|بجرب|بحاول|وفر|أوفر|ادخر|أدخر|حصالة|50|100)/i.test(message);
+  const isAcceptingMicroStep = !isContinueIntent && /(حسنا|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|موافق|اتفقنا|بجرب|بحاول|وفر|أوفر|ادخر|أدخر|حصالة|50|100)/i.test(message);
 
   const isUserAsking = (/[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|تنصحني)(\s|$)/i.test(message)) && !isMoveForwardOrCommitment;
   // إزالة القفل الصارم للتبادلات إذا قدم المستفيد خطوة أو التزاماً أو طلب المتابعة أو طلب الاعتماد
@@ -364,7 +367,9 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   let evaluationSessionGuideline = '';
   if (isEvaluationSession) {
     let stationStateGuideline = `المحطة في مرحلة الاستكشاف (التبادل ${stationTurnCount + 1} من 5)، اطرح سؤالاً استكشافياً واحداً محدداً.`;
-    if (isAdoptionIntent) {
+    if (isContinueIntent) {
+      stationStateGuideline = `[المستفيد اختار صراحة مواصلة الحوار والتعمق ("${message}")]: المستفيد رفض إنهاء المحطة وفضّل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة وإطالة الاستكشاف. ⛔ يُمنع منعاً باتاً إنهاء المحطة أو وضع "station_completed": true! اجعل "station_completed": false حتماً. رحب برغبته في الاستمرار في جملة دافئة، ثم اطرح سؤالاً تشخيصياً نوعياً جديداً في صميم اختصاصك (${advisorRole}) لتعميق فهم واقعه.`;
+    } else if (isAdoptionIntent) {
       stationStateGuideline = `[طلب اعتماد صريح للمحطة!] المستفيد يطلب صراحة وبشكل مباشر اعتماد التقييم وإنهاء المحطة والانتقال ("${message}"). يجب إلزامياً وضع "station_completed": true، وتقديم الدرجة والملخص التشخيصي والنصيحة الختامية دون طرح أي سؤال على الإطلاق! (يُمنع منعاً باتاً طرح أي سؤال جديد).`;
     } else if (isAcceptingMicroStep && stationTurnCount >= 1) {
       stationStateGuideline = `[المستفيد وافق على الخطوة الميكروية المقترحة!] المستفيد وافق أو قرر تجربة العادة/الخطوة المقترحة ("${message}"). توقف فوراً عن الأسئلة الاستكشافية وعن السؤال عن مبالغ أو آليات تنفيذ مجهدة؛ اعكس موافقته بدفء، وقدّم التقييم المرحلي بدرجة واضحة من 10 واعرض صيغة التخيير المعيارية لإنهاء المحطة دون طرح أسئلة استجوابية.`;
@@ -828,7 +833,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     parsed.advice = parsed.advice || '';
     parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
     parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
-    if (forcedIncomplete) {
+    if (forcedIncomplete || isContinueIntent) {
       parsed.station_completed = false;
     }
     if (isAdoptionIntent) {
@@ -1013,7 +1018,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
         parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
         parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
 
-        if (forcedIncomplete) {
+        if (forcedIncomplete || isContinueIntent) {
           parsed.station_completed = false;
         }
         if (isAdoptionIntent) {
