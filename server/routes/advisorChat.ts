@@ -202,10 +202,15 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const advisorRole = (advisor && typeof advisor === 'object' && (advisor.role || advisor.title)) ? (advisor.role || advisor.title) : defaultMeta.role;
 
   // فحص ما إذا كان المستخدم يطلب المضي قدماً أو يقدم التزاماً/خطوة عملية
-  const isMoveForwardOrCommitment = /(نصف\s+ساعة|ساعة|دقائق|دقيقة|خطوة|أمشي|امشي|مشي|تأمل|تامل|جاهز|ننتقل|نكمل|المحطة التالية|اعتمد|اعتماد|تمام|حسنا|موافق|اتفقنا)/i.test(message);
+  const isMoveForwardOrCommitment = /(نصف\s+ساعة|ساعة|دقائق|دقيقة|خطوة|أمشي|امشي|مشي|تأمل|تامل|جاهز|ننتقل|نكمل|المحطة التالية|اعتمد|اعتماد|تمام|حسنا|موافق|اتفقنا|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول)/i.test(message);
+  // فحص ما إذا كان المستخدم يطلب صراحة اعتماد التقييم وإنهاء المحطة
+  const isAdoptionIntent = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|ننتقل|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|موافق|نعم اعتمد)/i.test(message);
+  // فحص ما إذا كان المستخدم يوافق على الخطوة الميكروية المقترحة
+  const isAcceptingMicroStep = /(حسنا|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|موافق|تمام|اتفقنا|بجرب|بحاول|وفر|أوفر|ادخر|أدخر|حصالة|50|100)/i.test(message);
+
   const isUserAsking = (/[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|تنصحني)(\s|$)/i.test(message)) && !isMoveForwardOrCommitment;
-  // إزالة القفل الصارم للتبادلات إذا قدم المستفيد خطوة أو التزاماً أو طلب المتابعة
-  const forcedIncomplete = Boolean(isEvaluationSession) && (stationTurnCount < 1 && !isMoveForwardOrCommitment) && isUserAsking;
+  // إزالة القفل الصارم للتبادلات إذا قدم المستفيد خطوة أو التزاماً أو طلب المتابعة أو طلب الاعتماد
+  const forcedIncomplete = Boolean(isEvaluationSession) && !isAdoptionIntent && (stationTurnCount < 1 && !isMoveForwardOrCommitment) && isUserAsking;
   const completionPhrasesRegex = /(أتممنا|انتهت\s+(?:هذه\s+)?المحطة|انتهينا\s+من\s+(?:هذه\s+)?المحطة|اكتملت\s+(?:هذه\s+)?المحطة|أنهينا\s+(?:هذه\s+)?المحطة|ختمنا\s+(?:هذه\s+)?المحطة|اكتمل\s+تقييم|أكملنا\s+تقييم|أتممنا\s+هذا\s+الجانب|أنهينا\s+هذا\s+الجانب|المحطة\s+التالية|ننتقل\s+(?:الآن\s+)?(?:إلى|ل)المحطة|اكتملت\s+محطة|أنجزنا\s+هذه\s+المحطة|أكملنا\s+هذه\s+المحطة|انتهت\s+هذه\s+المحطة|اكتملت\s+هذه\s+المحطة|أتممنا\s+تقييم)/i;
 
   // سادساً: سياق المحطات - استخراج ملخص مقتضب (سطر أو سطران) لأهم ما ذكره المستخدم في المحطات السابقة
@@ -358,16 +363,25 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 
   let evaluationSessionGuideline = '';
   if (isEvaluationSession) {
+    let stationStateGuideline = `المحطة في مرحلة الاستكشاف (التبادل ${stationTurnCount + 1} من 5)، اطرح سؤالاً استكشافياً واحداً محدداً.`;
+    if (isAdoptionIntent) {
+      stationStateGuideline = `[طلب اعتماد صريح للمحطة!] المستفيد يطلب صراحة وبشكل مباشر اعتماد التقييم وإنهاء المحطة والانتقال ("${message}"). يجب إلزامياً وضع "station_completed": true، وتقديم الدرجة والملخص التشخيصي والنصيحة الختامية دون طرح أي سؤال على الإطلاق! (يُمنع منعاً باتاً طرح أي سؤال جديد).`;
+    } else if (isAcceptingMicroStep && stationTurnCount >= 1) {
+      stationStateGuideline = `[المستفيد وافق على الخطوة الميكروية المقترحة!] المستفيد وافق أو قرر تجربة العادة/الخطوة المقترحة ("${message}"). توقف فوراً عن الأسئلة الاستكشافية وعن السؤال عن مبالغ أو آليات تنفيذ مجهدة؛ اعكس موافقته بدفء، وقدّم التقييم المرحلي بدرجة واضحة من 10 واعرض صيغة التخيير المعيارية لإنهاء المحطة دون طرح أسئلة استجوابية.`;
+    } else if (stationTurnCount >= 4) {
+      stationStateGuideline = `بلغ المستخدم الإجابة الخامسة؛ يجب تطبيق قاعدة التقييم المرحلي وعرض الدرجة وصيغة التخيير المعيارية دون أي سؤال استكشافي سادس ما لم يطلب المستخدم الاستمرار صراحة.`;
+    }
+
     evaluationSessionGuideline = `
 [بروتوكول جلسة الاستشارة والتقييم الحواري التكيفي 🌿]
 المستفيد يخوض جلسة استشارية تقييمية لمحطة (${advisorName})${evaluationQuestionTitle ? ` - وسؤال المحطة: "${evaluationQuestionTitle}"` : ''}.
 - عدد التبادلات الحوارية التي تمت حتى الآن في هذه المحطة (stationTurnCount): ${stationTurnCount}.
-- حالة إتمام المحطة: ${stationTurnCount < 4 ? `المحطة في مرحلة الاستكشاف (التبادل ${stationTurnCount + 1} من 5)، اطرح سؤالاً استكشافياً واحداً محدداً.` : `بلغ المستخدم الإجابة الخامسة؛ يجب تطبيق قاعدة التقييم المرحلي وعرض الدرجة وصيغة التخيير المعيارية دون أي سؤال استكشافي سادس ما لم يطلب المستخدم الاستمرار صراحة.`}
+- حالة إتمام المحطة: ${stationStateGuideline}
 
 ⚠️ توجيهات حاسمة:
 1. ⛔ لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة" إلا إذا كان station_completed يساوي true فقط!
-2. عند بلوغ الإجابة الخامسة (stationTurnCount >= 4): يجب التوقف عن الاستكشاف وعرض صيغة التقييم المرحلي والتخيير بين الاعتماد أو المواصلة.
-3. إذا اختار المستفيد الاعتماد (station_completed = true): اختم بتلخيص خطة صغيرة بجملتين واضحتين، ولا تطرح أي سؤال جديد!
+2. عند موافقة المستفيد على الخطوة أو بلوغ التبادل الخامس: يجب التوقف عن الاستكشاف وعرض صيغة التقييم المرحلي والتخيير بين الاعتماد أو المواصلة.
+3. إذا اختار المستفيد الاعتماد ("اعتمد التقييم") أو وضعت station_completed = true: اختم بملخص تشخيصي وخطة صغيرة بجملتين واضحتين، ويُمنع منعاً باتاً طرح أي سؤال جديد!
 `;
   } else {
     evaluationSessionGuideline = `
@@ -817,6 +831,9 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     if (forcedIncomplete) {
       parsed.station_completed = false;
     }
+    if (isAdoptionIntent) {
+      parsed.station_completed = true;
+    }
 
     if (!parsed.reply && (parsed.advice || parsed.summary)) {
       parsed.reply = parsed.advice || parsed.summary;
@@ -998,6 +1015,9 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         if (forcedIncomplete) {
           parsed.station_completed = false;
+        }
+        if (isAdoptionIntent) {
+          parsed.station_completed = true;
         }
 
         if (!parsed.reply && (parsed.advice || parsed.summary)) {

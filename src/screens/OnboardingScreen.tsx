@@ -772,11 +772,18 @@ ${specificQuestion}
         if (local.challenges && local.challenges.length > 0) dynamicChallenges = local.challenges;
       }
 
-      if (pendingOfferedScore !== null) {
+      if (isExplicitAdoption) {
+        isStationCompleted = true;
+        if (pendingOfferedScore !== null) {
+          earnedScore = pendingOfferedScore;
+        } else if (earnedScore === undefined || earnedScore <= 0) {
+          earnedScore = currentAdvisor.id === 'financial' ? 5.5 : 6.0;
+        }
+      } else if (pendingOfferedScore !== null) {
         earnedScore = pendingOfferedScore;
       }
 
-      // If station completed by AI advisor:
+      // If station completed by AI advisor or explicit adoption:
       if (isStationCompleted) {
         if (pendingOfferedScore !== null) {
           earnedScore = pendingOfferedScore;
