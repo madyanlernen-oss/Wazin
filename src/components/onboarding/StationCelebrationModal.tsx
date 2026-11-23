@@ -43,14 +43,10 @@ export const StationCelebrationModal: React.FC<StationCelebrationModalProps> = (
         </div>
 
         <div>
-          <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full mb-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-            <span className="flex items-center gap-1">
-              <span>اكتمل تقييم المحطة</span>
-              <span dir="ltr" className="font-mono">
-                {stationNumber} / 8
-              </span>
-              <span>بنجاح</span>
+          <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-full mb-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+            <span className="font-extrabold">
+              اكتمل تقييم المحطة {stationNumber} من 8 بنجاح
             </span>
           </div>
           <h3 className="text-2xl font-black text-[#0F172A] dark:text-[#F1F5F9]">
