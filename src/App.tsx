@@ -59,6 +59,15 @@ export default function App() {
     return 'landing';
   });
 
+  const [previousScreen, setPreviousScreen] = useState<Screen>('dashboard');
+
+  const navigateTo = (newScreen: Screen) => {
+    if (newScreen !== activeScreen) {
+      setPreviousScreen(activeScreen);
+      setActiveScreen(newScreen);
+    }
+  };
+
   // Track whether user clicked 'login' or 'signup' from top buttons
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login');
 
@@ -287,12 +296,12 @@ export default function App() {
       // ignore
     }
 
-    setActiveScreen('onboarding');
+    navigateTo('onboarding');
   };
 
   // Handler: Finish all 8 advisors
   const handleCompleteAll = () => {
-    setActiveScreen('dashboard');
+    navigateTo('dashboard');
   };
 
   // Handler: Add custom goal to area
@@ -351,13 +360,13 @@ export default function App() {
   // Switch to specific advisor in chat
   const handleSelectAdvisorChat = (advisorId: LifeAreaId) => {
     setSelectedAdvisorId(advisorId);
-    setActiveScreen('advisor_chat');
+    navigateTo('advisor_chat');
   };
 
   // Jump into specific advisor's questionnaire
   const handleEditAdvisorEvaluation = (advisorId: LifeAreaId) => {
     setSelectedAdvisorId(advisorId);
-    setActiveScreen('onboarding');
+    navigateTo('onboarding');
   };
 
   // Screen titles for mobile header
@@ -379,7 +388,7 @@ export default function App() {
         {/* Top App Bar */}
         <Navbar
           currentScreen={activeScreen}
-          onNavigate={(screen) => setActiveScreen(screen)}
+          onNavigate={(screen) => navigateTo(screen)}
           onNavigateToAuth={handleNavigateToAuth}
           userProfile={appState.userProfile}
           onSignOut={handleSignOut}
@@ -418,7 +427,7 @@ export default function App() {
       {/* Sidebar on the right in RTL */}
       <Sidebar
         currentScreen={activeScreen as 'dashboard' | 'onboarding' | 'advisor_chat' | 'director_summary' | 'comparison' | 'goals_matrix'}
-        onNavigate={(screen) => setActiveScreen(screen)}
+        onNavigate={(screen) => navigateTo(screen)}
         userProfile={appState.userProfile}
         onSignOut={handleSignOut}
         onReset={handleResetProfile}
@@ -509,10 +518,14 @@ export default function App() {
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
               completedAdvisors={appState.completedAdvisors}
               completedDates={appState.completedDates}
-              onNavigateToDashboard={() => setActiveScreen('dashboard')}
+              onNavigateToDashboard={() => navigateTo('dashboard')}
+              onNavigateBack={() => {
+                const target = previousScreen === 'onboarding' ? 'dashboard' : previousScreen;
+                navigateTo(target);
+              }}
               onNavigateToAdvisorChat={(advisorId) => {
                 setSelectedAdvisorId(advisorId);
-                setActiveScreen('advisor_chat');
+                navigateTo('advisor_chat');
               }}
               theme={theme}
             />

@@ -67,6 +67,7 @@ interface OnboardingScreenProps {
   completedAdvisors: LifeAreaId[];
   completedDates?: Record<string, number>;
   onNavigateToDashboard: () => void;
+  onNavigateBack?: () => void;
   onNavigateToAdvisorChat?: (advisorId: LifeAreaId) => void;
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
   theme?: 'light' | 'dark';
@@ -499,6 +500,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onAddEisenhowerGoal,
   completedDates,
   onNavigateToDashboard,
+  onNavigateBack,
   onNavigateToAdvisorChat,
   theme: _theme = 'light',
 }) => {
@@ -619,6 +621,17 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       });
     }
     setShowContextModal(false);
+  };
+
+  const handleCloseContextModal = () => {
+    setShowContextModal(false);
+    if (!isContextCompleted) {
+      if (onNavigateBack) {
+        onNavigateBack();
+      } else {
+        onNavigateToDashboard();
+      }
+    }
   };
 
   const handleSelectAiMode = (mode: AiModelMode) => {
@@ -2002,8 +2015,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           role="dialog"
           aria-modal="true"
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
+          onClick={handleCloseContextModal}
         >
-          <div className="bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 text-right animate-fadeIn">
+          <div
+            className="bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 text-right animate-fadeIn"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-[#0F6E6E] dark:text-cyan-400 flex items-center justify-center flex-shrink-0 shadow-xs">
@@ -2026,16 +2043,15 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
                 </div>
               </div>
 
-              {isContextCompleted && (
-                <button
-                  type="button"
-                  onClick={() => setShowContextModal(false)}
-                  className="w-9 h-9 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer"
-                  aria-label="إغلاق النافذة"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleCloseContextModal}
+                className="w-9 h-9 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer flex-shrink-0"
+                aria-label={!isContextCompleted ? 'إغلاق والعودة للصفحة السابقة' : 'إغلاق النافذة'}
+                title={!isContextCompleted ? 'إغلاق والعودة للصفحة السابقة' : 'إغلاق النافذة'}
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
             {contextError && (
@@ -2161,15 +2177,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
             </div>
 
             <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
-              {isContextCompleted && (
-                <button
-                  type="button"
-                  onClick={() => setShowContextModal(false)}
-                  className="px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
-                >
-                  إغلاق
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={handleCloseContextModal}
+                className="px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                {!isContextCompleted ? 'إلغاء والعودة' : 'إغلاق'}
+              </button>
               <button
                 type="button"
                 onClick={handleSaveContext}
