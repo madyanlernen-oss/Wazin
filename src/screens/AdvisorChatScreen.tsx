@@ -1,27 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { VoiceInput } from '../components/VoiceInput';
-import { FormattedChatMessage, isolateNumbersInText } from '../components/FormattedChatMessage';
-import { CrisisSupportCard, isCrisisMessage } from '../components/CrisisSupportCard';
-import {
-  Send,
-  Sparkles,
-  User,
-  ArrowRight,
-  Plus,
-  Check,
-  Lightbulb,
-  Loader2,
-  ChevronDown,
-  Zap,
-  Brain,
-  Scale,
-  CheckCircle2,
-  X,
-  ArrowLeft,
-  Square,
-  Undo2,
-  Pencil,
-} from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import {
   AdvisorConfig,
@@ -29,50 +7,20 @@ import {
   LifeAreaId,
   UserProfile,
 } from '../types/lifeBalance';
+import { isCrisisMessage } from '../components/CrisisSupportCard';
+import {
+  AiModelMode,
+  AI_MODES,
+  AdvisorSelectorSidebar,
+  ChatRoomHeader,
+  ChatMessageList,
+  ChatPromptInputBar,
+  ChatToast,
+} from '../components/chat';
 
-export type AiModelMode = 'fast' | 'balanced' | 'deep';
-
-export const AI_MODES: {
-  id: AiModelMode;
-  title: string;
-  shortTitle: string;
-  icon: any;
-  color: string;
-  bgColor: string;
-  badge: string;
-  desc: string;
-}[] = [
-    {
-      id: 'fast',
-      title: 'الوضع السريع ⚡',
-      shortTitle: 'سريع ⚡',
-      icon: Zap,
-      color: '#0284c7',
-      bgColor: '#f0f9ff',
-      badge: 'استجابة سريعة',
-      desc: 'إجابات فورية، مباشرة، وموجزة للأسئلة والحلول السريعة',
-    },
-    {
-      id: 'balanced',
-      title: 'الوضع المتوازن ⚖️',
-      shortTitle: 'متوازن ⚖️',
-      icon: Scale,
-      color: '#1b605b',
-      bgColor: '#ecfdf5',
-      badge: 'موصى به',
-      desc: 'توازن ذكي بين سرعة التفاعل وعمق التوجيه الإرشادي',
-    },
-    {
-      id: 'deep',
-      title: 'التحليل العميق 🧠',
-      shortTitle: 'تفكير عميق 🧠',
-      icon: Brain,
-      color: '#7c3aed',
-      bgColor: '#f5f3ff',
-      badge: 'تفكير استراتيجي',
-      desc: 'تفكيك جذري للتحديات، تحليل الدوافع النفسية، وخطط استراتيجية شاملة',
-    },
-  ];
+// Re-export for backward compatibility
+export type { AiModelMode };
+export { AI_MODES };
 
 interface AdvisorChatScreenProps {
   currentAdvisorId: LifeAreaId;
@@ -149,7 +97,6 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     }
     return 'balanced';
   });
-  const [showModeDropdown, setShowModeDropdown] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -169,8 +116,6 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     setAiMode(mode);
     localStorage.setItem('wazan_ai_mode', mode);
   };
-
-  const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
 
   // Persist messagesByAdvisor to localStorage under wazan_advisor_chats
   useEffect(() => {
@@ -603,495 +548,55 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Advisors Switcher Sidebar */}
-        <div className="lg:col-span-4 bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-4 shadow-xs space-y-3 transition-colors">
-          <div className="px-2 py-1">
-            <h3 className="font-extrabold text-sm text-[#0F172A] dark:text-[#F1F5F9]">اختر المستشار للمحادثة</h3>
-            <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
-              لكل مستشار سياق مستقل مبني على نتائجك وأهدافك
-            </p>
-          </div>
-
-          <div className="space-y-1.5 overflow-y-auto max-h-[75vh] pr-1">
-            {ADVISORS_LIST.map((advisor) => {
-              const isSelected = advisor.id === currentAdvisor.id;
-              const sc = scores[advisor.id] || 0;
-
-              return (
-                <button
-                  key={advisor.id}
-                  onClick={() => onSelectAdvisor(advisor.id)}
-                  className={`w-full text-right p-3 rounded-2xl transition-all duration-200 flex items-center justify-between border cursor-pointer min-h-[44px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${isSelected
-                    ? 'bg-[#F7F6F2] dark:bg-[#112028] border-[#0F6E6E] dark:border-[#0891B2] shadow-xs'
-                    : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734] text-[#0F172A] dark:text-[#F1F5F9]'
-                    }`}
-                  style={isSelected ? { borderRightColor: advisor.themeColor, borderRightWidth: '4px' } : {}}
-                >
-                  <div className="flex items-center gap-3">
-                    <div
-                      className="w-10 h-10 rounded-xl flex items-center justify-center text-xl shadow-xs border border-black/5 dark:border-white/10"
-                      style={{ backgroundColor: `${advisor.themeColor}15` }}
-                    >
-                      {advisor.avatarSvg}
-                    </div>
-                    <div>
-                      <h4 className="font-extrabold text-xs text-[#0F172A] dark:text-[#F1F5F9]">{advisor.name}</h4>
-                      <p className="text-[10px] text-[#475569] dark:text-[#94A3B8]">{advisor.title}</p>
-                    </div>
-                  </div>
-
-                  <div dir="ltr" className="text-left font-mono font-bold">
-                    <span
-                      className="text-xs"
-                      style={{ color: advisor.themeColor }}
-                    >
-                      {sc.toFixed(1)}
-                    </span>
-                    <span className="text-[9px] text-[#64748B] dark:text-[#94A3B8]"> / 10</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
+        <AdvisorSelectorSidebar
+          currentAdvisorId={currentAdvisor.id}
+          scores={scores}
+          onSelectAdvisor={onSelectAdvisor}
+        />
 
         {/* Right: The Active Advisor Consultation Room */}
         <div className="lg:col-span-8 flex flex-col bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl overflow-hidden shadow-xs h-[78vh] transition-colors">
           {/* Room Header Banner */}
-          <div className="p-4 sm:p-5 border-b border-[#E2E8F0] dark:border-[#1E343F] bg-[#F7F6F2] dark:bg-[#0B161C] flex items-center justify-between transition-colors">
-            <div className="flex items-center gap-3.5">
-              <div
-                className="w-12 h-12 rounded-2xl flex items-center justify-center text-2xl shadow-xs border border-black/5 dark:border-white/10 relative"
-                style={{ backgroundColor: `${currentAdvisor.themeColor}20` }}
-              >
-                {currentAdvisor.avatarSvg}
-                <span
-                  className="absolute -bottom-1 -right-1 w-3.5 h-3.5 rounded-full border-2 border-white dark:border-[#0B161C]"
-                  style={{ backgroundColor: currentAdvisor.themeColor }}
-                />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">{currentAdvisor.name}</h3>
-                  <span
-                    className="text-[10px] font-bold px-2 py-0.5 rounded-full border"
-                    style={{
-                      color: currentAdvisor.themeColor,
-                      borderColor: `${currentAdvisor.themeColor}35`,
-                      backgroundColor: `${currentAdvisor.themeColor}10`,
-                    }}
-                  >
-                    {currentAdvisor.badge}
-                  </span>
-                </div>
-                <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">{currentAdvisor.role}</p>
-              </div>
-            </div>
-
-            {/* Header Right Side: AI Model Mode Selector & Score Tag */}
-            <div className="flex items-center gap-2 sm:gap-3">
-              {/* AI Model Mode Selector */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => setShowModeDropdown(!showModeDropdown)}
-                  className="flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl border transition-all text-xs font-bold shadow-xs hover:shadow-sm cursor-pointer"
-                  style={{
-                    backgroundColor: currentModeConfig.bgColor,
-                    borderColor: `${currentModeConfig.color}40`,
-                    color: currentModeConfig.color,
-                  }}
-                  title="تغيير نمط تفكير الذكاء الاصطناعي"
-                >
-                  <currentModeConfig.icon className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline font-black">{currentModeConfig.title}</span>
-                  <span className="sm:hidden font-black">{currentModeConfig.shortTitle}</span>
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showModeDropdown ? 'rotate-180' : ''}`} />
-                </button>
-
-                {/* Dropdown Menu */}
-                {showModeDropdown && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-40"
-                      onClick={() => setShowModeDropdown(false)}
-                    />
-                    <div className="absolute left-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#0E1D24] rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
-                      <div className="px-3 py-2 border-b border-[#E2E8F0] dark:border-[#1E343F] mb-1">
-                        <span className="text-[11px] font-black text-[#0F172A] dark:text-[#F1F5F9] block">مستوى تفكير الذكاء الاصطناعي (Gemini)</span>
-                        <span className="text-[10px] text-[#475569] dark:text-[#94A3B8]">اختر نمط الإجابة والتحليل المناسب لاحتياجك</span>
-                      </div>
-
-                      <div className="space-y-1">
-                        {AI_MODES.map((mode) => {
-                          const isSelected = mode.id === aiMode;
-                          const IconComponent = mode.icon;
-                          return (
-                            <button
-                              key={mode.id}
-                              type="button"
-                              onClick={() => {
-                                handleSelectAiMode(mode.id);
-                                setShowModeDropdown(false);
-                              }}
-                              className={`w-full text-right p-2.5 rounded-xl transition-all flex items-start gap-2.5 border cursor-pointer ${isSelected
-                                ? 'border-[#0F6E6E] dark:border-[#22D3EE] shadow-xs'
-                                : 'border-transparent hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
-                                }`}
-                              style={isSelected ? { backgroundColor: mode.bgColor } : {}}
-                            >
-                              <div
-                                className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0 mt-0.5"
-                                style={{ backgroundColor: `${mode.color}15`, color: mode.color }}
-                              >
-                                <IconComponent className="w-4 h-4" />
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center justify-between">
-                                  <span className="text-xs font-black text-[#0F172A] dark:text-[#F1F5F9]">{mode.title}</span>
-                                  <span
-                                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-md"
-                                    style={{ backgroundColor: `${mode.color}20`, color: mode.color }}
-                                  >
-                                    {mode.badge}
-                                  </span>
-                                </div>
-                                <p className="text-[10px] text-[#475569] dark:text-[#94A3B8] leading-tight mt-1">{mode.desc}</p>
-                              </div>
-                              {isSelected && <Check className="w-4 h-4 text-[#0F6E6E] dark:text-[#22D3EE] flex-shrink-0 mt-1" />}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {/* Current Score Tag with proper LTR format */}
-              <div dir="ltr" className="bg-white dark:bg-[#0E1D24] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] text-left shadow-xs transition-colors">
-                <span className="text-[9px] sm:text-[10px] text-[#64748B] dark:text-[#94A3B8] block text-right font-sans">درجتك</span>
-                <span className="text-xs sm:text-sm font-black font-mono block" style={{ color: currentAdvisor.themeColor }}>
-                  {currentScore.toFixed(1)} / 10
-                </span>
-              </div>
-            </div>
-          </div>
+          <ChatRoomHeader
+            currentAdvisor={currentAdvisor}
+            currentScore={currentScore}
+            aiMode={aiMode}
+            onSelectAiMode={handleSelectAiMode}
+          />
 
           {/* Chat Messages Area */}
-          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 bg-[#F7F6F2]/50 dark:bg-[#071318]/90 transition-colors">
-            {(() => {
-              const lastUserMsgId = [...activeMessages].reverse().find((m) => m.sender === 'user')?.id;
-              return activeMessages.map((msg) => {
-                const isUser = msg.sender === 'user';
+          <ChatMessageList
+            messages={activeMessages}
+            currentAdvisor={currentAdvisor}
+            isLoading={isLoading}
+            aiMode={aiMode}
+            addedGoals={addedGoals}
+            onAddActionToGoals={handleAddActionToGoals}
+            onUndoLastExchange={handleUndoLastExchange}
+            messagesEndRef={messagesEndRef}
+          />
 
-                return (
-                  <div
-                    key={msg.id}
-                    className={`flex gap-3 ${isUser ? 'flex-row-reverse' : 'flex-row'}`}
-                  >
-                    {/* Avatar */}
-                    <div
-                      className={`w-8 h-8 rounded-xl flex items-center justify-center text-sm flex-shrink-0 ${isUser
-                        ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white'
-                        : 'border border-black/5 dark:border-white/10'
-                        }`}
-                      style={!isUser ? { backgroundColor: `${currentAdvisor.themeColor}15` } : {}}
-                    >
-                      {isUser ? <User className="w-4 h-4" /> : currentAdvisor.avatarSvg}
-                    </div>
-
-                    {/* Bubble */}
-                    <div className={`max-w-[85%] sm:max-w-[75%] space-y-3`}>
-                      <div
-                        className={`p-4 rounded-2xl text-xs sm:text-sm leading-relaxed ${isUser
-                          ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white rounded-tr-none shadow-xs'
-                          : 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border border-[#E2E8F0] dark:border-[#1E343F] rounded-tl-none shadow-xs'
-                          }`}
-                      >
-                        <FormattedChatMessage text={msg.content} isAdvisor={!isUser} />
-                        {!isUser && msg.source === 'local-fallback' && (
-                          <div className="mt-1.5 flex items-center">
-                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                              رد احتياطي
-                            </span>
-                          </div>
-                        )}
-                        <span className="text-[10px] opacity-60 block mt-2 text-left" dir="ltr">
-                          {msg.timestamp}
-                        </span>
-
-                        {/* Undo & Edit actions for the last user message */}
-                        {isUser && msg.id === lastUserMsgId && !isLoading && (
-                          <div className="flex items-center gap-1.5 justify-end pt-1.5 border-t border-white/20 mt-2">
-                            <button
-                              type="button"
-                              onClick={handleUndoLastExchange}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition-all border border-white/20 cursor-pointer shadow-xs"
-                              title="تراجع عن الرسالة وحذف رد المستشار وإعادة النص لخانة الكتابة"
-                            >
-                              <Undo2 className="w-3 h-3" />
-                              <span>تراجع</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleUndoLastExchange}
-                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/20 hover:bg-white/30 text-white text-[10px] font-bold transition-all border border-white/20 cursor-pointer shadow-xs"
-                              title="تعديل الرسالة وحذف رد المستشار وإعادة النص لخانة الكتابة"
-                            >
-                              <Pencil className="w-3 h-3" />
-                              <span>تعديل</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Render Crisis Support Card if crisis response detected */}
-                      {!isUser && (msg.isCrisis || isCrisisMessage(msg.content)) && (
-                        <CrisisSupportCard />
-                      )}
-
-                      {/* Actionable Steps suggested by advisor */}
-                      {!isUser && msg.actionSteps && msg.actionSteps.length > 0 && (
-                        <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-3.5 space-y-2 shadow-xs transition-colors">
-                          <span className="text-[11px] font-bold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
-                            خطوات عملية مقترحة من المستشار:
-                          </span>
-                          <div className="space-y-1.5">
-                            {msg.actionSteps.map((step, sIdx) => {
-                              const isAdded = addedGoals[step];
-                              return (
-                                <div
-                                  key={sIdx}
-                                  className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9]"
-                                >
-                                  <span>{isolateNumbersInText(step)}</span>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleAddActionToGoals(step)}
-                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all flex-shrink-0 shadow-xs cursor-pointer ${isAdded
-                                      ? 'bg-emerald-700 text-white'
-                                      : 'bg-white dark:bg-[#0E1D24] text-[#0F6E6E] dark:text-[#22D3EE] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
-                                      }`}
-                                  >
-                                    {isAdded ? (
-                                      <>
-                                        <Check className="w-3 h-3" />
-                                        <span>أُضيفت لمصفوفة أيزنهاور</span>
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Plus className="w-3 h-3" />
-                                        <span>إضافة لمصفوفة أيزنهاور (المربع 2)</span>
-                                      </>
-                                    )}
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Reflection Question */}
-                      {!isUser && msg.reflectionQuestion && (
-                        <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/50 rounded-xl p-3 text-xs text-[#8A5A00] dark:text-[#FBBF24] flex items-start gap-2 shadow-xs">
-                          <Lightbulb className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <span className="font-bold text-[#8A5A00] dark:text-[#FBBF24] block mb-0.5">
-                              سؤال للتأمل الذاتي:
-                            </span>
-                            <span>{isolateNumbersInText(msg.reflectionQuestion)}</span>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              });
-            })()}
-
-            {isLoading && (
-              <div className="flex gap-3 items-start text-xs text-[#475569] dark:text-[#94A3B8]">
-                <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-sm shadow-xs flex-shrink-0 mt-0.5"
-                  style={{ backgroundColor: `${currentAdvisor.themeColor}15` }}
-                >
-                  {currentAdvisor.avatarSvg}
-                </div>
-                <div className="bg-white dark:bg-[#0E1D24] p-3.5 rounded-2xl rounded-tl-none border border-[#E2E8F0] dark:border-[#1E343F] shadow-sm space-y-2.5 max-w-[85%] sm:max-w-[70%]">
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-4 h-4 animate-spin text-[#0F6E6E] dark:text-[#22D3EE] flex-shrink-0" />
-                    <span className="font-bold text-[#0F172A] dark:text-[#F1F5F9]">
-                      {aiMode === 'fast' && `${currentAdvisor.name} يصيغ لك نصيحة فورية سريعة ⚡...`}
-                      {aiMode === 'deep' && `${currentAdvisor.name} يفكك استشارتك بعمق وتحليل استراتيجي 🧠...`}
-                      {aiMode === 'balanced' && `${currentAdvisor.name} يفكر في استشارتك بعناية ⚖️...`}
-                    </span>
-                  </div>
-                  {/* Subtle pulsing skeleton lines to lower perceived wait time */}
-                  <div className="space-y-1.5 pt-0.5">
-                    <div className="h-2 rounded bg-slate-200/90 dark:bg-slate-700/60 animate-pulse w-48 sm:w-60" />
-                    <div className="h-2 rounded bg-slate-200/90 dark:bg-slate-700/60 animate-pulse w-32 sm:w-40" />
-                  </div>
-                </div>
-              </div>
-            )}
-
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Suggested Questions Chips */}
-          <div className="px-4 py-2 border-t border-[#E2E8F0] dark:border-[#1E343F] bg-[#F7F6F2] dark:bg-[#0B161C] flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs transition-colors">
-            <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] font-bold flex-shrink-0">أسئلة مقترحة:</span>
-            {currentAdvisor.suggestedQuestions.map((qText, idx) => (
-              <button
-                key={idx}
-                type="button"
-                onClick={() => handleSendMessage(qText)}
-                disabled={isLoading}
-                className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-[11px] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
-              >
-                {qText}
-              </button>
-            ))}
-          </div>
-
-          {/* Chat Input Box */}
-          <div className="p-3 sm:p-4 border-t border-[#E2E8F0] dark:border-[#1E343F] bg-white dark:bg-[#0E1D24] space-y-2.5 transition-colors">
-            {/* Quick AI Mode Selector Pill */}
-            <div className="flex items-center justify-between px-1">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] font-bold">نمط التفكير:</span>
-                <div className="inline-flex rounded-xl p-0.5 bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F]">
-                  {AI_MODES.map((m) => {
-                    const isSelected = m.id === aiMode;
-                    const IconC = m.icon;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => handleSelectAiMode(m.id)}
-                        className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${isSelected
-                          ? 'bg-white dark:bg-[#0E1D24] shadow-xs'
-                          : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
-                          }`}
-                        style={isSelected ? { color: m.color } : {}}
-                        title={m.desc}
-                      >
-                        <IconC className="w-3 h-3" />
-                        <span>{m.shortTitle}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-              <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] hidden md:inline font-medium">
-                {currentModeConfig.desc}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <VoiceInput
-                currentValue={inputMessage}
-                onTranscript={(transcript) => setInputMessage(transcript)}
-                disabled={isLoading}
-                showStatusBadge={true}
-                resetKey={currentAdvisorId}
-              />
-
-              {/* Free Text Input in dedicated Form for Enter key support */}
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  if (!isLoading && inputMessage.trim()) {
-                    handleSendMessage();
-                  }
-                }}
-                className="flex-1"
-              >
-                <input
-                  type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
-                  placeholder={`اطرح سؤالك أو تحدث بصوتك مع ${currentAdvisor.name}...`}
-                  className="w-full bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-[#F1F5F9] placeholder-[#94A3B8] dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-[#22D3EE] focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-[#22D3EE] transition-all"
-                  dir="rtl"
-                  disabled={isLoading}
-                />
-              </form>
-
-              {/* Send or Stop Button completely outside form */}
-              {isLoading ? (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleStopMessage(e);
-                  }}
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  className="relative z-20 pointer-events-auto h-12 px-3.5 sm:px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white flex items-center justify-center gap-1.5 transition-all shadow-md flex-shrink-0 cursor-pointer font-bold text-xs select-none"
-                  title="إيقاف انتظار الرد واسترجاع رسالتك"
-                >
-                  <Square className="w-4 h-4 fill-current" />
-                  <span>إيقاف ⏹</span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={!inputMessage.trim() || isLoading}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleSendMessage();
-                  }}
-                  className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
-                  style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
-                  title="إرسال"
-                >
-                  <Send className="w-5 h-5 -rotate-90" />
-                </button>
-              )}
-            </div>
-          </div>
+          {/* Input Bar with quick questions chips & send/stop */}
+          <ChatPromptInputBar
+            currentAdvisor={currentAdvisor}
+            inputMessage={inputMessage}
+            onChangeInputMessage={setInputMessage}
+            isLoading={isLoading}
+            aiMode={aiMode}
+            onSelectAiMode={handleSelectAiMode}
+            onSendMessage={handleSendMessage}
+            onStopMessage={handleStopMessage}
+          />
         </div>
       </div>
 
       {/* Floating Confirmation Toast for Eisenhower Injection */}
-      {toastMessage && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-6 start-6 z-50 flex items-center gap-3 px-4 py-3 rounded-2xl bg-[#064E3B] text-white shadow-2xl border border-emerald-500/50 backdrop-blur-md animate-in fade-in slide-in-from-bottom-3 duration-300 max-w-md"
-        >
-          <CheckCircle2 className="w-5 h-5 text-emerald-300 flex-shrink-0" />
-          <span className="text-xs font-bold leading-relaxed flex-1">
-            {toastMessage}
-          </span>
-          {onNavigateToGoalsMatrix && (
-            <button
-              type="button"
-              onClick={onNavigateToGoalsMatrix}
-              className="px-2.5 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-[11px] font-black text-emerald-100 hover:text-white transition-all flex items-center gap-1 flex-shrink-0 cursor-pointer shadow-xs"
-            >
-              <span>فتح المصفوفة</span>
-              <ArrowLeft className="w-3 h-3" />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => setToastMessage(null)}
-            className="p-1 rounded-lg text-emerald-200 hover:text-white hover:bg-emerald-800/60 transition-all flex-shrink-0 cursor-pointer"
-            aria-label="إغلاق الإشعار"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
+      <ChatToast
+        toastMessage={toastMessage}
+        onClose={() => setToastMessage(null)}
+        onNavigateToGoalsMatrix={onNavigateToGoalsMatrix}
+      />
     </div>
   );
 };
+export default AdvisorChatScreen;
