@@ -33,6 +33,8 @@ export type { EvaluationChatMessage, StationDynamicInsights };
 
 interface OnboardingScreenProps {
   initialAdvisorId?: LifeAreaId;
+  assessmentMode?: 'initial_assessment' | 'weekly_checkin';
+  assessmentSessionId?: number | string;
   answers: Record<string, any>;
   userProfile?: UserProfile | null;
   onUpdateProfile?: (updated: Partial<UserProfile>) => void;
@@ -52,6 +54,8 @@ interface OnboardingScreenProps {
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   initialAdvisorId = 'spiritual',
+  assessmentMode,
+  assessmentSessionId,
   answers,
   userProfile,
   onUpdateProfile,
@@ -101,12 +105,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     (!((userProfile?.employmentStatus || userProfile?.workStatus || '').includes('موظف') || (userProfile?.employmentStatus || userProfile?.workStatus || '').includes('صاحب عمل') || (userProfile?.employmentStatus || userProfile?.workStatus || '').includes('مستقل')) || userProfile?.incomeStability?.trim())
   );
 
-  // إذا كانت بيانات السياق ناقصة، افتح نافذة سياق المستفيد الإلزامية تلقائياً
+  // إظهار نافذة سياق المستفيد دائماً عند فتح التقييم الأسبوعي أو إذا كانت البيانات غير مكتملة
   useEffect(() => {
-    if (!isContextCompleted) {
+    if (assessmentMode === 'weekly_checkin' || !isContextCompleted) {
       setShowContextModal(true);
     }
-  }, [isContextCompleted]);
+  }, [assessmentSessionId, assessmentMode, isContextCompleted]);
 
   // Banner dismissed state persisted in localStorage
   const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
@@ -228,7 +232,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   ): EvaluationChatMessage => {
     const consult = stConfig.consultation || stConfig.initialDiagnostic;
 
-    // Custom warm, calm, non-medical opening for Spiritual Station (السكينة والمعنى)
+    // Custom warm, calm opening for Spiritual Station (السكينة والمعنى)
     if (advisor.id === 'spiritual') {
       const spiritualText = `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في محطة السكينة والمعنى 🌿
 
@@ -244,6 +248,112 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         id: `welcome_${advisor.id}_${Date.now()}`,
         sender: 'advisor',
         text: spiritualText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+    }
+
+    // Custom context-aware opening for Financial Station (أ. كمال المالي) - التكيف الصارم حسب سياق وخلفية المستفيد
+    if (advisor.id === 'financial') {
+      const status = (userProfile?.employmentStatus || userProfile?.workStatus || '').trim();
+      const isStudent = status === 'طالب جامعي' || status.includes('طالب');
+      const isBusiness =
+        status === 'صاحب عمل/مستقل' ||
+        status === 'صاحب عمل' ||
+        status === 'مستقل' ||
+        status.includes('صاحب عمل') ||
+        status.includes('مستقل');
+      const isRetired = status === 'متقاعد' || status.includes('متقاعد');
+      const isJobSeeker = status === 'باحث عن عمل' || status.includes('باحث');
+      const hasDependents = userProfile?.hasDependents === 'نعم';
+      const incomeSrc = userProfile?.incomeSource?.trim();
+      const incomeStab = userProfile?.incomeStability?.trim();
+
+      let contextIntro = '';
+      let specificQuestion = '';
+      let guidanceNote = '';
+
+      if (isStudent) {
+        contextIntro = `بما أنك في المرحلة الجامعية وتعتمد على **${incomeSrc || 'مكافأة جامعية أو مصروف شهري'}**${hasDependents ? ' مع وجود معالين ترعاهم' : ''} 🎓`;
+        specificQuestion = `كيف تدير هذا الدخل شهرياً، وهل يفي باحتياجاتك ومستلزماتك الدراسية وتدخر منه شيئاً للطوارئ، أم تواجه تحدياً وعجزاً في التوفيق حتى نهاية الشهر؟`;
+        guidanceNote = `سنساعدك في ضبط ميزانيتك الجامعية وبناء أول حصالة أمان مالي تناسب واقعك دون تعقيد.`;
+      } else if (isBusiness) {
+        contextIntro = `بصفتك رائد أعمال / صاحب عمل حر بدخل **${incomeStab || 'متغير'}**${hasDependents ? ' ومسؤوليات أسرية' : ''} 💼`;
+        specificQuestion = `كيف تصف استقرارك المالي حالياً مع تقلبات التدفق النقدي، وهل تفصل بدقة بين مالك الشخصي وميزانية العمل، وما مدى جاهزية احتياطيك المالي لأي فترة ركود؟`;
+        guidanceNote = `سنعمل معاً على حماية استقرارك الشخصي وفصل حساباتك وتأمين صمام أمان تجاري وشخصي.`;
+      } else if (isRetired) {
+        contextIntro = `مع انتقالك لمرحلة التقاعد المباركة واعتمادك على المعاش التقاعدي${hasDependents ? ' مع رعاية أسرتك' : ''} 🌿`;
+        specificQuestion = `كيف تصف كفاية واستقرار دخلك التقاعدي، وهل يغطي نمط معيشتك ورعايتك الصحية بأمان أم تواجه التزامات مستجدة؟`;
+        guidanceNote = `هدفنا ضمان أمانك المالي وراحة بالك تجاه أي متطلبات صحية أو أسرية طارئة.`;
+      } else if (isJobSeeker) {
+        contextIntro = `وأنت في مرحلة البحث عن فرصة عمل جديدة والانطلاق المهني 🎯`;
+        specificQuestion = `كيف تدير مصاريفك الضرورية ومدخراتك المتاحة حالياً لتمديد فترة الأمان المالي وتجنب الديون المرهقة؟`;
+        guidanceNote = `سنركز على ترشيد النفقات وحماية مدخراتك لتمنحك الأريحية والتركيز في رحلة بحثك.`;
+      } else {
+        // Employee / default
+        contextIntro = `بصفتك موظفاً بدخل **${incomeStab || 'شهري منتظم'}**${hasDependents ? ' ومع وجود معالين وأسرة ترعاها' : ''} 📊`;
+        specificQuestion = `كيف توزع راتبك شهرياً بين النفقات الأساسية والادخار وصندوق الطوارئ؟ وهل تشعر بضغط الأقساط أو تسرب غير مرئي للمال؟`;
+        guidanceNote = `سنضع خطة واضحة لإدارة الراتب وتأسيس صمام الأمان والتحرر من الالتزامات الضاغطة.`;
+      }
+
+      const financialText = `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في محطة الاستقلال والتخطيط المالي 💰
+
+أنا **${advisor.name}**، ${advisor.role}.
+${contextIntro}
+
+📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**
+${specificQuestion}
+
+💡 ${guidanceNote}
+(شاركني واقعك بصراحة، ويمكنك تقييم رضاك المالي الحالي من 1 إلى 10)`;
+
+      return {
+        id: `welcome_${advisor.id}_${Date.now()}`,
+        sender: 'advisor',
+        text: financialText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+    }
+
+    // Custom context-aware opening for Career Station (م. طارق المهني)
+    if (advisor.id === 'career') {
+      const status = (userProfile?.employmentStatus || userProfile?.workStatus || '').trim();
+      const isStudent = status === 'طالب جامعي' || status.includes('طالب');
+      const isBusiness =
+        status === 'صاحب عمل/مستقل' ||
+        status === 'صاحب عمل' ||
+        status === 'مستقل' ||
+        status.includes('صاحب عمل') ||
+        status.includes('مستقل');
+      const isRetired = status === 'متقاعد' || status.includes('متقاعد');
+      const isJobSeeker = status === 'باحث عن عمل' || status.includes('باحث');
+
+      let specificQuestion = '';
+      if (isStudent) {
+        specificQuestion = `ما مدى وضوح مسارك الأكاديمي، واكتسابك لمهارات سوق العمل وفرص التدريب والمشاريع العملية قبل التخرج؟`;
+      } else if (isBusiness) {
+        specificQuestion = `ما مدى وضوح رؤيتك لمشروعك، وكيف تدير نمو أعمالك والتفويض دون أن تستنزف طاقتك الشخصية؟`;
+      } else if (isJobSeeker) {
+        specificQuestion = `ما مدى جاهزية سيرتك الذاتية ومهاراتك للفرص المستهدفة، وكيف تدير معنوياتك وخطواتك الأسبوعية في البحث؟`;
+      } else if (isRetired) {
+        specificQuestion = `كيف تستثمر خبرتك وتجربتك المهنية الطويلة في استشارات أو مبادرات مجتمعية ملهمة؟`;
+      } else {
+        specificQuestion = `ما مدى وضوح مسارك المهني ونموك الوظيفي، وهل تشعر بالإنجاز والتقدير في بيئة عملك الحالية؟`;
+      }
+
+      const careerText = `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في محطة التطور والمسار المهني 🎯
+
+أنا **${advisor.name}**، ${advisor.role}.
+يسعدني أن نتدارس معاً أهدافك وإمكاناتك المهنية لبناء أثر مستدام.
+
+📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**
+${specificQuestion}
+
+💡 إجابتك ستساعدنا في رسم بوصلة مهنية واضحة وخطوات عملية ترفع جاهزيتك.`;
+
+      return {
+        id: `welcome_${advisor.id}_${Date.now()}`,
+        sender: 'advisor',
+        text: careerText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
     }
@@ -281,7 +391,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         [advisorKey]: [refreshedOpening],
       }));
     }
-  }, [userProfile?.employmentStatus, userProfile?.workStatus]);
+  }, [
+    userProfile?.employmentStatus,
+    userProfile?.workStatus,
+    userProfile?.incomeSource,
+    userProfile?.hasDependents,
+    userProfile?.incomeStability,
+    userProfile?.ageGroup,
+  ]);
 
   // 1) Initialize welcoming message for station
   useEffect(() => {
@@ -570,7 +687,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
           stationNumber,
           earnedScore,
           currentTurns,
-          historyTextsArray
+          historyTextsArray,
+          userProfile
         );
         reasoningContent = local.reasoning;
         summaryContent = local.summary;

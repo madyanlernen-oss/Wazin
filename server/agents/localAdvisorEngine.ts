@@ -8,9 +8,18 @@ export function generateLocalAgentResponse(
   evaluationStep?: number,
   evaluationQuestionTitle?: string,
   assessmentMode: 'initial_assessment' | 'weekly_checkin' = 'weekly_checkin',
-  stationTurnCount: number = 0
+  stationTurnCount: number = 0,
+  userProfile?: any
 ) {
   const msg = message.toLowerCase().trim();
+  const status = (userProfile?.employmentStatus || userProfile?.workStatus || '').trim();
+  const isStudent = status === 'طالب جامعي' || status.includes('طالب');
+  const isBusiness = status.includes('صاحب عمل') || status.includes('مستقل');
+  const isJobSeeker = status.includes('باحث');
+  const isRetired = status.includes('متقاعد');
+  const incomeSrc = userProfile?.incomeSource || (isStudent ? 'المكافأة الجامعية/المصروف' : '');
+  const incomeStab = userProfile?.incomeStability || '';
+  const hasDep = userProfile?.hasDependents === 'نعم';
   const accountName = (userName && userName.includes('سعود')) ? 'سعود المنصور' : '';
   const userGreeting = accountName ? `يا ${accountName}` : '';
 
@@ -559,19 +568,47 @@ export function generateLocalAgentResponse(
     });
   }
 
-  // 2. Domain: Financial (أ. كمال المالي)
+  // 2. Domain: Financial (أ. كمال المالي) - تكييف كامل حسب سياق وخلفية المستفيد
   if (agentKey === 'financial') {
     if (isGreeting) {
-      return formatAgentOutput({
-        reasoning: `تحليل مالي استباقي: المستفيد يبدأ الحوار المالي، والهدف هو توجيهه لتقييم سلوكه الإنفاقي وتأسيس صمام الأمان المالي دون التسبب في قلق أو شعور بالحرمان.`,
-        summary: `الترحيب المالي واستعراض ركائز الوعي المالي الحكيم والنمو المستدام.`,
-        advice: `تدوين كافة المصروفات اليومية لمدة أسبوع لرصد مواضع الهدر المالي.`,
-        reply: `مرحباً بك يا ${userName}! أنا ${advName} المستشار المالي لمنصة وزان.\n\nهدفي أن نبني معاً وعياً مالياً حكيماً يضمن لك الأمان والنمو المستدام دون تضييق. ما الذي يشغل تفكيرك مالياً أو تود مراجعته معي اليوم؟`,
-        actionSteps: [
+      let welcomeIntro = '';
+      let welcomeAdvice = '';
+      let welcomeQuestion = '';
+      let welcomeSteps = ['تدوين المصروفات اليومية لمدة أسبوع لرصد مواضع الهدر'];
+
+      if (isStudent) {
+        welcomeIntro = `مرحباً بك يا ${userName}! أنا ${advName} المستشار المالي لمنصة وزان.\n\nبما أنك في المرحلة الجامعية وتعتمد على ${incomeSrc}، يسعدني أن نضع معاً خطة ميسرة لضبط ميزانيتك ومكافأتك وتأسيس أول صمام أمان مالي دون تعقيد أو تضييق. كيف تصف إدارة مكافأتك ومصروفك الجامعي شهرياً؟`;
+        welcomeAdvice = `اقتطاع مبلغ رمزي (50 إلى 100 ريال شهرياً) من المكافأة في حصالة أو حساب ادخار فرعي كصمام أمان جامعي.`;
+        welcomeQuestion = `هل تكفيك مكافأتك ومصروفك حتى نهاية الشهر الأكاديمي، وما البند الذي يستنزفها أكثر؟`;
+        welcomeSteps = [
+          'فتح حساب ادخار فرعي مخصص للطوارئ الجامعية وتسميته صمام الأمان',
+          'رصد نفقات المقاهي والمستلزمات الدراسية أسبوعياً لتحديد التسرب'
+        ];
+      } else if (isBusiness) {
+        welcomeIntro = `مرحباً بك يا ${userName}! أنا ${advName} المستشار المالي لمنصة وزان.\n\nكرائد أعمال / صاحب عمل حر بدخل ${incomeStab || 'متغير'}، هدفنا حماية استقرارك الشخصي وفصل أموال العمل وتأمين صمام أمان مزدوج للمواسم الهادئة. كيف تدير التدفق النقدي واستقرارك المالي حالياً؟`;
+        welcomeAdvice = `الفصل الصارم بين حساب العمل والحساب الشخصي وتحديد راتب شهري ثابت لنفسك.`;
+        welcomeQuestion = `هل تفصل بدقة بين مالك الشخصي وميزانية العمل، وما مدى كفاية احتياطيك لأي فترة ركود؟`;
+        welcomeSteps = [
+          'فصل الحساب البنكي التجاري عن الحساب الشخصي تماماً',
+          'بناء احتياطي طوارئ تجاري يغطي 3-6 أشهر نفقات تشغيلية'
+        ];
+      } else {
+        welcomeIntro = `مرحباً بك يا ${userName}! أنا ${advName} المستشار المالي لمنصة وزان.\n\nبصفتك موظفاً بدخل ${incomeStab || 'شهري منتظم'}${hasDep ? ' ولديك معالون وأسرة ترعاها' : ''}، هدفنا بناء ميزانية متزنة تحمي راتبك وتعزز الادخار وصندوق الطوارئ. ما الذي يشغل تفكيرك مالياً أو تود مراجعته معي اليوم؟`;
+        welcomeAdvice = `تطبيق قاعدة 50/30/20 وأتمتة ادخار جزء من الراتب فور استلامه.`;
+        welcomeQuestion = `كيف توزع راتبك شهرياً بين النفقات الأساسية والادخار وصندوق الطوارئ؟`;
+        welcomeSteps = [
           'تدوين كافة المصروفات اليومية لمدة أسبوع لرصد الهدر',
           'تحويل مبلغ تلقائي ثابت (حتى لو بسيط) لصندوق الادخار فور استلام الراتب'
-        ],
-        reflectionQuestion: 'هل تشعر أن قراراتك المالية الحالية تخدم أهدافك الاستراتيجية أم استهلاك اللحظة؟'
+        ];
+      }
+
+      return formatAgentOutput({
+        reasoning: `تحليل مالي استباقي متكيف مع سياق المستفيد (${status}): توجيه المستفيد لبناء صمام الأمان وإدارة ميزانيته الواقعية دون تشتيت أو افتراضات غير واقعية.`,
+        summary: `الترحيب المالي واستعراض ركائز الوعي المالي الحكيم المتوافق مع سياق المستفيد.`,
+        advice: welcomeAdvice,
+        reply: welcomeIntro,
+        actionSteps: welcomeSteps,
+        reflectionQuestion: welcomeQuestion
       });
     }
 

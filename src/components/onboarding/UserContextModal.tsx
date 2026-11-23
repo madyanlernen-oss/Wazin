@@ -101,14 +101,18 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
                 <h3 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
                   سياق المستفيد وخلفيته الحياتية
                 </h3>
-                {!isContextCompleted && (
+                {!isContextCompleted ? (
                   <span className="px-2 py-0.5 text-[11px] font-black rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
                     إلزامي
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 text-[11px] font-black rounded-md bg-teal-500/10 text-[#0F6E6E] dark:text-cyan-400 border border-teal-500/20">
+                    تأكيد السياق للتقييم
                   </span>
                 )}
               </div>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-0.5">
-                تساعد مستشاري وزان في تفصيل نصائح واقعية تراعي قدراتك وميزانيتك
+                تساعد مستشاري وزان في تفصيل نصائح وأسئلة واقعية تراعي قدراتك وميزانيتك
               </p>
             </div>
           </div>
@@ -252,14 +256,14 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
             onClick={onClose}
             className="px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
           >
-            {!isContextCompleted ? 'إلغاء والعودة' : 'إغلاق'}
+            {!isContextCompleted ? 'إلغاء والعودة' : 'إغلاق ومتابعة التقييم'}
           </button>
           <button
             type="button"
             onClick={handleSave}
             className="px-6 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-black bg-[#0F6E6E] hover:bg-[#0b5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white transition-colors cursor-pointer shadow-md shadow-teal-900/10 flex-1 sm:flex-initial text-center"
           >
-            {isContextCompleted ? 'حفظ التعديلات' : 'حفظ ومتابعة التقييم'}
+            {isContextCompleted ? 'حفظ التعديلات واعتماد السياق' : 'حفظ ومتابعة التقييم'}
           </button>
         </div>
       </div>

@@ -54,6 +54,7 @@ export default function App() {
   const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
     return isDemoModeActive() || appState.userProfile?.email === 'demo@wazan.com';
   });
+  const [weeklySessionKey, setWeeklySessionKey] = useState<number>(1);
 
   // Screen navigation state: restore last screen on reload if user is authenticated
   const [activeScreen, setActiveScreen] = useState<Screen>(() => {
@@ -142,6 +143,7 @@ export default function App() {
     const demoState = activateDemoMode();
     setAppState(demoState);
     setIsDemoMode(true);
+    setWeeklySessionKey((k) => k + 1);
     setActiveScreen('onboarding'); // Direct to active live station
   };
 
@@ -150,6 +152,7 @@ export default function App() {
     const demoState = activateDemoMode();
     setAppState(demoState);
     setIsDemoMode(true);
+    setWeeklySessionKey((k) => k + 1);
     setActiveScreen('onboarding');
   };
 
@@ -303,6 +306,7 @@ export default function App() {
   // Handler: Start a fresh new weekly assessment cycle
   const handleStartNewWeeklyAssessment = () => {
     setSelectedAdvisorId('spiritual');
+    setWeeklySessionKey((k) => k + 1);
     setAppState((prev) => {
       const resetScores: Record<string, number> = {};
       ADVISORS_LIST.forEach((adv) => {
@@ -551,6 +555,8 @@ export default function App() {
           {activeScreen === 'onboarding' && (
             <OnboardingScreen
               initialAdvisorId={selectedAdvisorId}
+              assessmentMode={appState.assessmentMode}
+              assessmentSessionId={weeklySessionKey}
               answers={appState.answers}
               userProfile={appState.userProfile}
               onUpdateProfile={handleUpdateUserProfile}

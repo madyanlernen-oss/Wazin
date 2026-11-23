@@ -454,9 +454,50 @@ ${incomeStability ? `- طبيعة واستقرار الدخل: ${incomeStability
     stationSummaryContextText = `\n[ملخص سريع لما ذكره المستفيد في هذه المحطة لربط السياق]:\n${summaryStatements.slice(-2).join('\n')}\n`;
   }
 
+  let domainSpecificContextGuideline = '';
+  if (agentKey === 'financial') {
+    const isStudent = workStatus.includes('طالب');
+    const isBusiness = workStatus.includes('صاحب عمل') || workStatus.includes('مستقل');
+    const isJobSeeker = workStatus.includes('باحث');
+    const isRetired = workStatus.includes('متقاعد');
+
+    let specificDirectives = '';
+    if (isStudent) {
+      specificDirectives = `
+- المستفيد طالب جامعي ويعتمد على (${incomeSource || 'مكافأة جامعية/منحة أو مصروف'}):
+  * يجب أن تسأله حصراً عن كيفية إدارته للمكافأة أو المصروف وتحديات التوفيق حتى نهاية الشهر ونفقات الدراسة.
+  * ركّز على تأسيس حصالة أو صندوق ادخار رمزي بسيط (50–100 ريال شهرياً) وضبط نفقات المقاهي والمستلزمات وتجنب الاقتراض.
+  * ⛔ يُمنع منعاً باتاً سؤاله عن "الراتب الوظيفي" أو "قروض وشراء سيارات" أو "استثمارات عقارية معقدة" أو افتراض دخل ثابت كبير.`;
+    } else if (isBusiness) {
+      specificDirectives = `
+- المستفيد رائد أعمال أو صاحب عمل حر بدخل (${incomeStability || 'متغير'}):
+  * اسأله عن إدارة التدفق النقدي بين مواسم الوفرة والركود، وفصل أموال العمل تماماً عن المصروف الشخصي.
+  * ركز على تأسيس صمام أمان مزدوج (تجاري وشخصي) لا يقل عن 6 أشهر.`;
+    } else if (isJobSeeker) {
+      specificDirectives = `
+- المستفيد باحث عن عمل:
+  * اسأله عن إدارة مصاريفه ومدخراته المتاحة (Runway) بحذر لتكفي أطول فترة دون اقتراض.
+  * ⛔ لا تفترض وجود راتب أو دخل حالي.`;
+    } else if (isRetired) {
+      specificDirectives = `
+- المستفيد متقاعد ويعتمد على المعاش التقاعدي:
+  * اسأله عن كفاية المعاش، وإدارة التكاليف الصحية الطارئة، والحفاظ على رأس المال بأمان.`;
+    } else {
+      specificDirectives = `
+- المستفيد موظف بدخل (${incomeStability || 'شهري منتظم'})${dependentsText === 'نعم' ? ' ومسؤوليات أسرية ومعالين' : ''}:
+  * اسأله عن إدارة الراتب، وقاعدة 50/30/20، وصندوق الطوارئ لـ 3-6 أشهر نفقات، والتعامل مع الأقساط والالتزامات.`;
+    }
+
+    domainSpecificContextGuideline = `
+[توجيه استثنائي وإلزامي للمستشار المالي (أ. كمال المالي) 💰]:
+${specificDirectives}
+`;
+  }
+
   // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
   systemInstruction = `
 ${userContextBlock}
+${domainSpecificContextGuideline}
 
 ${agentRoleDescription}
 
@@ -1073,7 +1114,8 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
       evaluationStep,
       evaluationQuestionTitle,
       assessmentMode,
-      stationTurnCount
+      stationTurnCount,
+      effectiveUserProfile
     );
     // 3) إضافة حقل source: "local-fallback"
     (localFallback as any).source = 'local-fallback';
