@@ -220,14 +220,35 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const completedCount = completedAdvisors.length;
   const progressPercent = Math.min(100, Math.round((completedCount / 8) * 100));
 
-  // Helper to build opening doctor consultation message for current station
+  // Helper to build opening consultation message for current station
   const getOpeningMessage = (
     advisor: AdvisorConfig,
     stConfig: StationAssessmentConfig,
     stationNum: number
   ): EvaluationChatMessage => {
     const consult = stConfig.consultation || stConfig.initialDiagnostic;
-    const text = `أهلاً بك يا صديقنا في محطة التقييم والاستشارة الحوارية 🩺\n\nأنا **${advisor.name}**، ${advisor.role}.\nسنقف معاً في هذا الجانب لنستكشف واقعك برفق ووعي لنبني عليه توازنك المستدام.\n\n📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**\n${consult.title}\n\n💡 ${consult.description}`;
+
+    // Custom warm, calm, non-medical opening for Spiritual Station (السكينة والمعنى)
+    if (advisor.id === 'spiritual') {
+      const spiritualText = `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في محطة السكينة والمعنى 🌿
+
+أنا **${advisor.name}**، ${advisor.role}.
+يسعدني أن نلتقي في هذه المساحة الهادئة لنستكشف معاً حضورك القلبي وسلامك الداخلي.
+
+📌 **سؤال البداية:**
+ما مدى شعورك بالسكينة وحضور القلب في يومك حالياً، وما الذي يشتتك أكثر؟ وكيف تصف مساحتك الروحية اليومية باختصار؟
+
+💡 إجابتك ستساعدنا في قراءة توازنك الروحي بعناية، وبناء خطوات عملية هادئة تناسب واقعك.`;
+
+      return {
+        id: `welcome_${advisor.id}_${Date.now()}`,
+        sender: 'advisor',
+        text: spiritualText,
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      };
+    }
+
+    const text = `أهلاً بك يا صديقنا في محطة التقييم والاستشارة الحوارية 🌿\n\nأنا **${advisor.name}**، ${advisor.role}.\nسنقف معاً في هذا الجانب لنستكشف واقعك برفق ووعي لنبني عليه توازنك المستدام.\n\n📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**\n${consult.title}\n\n💡 ${consult.description}`;
 
     return {
       id: `welcome_${advisor.id}_${Date.now()}`,

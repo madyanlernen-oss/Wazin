@@ -352,7 +352,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   let evaluationSessionGuideline = '';
   if (isEvaluationSession) {
     evaluationSessionGuideline = `
-[بروتوكول جلسة الاستشارة والتقييم الحواري التكيفي 🩺]
+[بروتوكول جلسة الاستشارة والتقييم الحواري التكيفي 🌿]
 المستفيد يخوض جلسة استشارية تقييمية لمحطة (${advisorName})${evaluationQuestionTitle ? ` - وسؤال المحطة: "${evaluationQuestionTitle}"` : ''}.
 - عدد التبادلات الحوارية التي تمت حتى الآن في هذه المحطة (stationTurnCount): ${stationTurnCount}.
 - حالة إتمام المحطة: ${stationTurnCount < 4 ? `المحطة في مرحلة الاستكشاف (التبادل ${stationTurnCount + 1} من 5)، اطرح سؤالاً استكشافياً واحداً محدداً.` : `بلغ المستخدم الإجابة الخامسة؛ يجب تطبيق قاعدة التقييم المرحلي وعرض الدرجة وصيغة التخيير المعيارية دون أي سؤال استكشافي سادس ما لم يطلب المستخدم الاستمرار صراحة.`}

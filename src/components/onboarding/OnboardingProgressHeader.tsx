@@ -60,7 +60,7 @@ export const OnboardingProgressHeader: React.FC<OnboardingProgressHeaderProps> =
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-1 border-b border-[#E2E8F0] dark:border-[#1E343F]/60">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-[#0F6E6E]/10 dark:bg-[#22D3EE]/15 text-[#0F6E6E] dark:text-[#22D3EE] flex items-center justify-center text-xl flex-shrink-0">
-              🩺
+              🌿
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -70,11 +70,11 @@ export const OnboardingProgressHeader: React.FC<OnboardingProgressHeaderProps> =
                 <span className="text-[10px] font-extrabold px-2.5 py-1 rounded-full bg-[#0F6E6E]/15 dark:bg-[#22D3EE]/20 text-[#0F6E6E] dark:text-[#22D3EE] border border-[#0F6E6E]/30 dark:border-[#22D3EE]/40 flex items-center gap-1 shadow-xs">
                   <span>التقييم التأسيسي الشامل</span>
                   <span>•</span>
-                  <span>8 محطات سريرية</span>
+                  <span>8 محطات نوعية</span>
                 </span>
               </div>
               <p className="text-xs text-[#334155] dark:text-[#CBD5E1] mt-0.5">
-                حوار سريري استشاري هادئ؛ استمع لمستشارك وشارك واقعك برفق لنشخص اتزانك خطوة بخطوة.
+                حوار استشاري هادئ ومطمئن؛ استمع لمستشارك وشارك واقعك برفق لنشخص اتزانك خطوة بخطوة.
               </p>
             </div>
           </div>
