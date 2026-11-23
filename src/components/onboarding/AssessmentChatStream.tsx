@@ -76,14 +76,6 @@ export const AssessmentChatStream: React.FC<AssessmentChatStreamProps> = ({
                 {/* Render Formatted Bold text without raw ** markers */}
                 <FormattedChatMessage text={msg.text} isAdvisor={isAdvisor} />
 
-                {isAdvisor && msg.source === 'local-fallback' && (
-                  <div className="mt-1.5 flex items-center">
-                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 rounded border border-amber-300 dark:border-amber-700">
-                      رد احتياطي
-                    </span>
-                  </div>
-                )}
-
                 <span
                   className={`block text-[10px] mt-2 font-mono ${
                     isAdvisor ? 'text-[#64748B] dark:text-[#94A3B8]' : 'text-emerald-100/75'

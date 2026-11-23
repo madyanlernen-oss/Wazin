@@ -90,7 +90,11 @@ export function answerUserInquiry(advisorId: string, text: string): string | nul
 
   // 1. الجانب الروحي والسكينة (د. سفيان الروحي)
   if (advisorId === 'spiritual') {
-    if (/(خلوة|الخلوة|وقت|مكان|مساحة|ساعة|كم دقيقة|كم وقت|طول الوقت|كم يجب|مكان هادئ|صمت)/i.test(t)) {
+    // التحقق أولاً مما إذا كان المستفيد يقترح مدة/خطوة عملية (مثل "نصف ساعة يوميا ما رايك")
+    if (/(نصف\s*ساعة|ساعة|ربع\s*ساعة|\d+\s*دقيقة|\d+\s*دقائق|وقت محدد)/i.test(t) && /(ممكن|رأيك|رايك|تنصح|ينفع|أخصص|اخصص|أبدأ|ابدأ|يوميا|يومياً)/i.test(t)) {
+      return 'اقتراحك ممتاز وواقعي جداً يا صديقنا؛ تخصيص هذا الوقت يومياً (أو حتى 15 إلى 30 دقيقة مستمرة) كخلوة هادئة ومساحة لصفاء الذهن واستحضار السكينة بعيداً عن المشتتات والشاشات يمثل خطوة تحولية تصنع اتزاناً حقيقياً ليومك وتثبت حضور قلبك.';
+    }
+    if (/(خلوة|الخلوة|مكان خاص|أين أخلو|اين اخلو|كم يجب|مكان هادئ|صمت)/i.test(t)) {
       return 'سؤالك دقيق وجوهري يا صديقنا: الخلوة الروحية لا تشترط ساعات طويلة ولا مكاناً فسيحاً خاصاً! تكفيك 5 إلى 10 دقائق فقط في بداية يومك أو قبل نومك، في زاوية هادئة من غرفتك أو حتى في سيارتك قبل النزول. المقصود ليس الانعزال الجغرافي أو المكاني، بل هدوء الذهن وانقطاع الهاتف والمشتتات لتتنفس وتستشعر قرب الخالق وسكينة صدرك وسلامك الداخلي.';
     }
     if (/(صلاة|الصلاة|اصلي|أصلي|ركوع|سجود|خشوع|أخشع|اخشع|فرض|سنن|ما اصلي|لا اصلي|تأمل|تامل|ميديتيشن)/i.test(t)) {
@@ -239,7 +243,32 @@ export function getClientAdvisorResponse(
   // 2. فحص عمق ووضوح إجابة المستفيد
   const isVagueOrShort = (!explicitNum && msg.length < 20) || /^(ماشي|عادي|تمام|لا أدري|ما ادري|ما اعرف|شوية|تعبان وبس|مدري)$/i.test(msg);
   const userWantsMoreDepth = /(أريد التعمق أكثر|اريد التعمق|تعمق معي|اسألني أكثر|اسالني اكثر|أريد توضيح أكثر|ابي اتعمق|لسه مو واضح)/i.test(msg);
-  const userAgreesToComplete = /(اعتمد التقييم|اعتمد|اعتماد|موافق|نعم دقيقة|تمام اعتمد|نكتفي بهذا|خلاص اعتمد|اعتمدها)/i.test(msg);
+  // فحص ما إذا كان المستخدم يحدد خطوة تهدئة أو التزاماً أو رغبة صريحة في المضي قدماً
+  const isConcreteCommitment = /(نصف\s*ساعة|ساعة|ربع\s*ساعة|\d+\s*دقيقة|\d+\s*دقائق|أمشي|امشي|مشي|تأمل|تامل|صلاة|ذكر|تنفس|خلوة|رياضة)/i.test(msg);
+  const userAgreesToComplete = /(اعتمد التقييم|اعتمد|اعتماد|موافق|نعم دقيقة|تمام اعتمد|نكتفي بهذا|خلاص اعتمد|اعتمدها|ننتقل|نكمل|المحطة التالية|جاهز للمحطة)/i.test(msg) || (isConcreteCommitment && stationTurnCount >= 1);
+
+  // إذا قدم المستفيد التزاماً محدداً أو خطوة عملية واضحة (مثل نصف ساعة يومياً)
+  if (isConcreteCommitment && stationTurnCount >= 1 && !userWantsMoreDepth) {
+    const commitmentStrengths = [
+      'المبادرة بوضع خطوة عملية قابلة للتطبيق اليومي',
+      'الوعي بأهمية تخصيص مساحة مهدئة للذات وسط صخب الحياة',
+    ];
+    const commitmentChallenges = [
+      'تثبيت هذه العادة وحمايتها من شتات المهام اليومية',
+    ];
+
+    return {
+      isQuestionOrInquiry: false,
+      station_completed: true,
+      score: Math.max(semanticScore, 7.5),
+      strengths: commitmentStrengths,
+      challenges: commitmentChallenges,
+      reasoning: `تم تقديم التزام وخطوة تهدئة عملية ومحددة ("${text}"). اعتماد التقييم وإغلاق المحطة بسلاسة وتأكيد الخطوة دون أسئلة استدراجية متكررة.`,
+      summary: `تحديد خطوة تهدئة يومية واعدة واعتماد تقييم ${advTitle}.`,
+      advice: `احرص على تثبيت هذه المساحة الهادئة يومياً في نفس التوقيت لحماية حضور قلبك.`,
+      reply: `خطوة مباركة وموفقة جداً يا صديقنا! 🌿\n\nتخصيص هذه المساحة الهادئة يومياً يمثل مرساة حقيقية لصفاء ذهنك وحضور قلبك وسط تسارع الالتزامات.\n\nبناءً على ما شاركته، أرى أن أرضيتك في هذا الجانب طيبة وواعدة. هل نعتمد هذا التقييم وخلاصة المحطة لننتقل معاً إلى المحطة التالية، أم تود إضافة أي تفصيل آخر؟`,
+    };
+  }
 
   // قواميس المتابعة الاستكشافية لكل مجال (Adaptive Domain Inquiries)
   const clinicalInquiries: Record<string, string[]> = {
@@ -300,14 +329,12 @@ export function getClientAdvisorResponse(
   // فحص استفسارات المستفيد المتخصصة لكل مجال
   const directInquiryAnswer = answerUserInquiry(advisor.id, text);
 
-  // شروط إغلاق المحطة:
-  const MIN_DIAGNOSTIC_TURNS = 4; // بعد الإجابة الخامسة
-  const shouldContinue = (
+  // شروط إغلاق المحطة: السماح بالانتقال السلس وعدم إجبار المستخدم على أسئلة تعسفية
+  const shouldContinue = !userAgreesToComplete && (
     isBareGreetingOnly ||
     userWantsMoreDepth ||
-    stationTurnCount < MIN_DIAGNOSTIC_TURNS ||
-    (!explicitNum && stationTurnCount < 6)
-  ) && (!userAgreesToComplete || stationTurnCount < MIN_DIAGNOSTIC_TURNS) && stationTurnCount < 10;
+    (stationTurnCount === 0 && !explicitNum)
+  );
 
   if (shouldContinue) {
     let nextProbe = '';
@@ -316,11 +343,9 @@ export function getClientAdvisorResponse(
     } else if (isVagueOrShort && stationTurnCount > 0) {
       nextProbe = `أسمعك يا صديقنا، لكن إجابتك مقتضبة جداً ولا تسمح لي كطبيب بتشخيص جذور هذا الجانب بدقة. 🌿\n\nدعنا نتناولها بصراحة أعمق (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
     } else if (userWantsMoreDepth) {
-      nextProbe = `أحييك على رغبتك الصادقة في التعمق والوضوح! هذا يثبت وعيك وحرصك على اتزانك. 🌿\n\nلنتناول زاوية أعمق (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
-    } else if (userAgreesToComplete && stationTurnCount < MIN_DIAGNOSTIC_TURNS) {
-      nextProbe = `أقدر رغبتك في حسم التقييم يا صديقنا العزيز، ولكن كطبيب ومستشار مؤتمن في هذا التقييم التأسيسي الأول، نحتاج لاستيفاء 5 محاور أساسية على الأقل لنبني عليها خطتك بدقة متناهية. 🌿\n\nدعنا نتناول هذا المحور الحيوي (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
+      nextProbe = `أحييك على رغبتك الصادقة في التعمق والوضوح! هذا يثبت وعيك وحرصك على اتزانك. 🌿\n\nلنتناول زاوية أعمق (المحاورة ${stationTurnCount + 1}):\n${nextRawQuestion}`;
     } else {
-      nextProbe = `أسمعك بتركيز وتفهم واهتمام. لننتقل إلى زاوية تشخيصية مكملة في ${advTitle} (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
+      nextProbe = `أسمعك بتركيز وتفهم واهتمام. لننتقل إلى زاوية تشخيصية مكملة في ${advTitle} (المحاورة ${stationTurnCount + 1}):\n${nextRawQuestion}`;
     }
 
     return {

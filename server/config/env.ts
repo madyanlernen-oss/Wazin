@@ -5,7 +5,7 @@ export const NODE_ENV = process.env.NODE_ENV || 'development';
 export const IS_PRODUCTION = NODE_ENV === 'production';
 
 export const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.0-flash';
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite';
 
 export const GROQ_API_KEY = process.env.GROQ_API_KEY || '';
 export const GROQ_MODEL = process.env.GROQ_MODEL || 'llama-3.3-70b-versatile';

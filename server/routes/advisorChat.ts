@@ -201,9 +201,11 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   advisorName = (advisor && typeof advisor === 'object' && advisor.name) ? advisor.name : defaultMeta.name;
   const advisorRole = (advisor && typeof advisor === 'object' && (advisor.role || advisor.title)) ? (advisor.role || advisor.title) : defaultMeta.role;
 
-  // التحقق من تساؤلات المستفيد ومن إلزامية إبقاء المحطة مفتوحة
-  const isUserAsking = /[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(message);
-  const forcedIncomplete = Boolean(isEvaluationSession) && (stationTurnCount < 4 || isUserAsking);
+  // فحص ما إذا كان المستخدم يطلب المضي قدماً أو يقدم التزاماً/خطوة عملية
+  const isMoveForwardOrCommitment = /(نصف\s+ساعة|ساعة|دقائق|دقيقة|خطوة|أمشي|امشي|مشي|تأمل|تامل|جاهز|ننتقل|نكمل|المحطة التالية|اعتمد|اعتماد|تمام|حسنا|موافق|اتفقنا)/i.test(message);
+  const isUserAsking = (/[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|تنصحني)(\s|$)/i.test(message)) && !isMoveForwardOrCommitment;
+  // إزالة القفل الصارم للتبادلات إذا قدم المستفيد خطوة أو التزاماً أو طلب المتابعة
+  const forcedIncomplete = Boolean(isEvaluationSession) && (stationTurnCount < 1 && !isMoveForwardOrCommitment) && isUserAsking;
   const completionPhrasesRegex = /(أتممنا|انتهت\s+(?:هذه\s+)?المحطة|انتهينا\s+من\s+(?:هذه\s+)?المحطة|اكتملت\s+(?:هذه\s+)?المحطة|أنهينا\s+(?:هذه\s+)?المحطة|ختمنا\s+(?:هذه\s+)?المحطة|اكتمل\s+تقييم|أكملنا\s+تقييم|أتممنا\s+هذا\s+الجانب|أنهينا\s+هذا\s+الجانب|المحطة\s+التالية|ننتقل\s+(?:الآن\s+)?(?:إلى|ل)المحطة|اكتملت\s+محطة|أنجزنا\s+هذه\s+المحطة|أكملنا\s+هذه\s+المحطة|انتهت\s+هذه\s+المحطة|اكتملت\s+هذه\s+المحطة|أتممنا\s+تقييم)/i;
 
   // سادساً: سياق المحطات - استخراج ملخص مقتضب (سطر أو سطران) لأهم ما ذكره المستخدم في المحطات السابقة
@@ -549,18 +551,16 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       throw new Error('مفتاح GEMINI_API_KEY غير متوفر في متغيرات البيئة.');
     }
 
-    // 4) ترتيب أسرع: ابدأ بنموذج lite الأقل ازدحاماً ثم GEMINI_MODEL ثم gemini-flash-latest
+    // اختيار النماذج العاملة والمجربة ديناميكياً مع ترتيب الأولويات ومقاومة 503/404
     const userGeminiModel = GEMINI_MODEL;
-    const validUserModel = userGeminiModel && !userGeminiModel.includes('2.5') ? userGeminiModel : undefined;
-
     const candidateModels = Array.from(
       new Set(
         [
-          'gemini-flash-lite-latest',
-          validUserModel,
-          'gemini-flash-latest',
-          'gemini-2.0-flash',
-          'gemini-2.0-flash-lite',
+          userGeminiModel,
+          'gemini-3.5-flash-lite',
+          'gemini-3.5-flash',
+          'gemini-3.8-flash',
+          'gemini-3.1-flash-lite',
         ].filter(Boolean) as string[]
       )
     );
