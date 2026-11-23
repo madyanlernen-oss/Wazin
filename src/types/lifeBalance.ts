@@ -83,6 +83,7 @@ export interface EisenhowerGoalItem {
   source: 'advisor' | 'user';
   advisorName?: string;
   createdAt?: string;
+  isFocus?: boolean;
 }
 
 export interface UserProfile {

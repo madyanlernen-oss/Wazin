@@ -22,6 +22,7 @@ import {
   ArrowRight,
   BrainCircuit,
   RefreshCw,
+  Star,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import {
@@ -273,6 +274,20 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   const [newQuadrant, setNewQuadrant] = useState<EisenhowerQuadrant>('q2_important_not_urgent');
   const [newAreaId, setNewAreaId] = useState<LifeAreaId>('career');
 
+  // Quick Manual Focus & Priorities states
+  const [quickManualTitle, setQuickManualTitle] = useState('');
+  const [quickManualQuadrant, setQuickManualQuadrant] = useState<EisenhowerQuadrant>('q2_important_not_urgent');
+  const [quickManualAreaId, setQuickManualAreaId] = useState<LifeAreaId>('personal');
+  const [quickManualIsFocus, setQuickManualIsFocus] = useState(false);
+
+  // Inline Quick Add inputs for each of the 4 quadrants
+  const [inlineInputs, setInlineInputs] = useState<Record<EisenhowerQuadrant, string>>({
+    q1_urgent_important: '',
+    q2_important_not_urgent: '',
+    q3_urgent_not_important: '',
+    q4_not_urgent_not_important: '',
+  });
+
   // Agent 11 Suggestions state (derived from Agent 9 & Agent 10)
   const [suggestions, setSuggestions] = useState<EisenhowerSuggestionItem[]>([]);
   const [isSuggestionsCollapsed, setIsSuggestionsCollapsed] = useState(false);
@@ -425,6 +440,69 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
     updateAllGoals(updated);
   };
 
+  // Toggle priority focus on a goal
+  const handleToggleFocusGoal = (id: string) => {
+    const updated = goals.map((g) => (g.id === id ? { ...g, isFocus: !g.isFocus } : g));
+    updateAllGoals(updated);
+    const target = updated.find((g) => g.id === id);
+    if (target?.isFocus) {
+      showToast('تم تمييز الهدف كبؤرة تركيز رئيسية! ⭐', 'success');
+    } else {
+      showToast('تم إزالة تمييز بؤرة التركيز', 'info');
+    }
+  };
+
+  // Add goal from top Quick Focus bar
+  const handleQuickAddManualGoal = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = quickManualTitle.trim();
+    if (!trimmed) return;
+
+    const newGoal: EisenhowerGoalItem = {
+      id: `goal_manual_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title: trimmed,
+      quadrant: quickManualQuadrant,
+      timeframe: activeTimeframe,
+      areaId: quickManualAreaId,
+      completed: false,
+      source: 'user',
+      isFocus: quickManualIsFocus,
+      createdAt: new Date().toISOString(),
+    };
+
+    updateAllGoals([newGoal, ...goals]);
+    setQuickManualTitle('');
+    setQuickManualIsFocus(false);
+    const quadrantLabel = {
+      q1_urgent_important: 'المربع 1 (نفّذ الآن)',
+      q2_important_not_urgent: 'المربع 2 (جدولـه)',
+      q3_urgent_not_important: 'المربع 3 (فوّضه)',
+      q4_not_urgent_not_important: 'المربع 4 (احذفه)',
+    }[quickManualQuadrant];
+    showToast(`تمت إضافة مهمة التركيز إلى ${quadrantLabel} بنجاح! 🎯`, 'success');
+  };
+
+  // Add goal inline from inside a specific quadrant
+  const handleInlineAddGoal = (quadrant: EisenhowerQuadrant) => {
+    const text = inlineInputs[quadrant]?.trim();
+    if (!text) return;
+
+    const newGoal: EisenhowerGoalItem = {
+      id: `goal_inline_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      title: text,
+      quadrant,
+      timeframe: activeTimeframe,
+      areaId: 'personal',
+      completed: false,
+      source: 'user',
+      createdAt: new Date().toISOString(),
+    };
+
+    updateAllGoals([newGoal, ...goals]);
+    setInlineInputs((prev) => ({ ...prev, [quadrant]: '' }));
+    showToast('تمت إضافة المهمة للتركيز في هذا المربع! 🎯', 'success');
+  };
+
   // Confirm delete goal
   const handleConfirmDeleteGoal = () => {
     if (!goalToDelete) return;
@@ -529,6 +607,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
   const totalInTimeframe = currentGoals.length;
   const completedInTimeframe = currentGoals.filter((g) => g.completed).length;
   const completionPercent = totalInTimeframe ? Math.round((completedInTimeframe / totalInTimeframe) * 100) : 0;
+  const activeFocusGoals = currentGoals.filter((g) => g.isFocus && !g.completed);
 
   // Reusable card renderer
   const renderGoalCard = (g: EisenhowerGoalItem, quadrantColor: 'rose' | 'emerald' | 'amber' | 'slate') => {
@@ -561,7 +640,9 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
         key={g.id}
         draggable
         onDragStart={(e) => handleDragStart(e, g.id)}
-        className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col gap-2.5 cursor-grab active:cursor-grabbing group min-w-0 select-none shadow-2xs ${colorClasses}`}
+        className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col gap-2.5 cursor-grab active:cursor-grabbing group min-w-0 select-none shadow-2xs ${colorClasses} ${
+          g.isFocus ? 'ring-2 ring-amber-400 dark:ring-amber-400/80 shadow-xs border-amber-300 dark:border-amber-700/80' : ''
+        }`}
       >
         {/* Top Row: Checkbox & Goal Content (Full horizontal width, never squished) */}
         <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full">
@@ -585,15 +666,22 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
 
           {/* Goal Title - Full Width, Clean Word Break */}
           <div className="min-w-0 flex-1">
-            <p
-              className={`text-xs sm:text-[13px] font-bold leading-relaxed break-words text-right ${
-                g.completed
-                  ? 'line-through text-slate-400 dark:text-slate-500'
-                  : 'text-[#0F172A] dark:text-white'
-              }`}
-            >
-              {g.title}
-            </p>
+            <div className="flex items-start gap-1.5">
+              {g.isFocus && (
+                <span title="بؤرة تركيز رئيسية">
+                  <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500 flex-shrink-0 mt-0.5" />
+                </span>
+              )}
+              <p
+                className={`text-xs sm:text-[13px] font-bold leading-relaxed break-words text-right flex-1 ${
+                  g.completed
+                    ? 'line-through text-slate-400 dark:text-slate-500'
+                    : 'text-[#0F172A] dark:text-white'
+                }`}
+              >
+                {g.title}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -615,9 +703,16 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
                 <span className="truncate">توجيه: {g.advisorName}</span>
               </span>
             )}
+
+            {/* User Manual Focus Tag */}
+            {g.source === 'user' && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-black text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/70 border border-amber-200/80 dark:border-amber-800/60 px-2 py-0.5 rounded-md max-w-full">
+                <span>🎯 تركيز يدوي</span>
+              </span>
+            )}
           </div>
 
-          {/* Quick Actions: Quadrant Move Dropdown, Edit & Delete Buttons */}
+          {/* Quick Actions: Quadrant Move Dropdown, Star, Edit & Delete Buttons */}
           <div className="flex items-center gap-1.5 flex-shrink-0 ms-auto">
             <select
               aria-label="نقل المربع لمصفوفة أيزنهاور"
@@ -631,6 +726,23 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
               <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
             </select>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                handleToggleFocusGoal(g.id);
+              }}
+              className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer flex-shrink-0 ${
+                g.isFocus
+                  ? 'text-amber-500 hover:text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700'
+                  : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-transparent'
+              }`}
+              title={g.isFocus ? 'إلغاء تمييز بؤرة التركيز' : 'تمييز كبؤرة تركيز رئيسية'}
+              aria-label={g.isFocus ? 'إلغاء تمييز بؤرة التركيز' : 'تمييز كبؤرة تركيز رئيسية'}
+            >
+              <Star className={`w-3.5 h-3.5 ${g.isFocus ? 'fill-current' : ''}`} />
+            </button>
 
             <button
               type="button"
@@ -808,6 +920,113 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           />
         </div>
       </div>
+
+      {/* Quick Manual Focus & Priorities Addition Section (Always visible at the top) */}
+      <section
+        aria-label="إضافة تركيز يدوي سريع"
+        className="bg-white dark:bg-[#112028] border-2 border-teal-500/30 dark:border-cyan-800/60 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4 transition-colors"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-teal-50 dark:bg-teal-950/70 text-[#0B6E72] dark:text-cyan-300 border border-teal-200 dark:border-cyan-800/50 flex items-center justify-center flex-shrink-0 shadow-2xs">
+              <Target className="w-5 h-5 text-[#0B6E72] dark:text-cyan-400" />
+            </div>
+            <div>
+              <div className="flex flex-wrap items-center gap-2 mb-0.5">
+                <h3 className="text-sm sm:text-base font-black text-[#0F172A] dark:text-white">
+                  تركيزي وأولوياتي اليدوية
+                </h3>
+                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/70 text-[#0B6E72] dark:text-cyan-300 border border-teal-200/80 dark:border-cyan-800/50">
+                  إضافة يدوية عادية ✍️
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                  النطاق: {activeTimeframe === 'daily' ? 'يومي' : activeTimeframe === 'weekly' ? 'أسبوعي' : activeTimeframe === 'monthly' ? 'شهري' : 'سنوي'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                أضف أي مهمة، هدف، أو عادة ترغب بالتركيز عليها مباشرة بأسلوبك الخاص دون وساطة الذكاء الاصطناعي.
+              </p>
+            </div>
+          </div>
+
+          {activeFocusGoals.length > 0 && (
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 text-xs font-black self-start sm:self-auto">
+              <Star className="w-3.5 h-3.5 fill-amber-500 text-amber-500" />
+              <span>{activeFocusGoals.length} أهداف في بؤرة التركيز</span>
+            </div>
+          )}
+        </div>
+
+        {/* Input Form */}
+        <form onSubmit={handleQuickAddManualGoal} className="space-y-3">
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2.5">
+            <div className="relative flex-1">
+              <input
+                type="text"
+                value={quickManualTitle}
+                onChange={(e) => setQuickManualTitle(e.target.value)}
+                placeholder="اكتب هنا ما تريد التركيز عليه وإنجازه يدوياً... (اضغط Enter للإضافة)"
+                className="w-full bg-slate-50 dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-700/80 focus:border-[#0B6E72] dark:focus:border-cyan-400 rounded-2xl px-4 py-3 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors"
+                dir="rtl"
+              />
+            </div>
+
+            <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+              {/* Quadrant Selector */}
+              <select
+                aria-label="المربع المستهدف في مصفوفة أيزنهاور"
+                value={quickManualQuadrant}
+                onChange={(e) => setQuickManualQuadrant(e.target.value as EisenhowerQuadrant)}
+                className="text-xs font-bold bg-slate-50 dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-700/80 rounded-2xl px-3 py-3 text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer min-h-[44px]"
+              >
+                <option value="q1_urgent_important">🔴 المربع 1: نفّذ الآن (مهم وعاجل)</option>
+                <option value="q2_important_not_urgent">🟢 المربع 2: جدولـه (مهم وغير عاجل • التوازن)</option>
+                <option value="q3_urgent_not_important">🟡 المربع 3: فوّضه (غير مهم وعاجل)</option>
+                <option value="q4_not_urgent_not_important">⚪ المربع 4: احذفه (غير مهم وغير عاجل)</option>
+              </select>
+
+              {/* Life Area Selector */}
+              <select
+                aria-label="مجال الحياة المرتبط بالهدف"
+                value={quickManualAreaId}
+                onChange={(e) => setQuickManualAreaId(e.target.value as LifeAreaId)}
+                className="text-xs font-bold bg-slate-50 dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-700/80 rounded-2xl px-3 py-3 text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer min-h-[44px]"
+              >
+                {ADVISORS_LIST.map((adv) => (
+                  <option key={adv.id} value={adv.id}>
+                    {adv.avatarSvg} {adv.title}
+                  </option>
+                ))}
+              </select>
+
+              {/* Pin as Focus toggle */}
+              <button
+                type="button"
+                onClick={() => setQuickManualIsFocus(!quickManualIsFocus)}
+                className={`px-3 py-3 rounded-2xl text-xs font-bold border transition-colors flex items-center gap-1.5 cursor-pointer min-h-[44px] ${
+                  quickManualIsFocus
+                    ? 'bg-amber-50 dark:bg-amber-950/70 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                    : 'bg-slate-50 dark:bg-[#0B161C] border-slate-200/90 dark:border-slate-700/80 text-slate-500 dark:text-slate-400 hover:text-amber-600'
+                }`}
+                title={quickManualIsFocus ? 'معين كبؤرة تركيز رئيسية' : 'تحديد كبؤرة تركيز رئيسية'}
+              >
+                <Star className={`w-3.5 h-3.5 ${quickManualIsFocus ? 'fill-amber-500 text-amber-500' : ''}`} />
+                <span className="hidden sm:inline">تركيز رئيسي</span>
+              </button>
+
+              {/* Submit Button */}
+              <button
+                type="submit"
+                disabled={!quickManualTitle.trim()}
+                className="px-5 py-3 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] disabled:opacity-40 disabled:cursor-not-allowed text-white text-xs font-black shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap min-h-[44px]"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة للتركيز</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </section>
 
       {/* Agent 11 Smart Goal & Plan Suggestions Section (Powered by Agent 9 & Agent 10) */}
       <section
@@ -1053,6 +1272,33 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             </span>
           </div>
 
+          {/* Inline Quick Add for Quadrant 1 */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleInlineAddGoal('q1_urgent_important');
+            }}
+            className="flex items-center gap-1.5 bg-slate-50 dark:bg-[#0B161C] border border-rose-200/80 dark:border-rose-900/50 rounded-2xl p-1.5 transition-colors focus-within:border-rose-400 dark:focus-within:border-rose-600 focus-within:ring-1 focus-within:ring-rose-400"
+          >
+            <input
+              type="text"
+              value={inlineInputs.q1_urgent_important}
+              onChange={(e) => setInlineInputs((prev) => ({ ...prev, q1_urgent_important: e.target.value }))}
+              placeholder="+ أضف مهمة عاجلة ومهمة للتركيز عليها الآن..."
+              className="w-full bg-transparent border-0 px-2.5 py-1.5 text-xs text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+              dir="rtl"
+            />
+            <button
+              type="submit"
+              disabled={!inlineInputs.q1_urgent_important.trim()}
+              className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0"
+              title="إضافة للمربع 1"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة</span>
+            </button>
+          </form>
+
           {/* Goal List */}
           <div className="space-y-2.5 min-h-[170px] flex-1">
             {q1Goals.length === 0 ? (
@@ -1096,6 +1342,33 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             </span>
           </div>
 
+          {/* Inline Quick Add for Quadrant 2 */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleInlineAddGoal('q2_important_not_urgent');
+            }}
+            className="flex items-center gap-1.5 bg-slate-50 dark:bg-[#0B161C] border border-emerald-200/80 dark:border-emerald-900/50 rounded-2xl p-1.5 transition-colors focus-within:border-emerald-400 dark:focus-within:border-emerald-600 focus-within:ring-1 focus-within:ring-emerald-400"
+          >
+            <input
+              type="text"
+              value={inlineInputs.q2_important_not_urgent}
+              onChange={(e) => setInlineInputs((prev) => ({ ...prev, q2_important_not_urgent: e.target.value }))}
+              placeholder="+ أضف هدفاً أو عادة للتركيز عليها وجدولتها..."
+              className="w-full bg-transparent border-0 px-2.5 py-1.5 text-xs text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+              dir="rtl"
+            />
+            <button
+              type="submit"
+              disabled={!inlineInputs.q2_important_not_urgent.trim()}
+              className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0"
+              title="إضافة للمربع 2"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة</span>
+            </button>
+          </form>
+
           {/* Goal List */}
           <div className="space-y-2.5 min-h-[170px] flex-1">
             {q2Goals.length === 0 ? (
@@ -1138,6 +1411,33 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             </span>
           </div>
 
+          {/* Inline Quick Add for Quadrant 3 */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleInlineAddGoal('q3_urgent_not_important');
+            }}
+            className="flex items-center gap-1.5 bg-slate-50 dark:bg-[#0B161C] border border-amber-200/80 dark:border-amber-900/50 rounded-2xl p-1.5 transition-colors focus-within:border-amber-400 dark:focus-within:border-amber-600 focus-within:ring-1 focus-within:ring-amber-400"
+          >
+            <input
+              type="text"
+              value={inlineInputs.q3_urgent_not_important}
+              onChange={(e) => setInlineInputs((prev) => ({ ...prev, q3_urgent_not_important: e.target.value }))}
+              placeholder="+ أضف مهمة تفويض أو أتمتة..."
+              className="w-full bg-transparent border-0 px-2.5 py-1.5 text-xs text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+              dir="rtl"
+            />
+            <button
+              type="submit"
+              disabled={!inlineInputs.q3_urgent_not_important.trim()}
+              className="px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0"
+              title="إضافة للمربع 3"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة</span>
+            </button>
+          </form>
+
           {/* Goal List */}
           <div className="space-y-2.5 min-h-[170px] flex-1">
             {q3Goals.length === 0 ? (
@@ -1179,6 +1479,33 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
               {q4Goals.length}
             </span>
           </div>
+
+          {/* Inline Quick Add for Quadrant 4 */}
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleInlineAddGoal('q4_not_urgent_not_important');
+            }}
+            className="flex items-center gap-1.5 bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-1.5 transition-colors focus-within:border-slate-400 dark:focus-within:border-slate-600 focus-within:ring-1 focus-within:ring-slate-400"
+          >
+            <input
+              type="text"
+              value={inlineInputs.q4_not_urgent_not_important}
+              onChange={(e) => setInlineInputs((prev) => ({ ...prev, q4_not_urgent_not_important: e.target.value }))}
+              placeholder="+ أضف مشتتاً أو مهمة لحذفها وتقليصها..."
+              className="w-full bg-transparent border-0 px-2.5 py-1.5 text-xs text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
+              dir="rtl"
+            />
+            <button
+              type="submit"
+              disabled={!inlineInputs.q4_not_urgent_not_important.trim()}
+              className="px-3 py-1.5 rounded-xl bg-slate-600 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0"
+              title="إضافة للمربع 4"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>إضافة</span>
+            </button>
+          </form>
 
           {/* Goal List */}
           <div className="space-y-2.5 min-h-[170px] flex-1">
