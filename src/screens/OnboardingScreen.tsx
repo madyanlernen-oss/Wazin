@@ -52,6 +52,78 @@ interface OnboardingScreenProps {
   theme?: 'light' | 'dark';
 }
 
+/**
+ * Helper to dynamically extract the most personalized, realistic golden habit
+ * directly from the consultation conversation and agreed micro-steps rather than
+ * relying strictly on generic static defaults.
+ */
+function getDynamicGoldenHabit(
+  advisor: AdvisorConfig,
+  messages: EvaluationChatMessage[] = [],
+  latestAdvice?: string
+): string {
+  // 1. إذا توفرت نصيحة أو خطوة مباشرة معتمدة من المستشار في الرد
+  if (latestAdvice && latestAdvice.trim().length > 10 && latestAdvice.trim().length < 150) {
+    return latestAdvice.trim();
+  }
+
+  // 2. البحث في رسائل المستشار الأخيرة عن نصيحة مستخلصة
+  const advisorWithAdvice = [...messages]
+    .reverse()
+    .find((m) => m.sender === 'advisor' && m.advice && m.advice.trim().length > 10 && m.advice.trim().length < 150);
+  if (advisorWithAdvice?.advice) {
+    return advisorWithAdvice.advice.trim();
+  }
+
+  // 3. استخراج الالتزام المخصص من سياق الحوار الفعلي للمحطة
+  const allTexts = messages.map((m) => m.text).join(' ');
+
+  if (advisor.id === 'spiritual') {
+    const hasThreeMin = /(ثلاث|3)\s*دقائق/i.test(allTexts);
+    const hasFiveMin = /(خمس|5)\s*دقائق/i.test(allTexts);
+    const hasTenMin = /(عشر|10)\s*دقائق/i.test(allTexts);
+    const hasPrayer = /(صلاة|الصلاة|دعاء|الدعاء|خلوة)/i.test(allTexts);
+
+    if (hasThreeMin) {
+      return hasPrayer
+        ? 'تخصيص 3 دقائق كل صباح دون هاتف لمراقبة التنفس مع صلاة أو دعاء قصير لربط القلب بالخالق.'
+        : 'تخصيص 3 دقائق كل صباح في مكان هادئ دون هاتف لمراقبة التنفس وصفاء الذهن.';
+    }
+    if (hasFiveMin) {
+      return hasPrayer
+        ? 'تخصيص 5 دقائق يومياً في بداية اليوم للصلاة والتأمل القلبي الهادئ بعيداً عن المشتتات.'
+        : 'تخصيص 5 دقائق يومياً في بداية الصباح لمراقبة التنفس واستحضار السكينة.';
+    }
+    if (hasTenMin) {
+      return 'تخصيص 10 دقائق يومياً للخلوة الروحية الهادئة واستحضار حضور القلب والسلام الداخلي.';
+    }
+  }
+
+  if (advisor.id === 'financial') {
+    if (/(مكافأة|مكافاه|مصروف|طالب)/i.test(allTexts) && /(ادخار|حساب فرعي|حصالة|50|100)/i.test(allTexts)) {
+      return 'اقتطاع 50 إلى 100 ريال شهرياً من المكافأة في حساب ادخار فرعي منفصل كصمام أمان جامعي.';
+    }
+    if (/(تدفق نقدي|مستقل|صاحب عمل|فصل)/i.test(allTexts)) {
+      return 'الفصل الصارم التام بين أموال العمل والمال الشخصي وبناء احتياطي طوارئ يغطي 6 أشهر.';
+    }
+    if (/(50\/30\/20|راتب|أقساط)/i.test(allTexts)) {
+      return 'تطبيق قاعدة 50/30/20 وأتمتة ادخار جزء ثابت من الراتب فور نزوله.';
+    }
+  }
+
+  if (advisor.id === 'health') {
+    if (/(مشي|20 دقيقة|15 دقيقة|خطوات)/i.test(allTexts)) {
+      return 'المشي اليومي النشط لمدة 15 إلى 20 دقيقة في الهواء الطلق.';
+    }
+    if (/(نوم|شاشات|أرق)/i.test(allTexts)) {
+      return 'إغلاق الشاشات قبل موعد النوم بـ 45 دقيقة وتثبيت موعد الاستيقاظ.';
+    }
+  }
+
+  // 4. البديل الافتراضي المعتمد
+  return advisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+}
+
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   initialAdvisorId = 'spiritual',
   assessmentMode,
@@ -709,7 +781,11 @@ ${specificQuestion}
         if (pendingOfferedScore !== null) {
           earnedScore = pendingOfferedScore;
         }
-        const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+        const goldenHabit = getDynamicGoldenHabit(
+          currentAdvisor,
+          [...(chatMessages[advisorKey] || []), { id: 'latest_user', sender: 'user', text, timestamp: '' }],
+          adviceContent
+        );
         if (!replyContent.includes('تم اعتماد تقييم المحطة')) {
           const isSpiritual = currentAdvisor.id === 'spiritual';
           const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
@@ -739,7 +815,11 @@ ${specificQuestion}
       if (isStationCompleted) {
         onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, earnedScore);
 
-        const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+        const goldenHabit = getDynamicGoldenHabit(
+          currentAdvisor,
+          [...(chatMessages[advisorKey] || []), { id: 'latest_user', sender: 'user', text, timestamp: '' }],
+          adviceContent
+        );
         if (onAddEisenhowerGoal) {
           onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
         }
@@ -750,7 +830,7 @@ ${specificQuestion}
           [currentAdvisor.id]: {
             score: earnedScore,
             strengths: dynamicStrengths.length > 0 ? dynamicStrengths : (fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب']),
-            challenges: dynamicChallenges.length > 0 ? dynamicChallenges : (fallbackInsights?.challenges || ['بناء عادة يومية مستدامة لحماية اتزانك']),
+            challenges: dynamicChallenges.length > 0 ? dynamicChallenges : [goldenHabit],
           },
         }));
 
@@ -878,7 +958,8 @@ ${specificQuestion}
     const finalScore = Number(scoreToAdopt.toFixed(1));
     onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, finalScore);
     
-    const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+    const currentAdvisorMsgs = chatMessages[currentAdvisor.id] || [];
+    const goldenHabit = getDynamicGoldenHabit(currentAdvisor, currentAdvisorMsgs);
     if (onAddEisenhowerGoal) {
       onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
     }
@@ -889,7 +970,7 @@ ${specificQuestion}
       [currentAdvisor.id]: {
         score: finalScore,
         strengths: fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب'],
-        challenges: fallbackInsights?.challenges || ['بناء عادة يومية مستدامة لحماية اتزانك'],
+        challenges: [goldenHabit, ...(fallbackInsights?.challenges?.slice(1) || [])],
       },
     }));
 
