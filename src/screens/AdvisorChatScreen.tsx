@@ -912,20 +912,27 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
             })()}
 
             {isLoading && (
-              <div className="flex gap-3 items-center text-xs text-[#475569] dark:text-[#94A3B8]">
+              <div className="flex gap-3 items-start text-xs text-[#475569] dark:text-[#94A3B8]">
                 <div
-                  className="w-8 h-8 rounded-xl flex items-center justify-center text-sm shadow-xs"
+                  className="w-8 h-8 rounded-xl flex items-center justify-center text-sm shadow-xs flex-shrink-0 mt-0.5"
                   style={{ backgroundColor: `${currentAdvisor.themeColor}15` }}
                 >
                   {currentAdvisor.avatarSvg}
                 </div>
-                <div className="bg-white dark:bg-[#0E1D24] p-3 rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-[#0F6E6E] dark:text-[#22D3EE]" />
-                  <span>
-                    {aiMode === 'fast' && `${currentAdvisor.name} يصيغ لك نصيحة فورية سريعة ⚡...`}
-                    {aiMode === 'deep' && `${currentAdvisor.name} يفكك استشارتك بعمق وتحليل استراتيجي 🧠...`}
-                    {aiMode === 'balanced' && `${currentAdvisor.name} يفكر في استشارتك بعناية ⚖️...`}
-                  </span>
+                <div className="bg-white dark:bg-[#0E1D24] p-3.5 rounded-2xl rounded-tl-none border border-[#E2E8F0] dark:border-[#1E343F] shadow-sm space-y-2.5 max-w-[85%] sm:max-w-[70%]">
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-4 h-4 animate-spin text-[#0F6E6E] dark:text-[#22D3EE] flex-shrink-0" />
+                    <span className="font-bold text-[#0F172A] dark:text-[#F1F5F9]">
+                      {aiMode === 'fast' && `${currentAdvisor.name} يصيغ لك نصيحة فورية سريعة ⚡...`}
+                      {aiMode === 'deep' && `${currentAdvisor.name} يفكك استشارتك بعمق وتحليل استراتيجي 🧠...`}
+                      {aiMode === 'balanced' && `${currentAdvisor.name} يفكر في استشارتك بعناية ⚖️...`}
+                    </span>
+                  </div>
+                  {/* Subtle pulsing skeleton lines to lower perceived wait time */}
+                  <div className="space-y-1.5 pt-0.5">
+                    <div className="h-2 rounded bg-slate-200/90 dark:bg-slate-700/60 animate-pulse w-48 sm:w-60" />
+                    <div className="h-2 rounded bg-slate-200/90 dark:bg-slate-700/60 animate-pulse w-32 sm:w-40" />
+                  </div>
                 </div>
               </div>
             )}

@@ -306,38 +306,44 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
         dir="rtl"
       >
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-12 flex items-center justify-between gap-2 sm:gap-4">
-          {/* Scrollable Links row on mobile / flex on desktop */}
-          <div
-            ref={navContainerRef}
-            className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden flex-1 min-w-0 py-1"
-          >
-            {NAV_SECTIONS.map((section) => {
-              const isActive = activeSection === section.id;
-              return (
-                <button
-                  key={section.id}
-                  ref={(el) => {
-                    navButtonRefs.current[section.id] = el;
-                  }}
-                  type="button"
-                  onClick={() => handleScrollToSection(section.id)}
-                  aria-current={isActive ? 'true' : undefined}
-                  className={`relative flex items-center justify-center px-3.5 sm:px-4 py-2 min-h-[40px] text-xs sm:text-sm font-extrabold transition-all duration-200 rounded-xl cursor-pointer select-none whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
-                    isActive
-                      ? 'text-[#0F6E6E] dark:text-[#22D3EE] font-black'
-                      : 'text-[#475569] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span>{section.label}</span>
-                  {isActive && (
-                    <span
-                      className="absolute bottom-1 left-1/2 -translate-x-1/2 w-3/5 min-w-[20px] max-w-[42px] h-[2.5px] rounded-full bg-[#0F6E6E] dark:bg-[#22D3EE] transition-all shadow-xs"
-                      aria-hidden="true"
-                    />
-                  )}
-                </button>
-              );
-            })}
+          {/* Scrollable Links row on mobile / flex on desktop with subtle edge fade */}
+          <div className="relative flex-1 min-w-0 flex items-center">
+            {/* Left & Right gradient fade indicators for mobile horizontal scroll */}
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-5 bg-gradient-to-l from-white/95 dark:from-[#07111c]/95 to-transparent z-10 sm:hidden" />
+            <div className="pointer-events-none absolute left-0 top-0 bottom-0 w-5 bg-gradient-to-r from-white/95 dark:from-[#07111c]/95 to-transparent z-10 sm:hidden" />
+
+            <div
+              ref={navContainerRef}
+              className="flex items-center gap-1 sm:gap-1.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden w-full py-1 px-1"
+            >
+              {NAV_SECTIONS.map((section) => {
+                const isActive = activeSection === section.id;
+                return (
+                  <button
+                    key={section.id}
+                    ref={(el) => {
+                      navButtonRefs.current[section.id] = el;
+                    }}
+                    type="button"
+                    onClick={() => handleScrollToSection(section.id)}
+                    aria-current={isActive ? 'true' : undefined}
+                    className={`relative flex items-center justify-center px-3.5 sm:px-4 py-2 min-h-[40px] text-xs sm:text-sm font-extrabold transition-all duration-200 rounded-xl cursor-pointer select-none whitespace-nowrap focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
+                      isActive
+                        ? 'text-[#0F6E6E] dark:text-[#22D3EE] font-black'
+                        : 'text-[#475569] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white hover:bg-slate-100/60 dark:hover:bg-slate-800/50'
+                    }`}
+                  >
+                    <span>{section.label}</span>
+                    {isActive && (
+                      <span
+                        className="absolute bottom-1 left-1/2 -translate-x-1/2 w-3/5 min-w-[20px] max-w-[42px] h-[2.5px] rounded-full bg-[#0F6E6E] dark:bg-[#22D3EE] transition-all shadow-xs"
+                        aria-hidden="true"
+                      />
+                    )}
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
           {/* Quick CTA on the left (end in RTL) */}

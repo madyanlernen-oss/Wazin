@@ -709,9 +709,14 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <p className="text-[11px] text-[#334155] dark:text-slate-300 leading-relaxed">
                   {isolateNumbersInText(moatazKeystoneHabit.expectedImpact)}
                 </p>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 inline-block">
-                  ⏰ {moatazKeystoneHabit.triggerTime}
-                </span>
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300 inline-flex items-center gap-1">
+                    <span>⏰</span> {moatazKeystoneHabit.triggerTime}
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 inline-flex items-center gap-1">
+                    <span>⏱️</span> 15 دقيقة يومياً
+                  </span>
+                </div>
               </div>
             </div>
 

@@ -600,11 +600,13 @@ export const RadarCore: React.FC<RadarCoreProps> = ({
                   }}
                   onMouseEnter={() => setHoveredArea(domain.id)}
                   onMouseLeave={() => setHoveredArea(null)}
-                  className={`w-full h-full flex flex-col items-center justify-center p-1.5 rounded-2xl motion-safe:transition-all motion-safe:duration-200 border text-center shadow-xs select-none cursor-pointer hover:scale-105 active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-[#0B6E72] dark:group-focus-visible:ring-cyan-400 ${
+                  className={`w-full h-full flex flex-col items-center justify-center p-1.5 rounded-2xl motion-safe:transition-all motion-safe:duration-200 border text-center select-none cursor-pointer hover:scale-105 active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-[#0B6E72] dark:group-focus-visible:ring-cyan-400 ${
                     isSelected
-                      ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] shadow-md ring-2 ring-[#0B6E72] dark:ring-[#22D3EE] border-[#0B6E72] dark:border-[#22D3EE]'
+                      ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] shadow-lg shadow-[#0B6E72]/20 dark:shadow-[0_8px_25px_-4px_rgba(34,211,238,0.35)] ring-2 ring-[#0B6E72] dark:ring-[#22D3EE] border-[#0B6E72] dark:border-[#22D3EE] scale-[1.04]'
                       : isHovered
                       ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border-slate-300 dark:border-slate-600 ring-1 ring-slate-300 dark:ring-slate-700 shadow-sm'
+                      : !selectedAreaId && index === 0
+                      ? 'bg-white/95 dark:bg-[#0E1D24]/95 text-[#334155] dark:text-slate-200 border-[#E2E8F0] dark:border-[#1E343F] ring-1 ring-teal-400/40 dark:ring-cyan-400/40 motion-safe:animate-pulse'
                       : 'bg-white/95 dark:bg-[#0E1D24]/95 text-[#334155] dark:text-slate-200 border-[#E2E8F0] dark:border-[#1E343F]'
                   }`}
                   style={{

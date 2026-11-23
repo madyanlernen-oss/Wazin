@@ -48,6 +48,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   const [activeWeekTab, setActiveWeekTab] = useState<number>(1);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
+  const [showCelebrationToast, setShowCelebrationToast] = useState(false);
   const [customInputText, setCustomInputText] = useState('');
 
   // Sync selected day and input when plan loads or selectedDay changes
@@ -144,6 +145,10 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     if (!plan || !currentTask) return;
 
     const nextCompleted = !currentTask.isCompleted;
+    if (nextCompleted) {
+      setShowCelebrationToast(true);
+      setTimeout(() => setShowCelebrationToast(false), 3200);
+    }
     const updatedDays = plan.days.map((d) => {
       if (d.dayNumber === selectedDayNum) {
         return {
@@ -421,6 +426,66 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                   {progressPercent}%
                 </span>
               </div>
+            </div>
+          </div>
+
+          {/* 30-Day Interactive Visual Progress Bar with Weekly Milestones */}
+          <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xs space-y-3.5">
+            <div className="flex items-center justify-between text-xs sm:text-sm">
+              <span className="font-extrabold text-[#0F172A] dark:text-white flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
+                <span>مسار الإنجاز التراكمي لـ 30 يوماً</span>
+              </span>
+              <span className="font-bold text-[#0F6E6E] dark:text-cyan-400">
+                {completedCount} من 30 يوماً مُنجز ({progressPercent}%)
+              </span>
+            </div>
+
+            {/* Progress track */}
+            <div className="relative w-full h-3.5 bg-slate-100 dark:bg-slate-800/80 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-[#0F6E6E] dark:from-cyan-400 dark:via-teal-400 dark:to-emerald-400 transition-all duration-500 rounded-full shadow-xs"
+                style={{ width: `${progressPercent}%` }}
+              />
+            </div>
+
+            {/* 4 Weekly Milestones */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1 text-[11px]">
+              {[
+                { week: 1, label: 'الأسبوع 1', days: 'يوم 1 - 7', target: 7 },
+                { week: 2, label: 'الأسبوع 2', days: 'يوم 8 - 14', target: 14 },
+                { week: 3, label: 'الأسبوع 3', days: 'يوم 15 - 21', target: 21 },
+                { week: 4, label: 'الأسبوع 4', days: 'يوم 22 - 30', target: 30 },
+              ].map((m) => {
+                const isPassed = completedCount >= m.target;
+                const isCurrent =
+                  completedCount < m.target &&
+                  (m.week === 1 || completedCount >= [0, 7, 14, 21][m.week - 1]);
+                return (
+                  <button
+                    key={m.week}
+                    type="button"
+                    onClick={() => setActiveWeekTab(m.week)}
+                    className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                      isPassed
+                        ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold'
+                        : isCurrent
+                        ? 'bg-teal-50/80 dark:bg-teal-950/40 border-teal-400 dark:border-cyan-500 text-teal-800 dark:text-cyan-300 font-extrabold ring-1 ring-teal-400/50'
+                        : 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+                    }`}
+                  >
+                    <div className="flex items-center justify-center gap-1">
+                      {isPassed ? (
+                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                      ) : (
+                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      )}
+                      <span>{m.label}</span>
+                    </div>
+                    <span className="text-[10px] opacity-75 block mt-0.5">{m.days}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -763,6 +828,14 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Micro-Celebration Toast on Completing Day Task */}
+      {showCelebrationToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#0F6E6E] dark:bg-cyan-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm font-extrabold animate-in fade-in slide-in-from-bottom-4 duration-300 border border-white/20 select-none pointer-events-none">
+          <Sparkles className="w-4 h-4 text-amber-300 animate-spin" />
+          <span>🎉 رائع جداً! تم تسجيل إنجاز اليوم بنجاح وخطوت خطوة للأمام نحو التوازن.</span>
         </div>
       )}
     </div>
