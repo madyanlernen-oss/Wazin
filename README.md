@@ -39,7 +39,6 @@ npm start
 - `npm run start`: Runs `tsx server.ts` in production mode.
 - `npm run preview`: Runs `vite preview`.
 - `npm run lint`: Runs `tsc --noEmit` to verify TypeScript types.
-- `npm run tunnel`: Runs `cloudflared tunnel --protocol http2 --url http://127.0.0.1:3000` to expose port 3000 externally.
 - `npm run clean`: Runs `rm -rf dist server.js`.
 
 **Default Server Port:** `3000` (`http://localhost:3000` or `http://127.0.0.1:3000`).
