@@ -16,6 +16,7 @@ import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
 import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
 import { ThirtyDayPlanScreen } from './screens/ThirtyDayPlanScreen';
+import { DemoModeBanner } from './components/DemoModeBanner';
 import { Menu, Sun, Moon } from 'lucide-react';
 import { ADVISORS_LIST } from './data/advisorsData';
 import {
@@ -35,6 +36,11 @@ import {
   resetStoredState,
   StoredAppState,
 } from './utils/storage';
+import {
+  activateDemoMode,
+  isDemoModeActive,
+  exitDemoMode,
+} from './utils/demoMode';
 
 export default function App() {
   const [appState, setAppState] = useState<StoredAppState>(() => {
@@ -43,6 +49,10 @@ export default function App() {
       loaded.userProfile = null;
     }
     return loaded;
+  });
+
+  const [isDemoMode, setIsDemoMode] = useState<boolean>(() => {
+    return isDemoModeActive() || appState.userProfile?.email === 'demo@wazan.com';
   });
 
   // Screen navigation state: restore last screen on reload if user is authenticated
@@ -127,15 +137,36 @@ export default function App() {
     setActiveScreen('login');
   };
 
+  // Handler: Activate Demo Mode for Hackathon Evaluators
+  const handleActivateDemo = () => {
+    const demoState = activateDemoMode();
+    setAppState(demoState);
+    setIsDemoMode(true);
+    setActiveScreen('dashboard');
+  };
+
+  // Handler: Reset Demo Data back to pristine full state
+  const handleResetDemoData = () => {
+    const demoState = activateDemoMode();
+    setAppState(demoState);
+    setIsDemoMode(true);
+    setActiveScreen('dashboard');
+  };
+
+  // Handler: Switch from Demo Mode to a fresh profile
+  const handleStartFreshProfile = () => {
+    exitDemoMode();
+    setIsDemoMode(false);
+    const fresh = getDefaultInitialState();
+    setAppState(fresh);
+    saveStoredState(fresh);
+    setAuthMode('signup');
+    setActiveScreen('login');
+  };
+
   // Handler: Load Sample Profile
   const handleLoadSample = () => {
-    const sample = loadSampleState();
-    sample.completedAdvisors = [];
-    sample.completedDates = {};
-    sample.answers = {};
-    setAppState(sample);
-    saveStoredState(sample);
-    setActiveScreen('dashboard');
+    handleActivateDemo();
   };
 
   // Handler: Login Success (loads realistic sample state for demo user سعود المنصور, or clean state for new users)
@@ -158,14 +189,14 @@ export default function App() {
       profile.name?.includes('ضيف');
 
     if (isDemo) {
-      const sample = loadSampleState();
-      sample.userProfile = profile;
-      sample.completedAdvisors = [];
-      sample.completedDates = {};
-      sample.answers = {};
-      setAppState(sample);
-      saveStoredState(sample);
+      const demoState = activateDemoMode();
+      demoState.userProfile = profile;
+      setAppState(demoState);
+      saveStoredState(demoState);
+      setIsDemoMode(true);
     } else {
+      exitDemoMode();
+      setIsDemoMode(false);
       const fresh = getDefaultInitialState();
       setAppState({
         ...fresh,
@@ -199,6 +230,8 @@ export default function App() {
 
   // Handler: Sign Out (تسجيل الخروج)
   const handleSignOut = () => {
+    exitDemoMode();
+    setIsDemoMode(false);
     setAppState((prev) => ({
       ...prev,
       userProfile: null,
@@ -350,6 +383,8 @@ export default function App() {
 
   // Handler: Reset Profile
   const handleResetProfile = () => {
+    exitDemoMode();
+    setIsDemoMode(false);
     const fresh = getDefaultInitialState();
     setAppState(fresh);
     resetStoredState();
@@ -402,7 +437,8 @@ export default function App() {
         <main className="transition-all duration-300">
           {activeScreen === 'landing' && (
             <LandingScreen
-              onLoadSample={handleLoadSample}
+              onLoadSample={handleActivateDemo}
+              onActivateDemo={handleActivateDemo}
               onNavigateToAuth={handleNavigateToAuth}
               theme={theme}
             />
@@ -412,6 +448,7 @@ export default function App() {
             <AuthScreen
               initialMode={authMode}
               onLoginSuccess={handleLoginSuccess}
+              onActivateDemo={handleActivateDemo}
               onCancel={() => setActiveScreen('landing')}
               theme={theme}
             />
@@ -440,6 +477,13 @@ export default function App() {
 
       {/* Main Content Area */}
       <div className="flex-1 min-w-0 flex flex-col min-h-screen overflow-x-hidden">
+        {/* Subtle Top Banner in Demo Mode */}
+        {isDemoMode && (
+          <DemoModeBanner
+            onResetDemo={handleResetDemoData}
+            onStartFreshProfile={handleStartFreshProfile}
+          />
+        )}
         {/* Mobile Header with Menu Toggle */}
         <header className="lg:hidden sticky top-0 z-20 bg-white/95 dark:bg-[#07111c]/95 backdrop-blur-md border-b border-slate-200/90 dark:border-slate-800 px-4 py-3 flex items-center justify-between shadow-xs transition-colors">
           <div className="flex items-center gap-3">

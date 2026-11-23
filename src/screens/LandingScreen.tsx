@@ -13,18 +13,21 @@ import {
   Loader2,
   ArrowUp,
   Check,
+  Zap,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LifeDimensionsGuide } from '../components/LifeDimensionsGuide';
 
 interface LandingScreenProps {
   onLoadSample?: () => void;
+  onActivateDemo?: () => void;
   onNavigateToAuth: (mode: 'login' | 'signup') => void;
   theme?: 'light' | 'dark';
 }
 
 export const LandingScreen: React.FC<LandingScreenProps> = ({
-  onLoadSample: _onLoadSample,
+  onLoadSample,
+  onActivateDemo,
   onNavigateToAuth,
   theme = 'light',
 }) => {
@@ -347,16 +350,29 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
           </div>
 
           {/* Quick CTA on the left (end in RTL) */}
-          <button
-            type="button"
-            onClick={() => onNavigateToAuth('login')}
-            className="min-h-[40px] min-w-[40px] px-3 sm:px-4 py-1.5 rounded-full bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 flex-shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
-            title="تسجيل الدخول / ابدأ الآن"
-            aria-label="ابدأ الآن وتسجيل الدخول"
-          >
-            <Sparkles className="w-3.5 h-3.5 text-cyan-200" aria-hidden="true" />
-            <span className="hidden sm:inline">ابدأ الآن</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onActivateDemo || onLoadSample}
+              className="min-h-[40px] px-3 sm:px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 flex-shrink-0 cursor-pointer"
+              title="تجربة فورية بحساب تجريبي (Demo Mode)"
+              aria-label="تجربة فورية بحساب تجريبي للمحكمين"
+            >
+              <Zap className="w-3.5 h-3.5 fill-current text-amber-200" aria-hidden="true" />
+              <span>تجربة فورية (Demo Mode)</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => onNavigateToAuth('login')}
+              className="min-h-[40px] min-w-[40px] px-3 sm:px-4 py-1.5 rounded-full bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-[#0891B2] dark:hover:bg-[#0E7490] text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 flex-shrink-0 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400"
+              title="تسجيل الدخول / ابدأ الآن"
+              aria-label="ابدأ الآن وتسجيل الدخول"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-cyan-200" aria-hidden="true" />
+              <span className="hidden sm:inline">ابدأ الآن</span>
+            </button>
+          </div>
         </div>
       </nav>
 
@@ -566,15 +582,26 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               منصة ذكية متخصصة تعيد رسم بوصلتك الحياتية بوعي. يرافقك المستشارون الذكيون في كل جانب وفق معايير نوعية، ليرسموا لك "عجلة الحياة" ويزودوك بخطة عمل تكاملية تجمع بين النجاح والسكينة.
             </p>
 
-            {/* Primary Hero Conversion CTA Button */}
-            <div className="pt-4 sm:pt-6 flex flex-col sm:flex-row items-center justify-center gap-3">
+            {/* Primary Hero Conversion CTA Buttons */}
+            <div className="pt-4 sm:pt-6 flex flex-col sm:flex-row items-center justify-center gap-3.5">
+              <button
+                type="button"
+                onClick={onActivateDemo || onLoadSample}
+                className="group relative inline-flex items-center justify-center gap-3 px-8 sm:px-9 py-4 rounded-full bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-600 hover:to-amber-700 text-white text-base sm:text-lg font-black shadow-xl shadow-amber-500/25 hover:shadow-2xl hover:shadow-amber-500/40 border border-amber-300/40 transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] active:translate-y-0 active:scale-95 cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-amber-500/30"
+                title="تصفح المنصة مباشرة بحساب تجريبي مكتمل للمحكّمين"
+              >
+                {/* Shimmer sweep effect */}
+                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
+                <Zap className="w-5 h-5 fill-current text-amber-200 animate-pulse" aria-hidden="true" />
+                <span>تجربة فورية بحساب تجريبي (Demo Mode)</span>
+                <span className="text-xs px-2.5 py-0.5 rounded-full bg-black/25 text-amber-100 font-bold">للمحكّمين ⚡</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => onNavigateToAuth('signup')}
-                className="group relative inline-flex items-center justify-center gap-3 px-8 sm:px-10 py-4 rounded-full bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-base sm:text-lg font-black shadow-xl shadow-[#0F6E6E]/25 hover:shadow-2xl hover:shadow-[#0F6E6E]/40 dark:shadow-cyan-950/60 dark:hover:shadow-cyan-900/70 border border-teal-500/40 dark:border-cyan-400/40 transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] active:translate-y-0 active:scale-95 cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0F6E6E]/30 dark:focus-visible:ring-cyan-400/40"
+                className="group relative inline-flex items-center justify-center gap-2.5 px-7 sm:px-8 py-4 rounded-full bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-base sm:text-lg font-black shadow-lg shadow-[#0F6E6E]/20 hover:shadow-xl hover:shadow-[#0F6E6E]/30 dark:shadow-cyan-950/60 dark:hover:shadow-cyan-900/70 border border-teal-500/40 dark:border-cyan-400/40 transition-all duration-300 hover:-translate-y-1 hover:scale-[1.02] active:translate-y-0 active:scale-95 cursor-pointer overflow-hidden focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#0F6E6E]/30 dark:focus-visible:ring-cyan-400/40"
               >
-                {/* Shimmer sweep effect */}
-                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
                 <span>ابدأ فحص اتزانك التفاعلي مجاناً</span>
                 <span className="text-xl leading-none font-bold transition-transform duration-300 group-hover:-translate-x-1.5" aria-hidden="true">&larr;</span>
               </button>

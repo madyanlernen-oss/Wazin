@@ -13,6 +13,7 @@ import {
   Check,
   KeyRound,
   Sparkles,
+  Zap,
 } from 'lucide-react';
 import { UserProfile } from '../types/lifeBalance';
 import {
@@ -22,9 +23,11 @@ import {
   saveUserCredential,
   verifyUserPassword,
 } from '../utils/storage';
+import { DEMO_USER_PROFILE } from '../utils/demoMode';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserProfile) => void;
+  onActivateDemo?: () => void;
   onCancel: () => void;
   initialMode?: 'login' | 'signup';
   theme?: 'light' | 'dark';
@@ -53,6 +56,7 @@ const GoogleIcon: React.FC<{ className?: string }> = ({ className = 'w-5 h-5' })
 
 export const AuthScreen: React.FC<AuthScreenProps> = ({
   onLoginSuccess,
+  onActivateDemo,
   onCancel,
   initialMode = 'login',
   theme = 'light',
@@ -374,6 +378,36 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
         {/* Main Card */}
         <div className="bg-white/92 dark:bg-[#0c1827] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 shadow-xl shadow-slate-900/5 dark:shadow-black/40 backdrop-blur-md transition-colors">
+
+          {/* Prominent Demo Mode Instant Access for Evaluators */}
+          <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-teal-500/10 dark:from-amber-950/40 dark:via-amber-905/30 dark:to-teal-950/30 border border-amber-300 dark:border-amber-700/80 shadow-xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="inline-flex items-center gap-1.5 text-xs font-black text-amber-800 dark:text-amber-300">
+                <Zap className="w-4 h-4 fill-current text-amber-500 animate-pulse" />
+                <span>خاص بلجان التحكيم والتقييم السريع ⚡</span>
+              </span>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-900 dark:text-amber-200 font-bold">
+                بدون تسجيل
+              </span>
+            </div>
+            <p className="text-[11px] text-[#475569] dark:text-slate-300 leading-relaxed">
+              تصفح فوري للمنصة بحساب تجريبي متكامل (سعود المنصور) يضم بيانات مكتملة عبر الجوانب الثمانية ومصفوفة أيزنهاور وخطة 30 يوماً.
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                if (onActivateDemo) {
+                  onActivateDemo();
+                } else {
+                  onLoginSuccess(DEMO_USER_PROFILE);
+                }
+              }}
+              className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:from-amber-700 active:to-amber-800 text-white text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 hover:shadow-lg hover:shadow-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Sparkles className="w-4 h-4 text-amber-100" />
+              <span>تجربة فورية بحساب تجريبي (Demo Mode)</span>
+            </button>
+          </div>
 
           {/* 1-Click Google Button (Clean Arabic Label with Aligned Icon) */}
           <div className="mb-6">
