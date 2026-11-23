@@ -606,7 +606,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 ref={videoRef}
                 src="/videos/wazan.mp4"
                 playsInline
-                preload="auto"
+                preload="none"
                 className="absolute inset-0 w-full h-full object-cover cursor-pointer z-0"
                 onPlay={() => {
                   setIsPlaying(true);

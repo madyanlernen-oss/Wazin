@@ -2795,7 +2795,7 @@ app.post('/api/log-error', logErrorRateLimiter, (req: Request, res: Response) =>
 
 // Setup Vite middlewares in development or static serve in production
 async function startServer() {
-  // Always serve public static assets directly (including /videos/wazan.mp4 and /assets/)
+  // Always serve public static assets directly (including /videos/ and /assets/)
   app.use(express.static(path.resolve(__dirname, 'public')));
 
   if (process.env.NODE_ENV === 'production' || fs.existsSync(path.resolve(__dirname, 'dist', 'index.html'))) {
