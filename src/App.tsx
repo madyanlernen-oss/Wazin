@@ -142,7 +142,7 @@ export default function App() {
     const demoState = activateDemoMode();
     setAppState(demoState);
     setIsDemoMode(true);
-    setActiveScreen('dashboard');
+    setActiveScreen('onboarding'); // Direct to active live station
   };
 
   // Handler: Reset Demo Data back to pristine full state
@@ -150,7 +150,7 @@ export default function App() {
     const demoState = activateDemoMode();
     setAppState(demoState);
     setIsDemoMode(true);
-    setActiveScreen('dashboard');
+    setActiveScreen('onboarding');
   };
 
   // Handler: Switch from Demo Mode to a fresh profile

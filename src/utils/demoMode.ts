@@ -353,21 +353,15 @@ export const DEMO_ADVISOR_CHATS: Record<string, ChatMessage[]> = {
 };
 
 /**
- * Activates the Demo Mode with rich, full-state sample data
+ * Activates Demo Mode for live presentations / weekly task workflow:
+ * - Basic profile is pre-filled so the presenter skips tedious signup.
+ * - The current weekly assessment / check-in is ACTIVE and OPEN (0/8 completed) so the presenter can execute it live.
+ * - Historical baseline data is preserved for comparison charts and previous-week analytics.
  */
 export function activateDemoMode(): StoredAppState {
-  const sampleAnswers: Record<string, any> = {
-    spiritual_score: 8.9,
-    financial_score: 8.4,
-    career_score: 8.7,
-    personal_score: 8.3,
-    learning_score: 8.5,
-    family_score: 8.6,
-    social_score: 8.0,
-    health_score: 8.1,
-  };
+  const sampleAnswers: Record<string, any> = {};
 
-  // Generate 30-day interactive plan with the first 12 days completed
+  // Generate 30-day interactive plan with the first 12 days completed as historical momentum
   const plan = generateThirtyDayPlan(DEMO_SCORES);
   if (plan && Array.isArray(plan.days)) {
     plan.days = plan.days.map((day, idx) => {
@@ -386,25 +380,25 @@ export function activateDemoMode(): StoredAppState {
 
   const demoState: StoredAppState = {
     userProfile: DEMO_USER_PROFILE,
-    scores: DEMO_SCORES,
+    scores: {
+      spiritual: 0,
+      financial: 0,
+      career: 0,
+      personal: 0,
+      learning: 0,
+      family: 0,
+      social: 0,
+      health: 0,
+    },
     answers: sampleAnswers,
     goals: DEMO_GOALS,
     eisenhowerGoals: DEMO_EISENHOWER_GOALS,
-    completedAdvisors: DEMO_COMPLETED_ADVISORS,
-    completedDates: {
-      spiritual: Date.now() - 86400000 * 2,
-      financial: Date.now() - 86400000 * 2,
-      career: Date.now() - 86400000 * 2,
-      personal: Date.now() - 86400000 * 2,
-      learning: Date.now() - 86400000 * 2,
-      family: Date.now() - 86400000 * 2,
-      social: Date.now() - 86400000 * 2,
-      health: Date.now() - 86400000 * 2,
-    },
-    hasCompletedBaseline: true,
+    completedAdvisors: [], // Start with 0/8 completed for live demonstration
+    completedDates: {},
+    hasCompletedBaseline: true, // Baseline is completed so user is in regular active weekly check-in mode
     assessmentMode: 'weekly_checkin',
-    directorReport: DEMO_DIRECTOR_REPORT,
-    lastActiveScreen: 'dashboard',
+    directorReport: null,
+    lastActiveScreen: 'onboarding', // Take the presenter straight into the live interactive station
     selectedAdvisorId: 'spiritual',
     thirtyDayPlan: plan,
   };
@@ -419,6 +413,8 @@ export function activateDemoMode(): StoredAppState {
     localStorage.setItem('wazan_eisenhower_goals', JSON.stringify(DEMO_EISENHOWER_GOALS));
     localStorage.setItem('wazan_eisenhower_timeframe', 'weekly');
     localStorage.setItem('wazan_ai_mode', 'balanced');
+    // Clear any previous station cache so the spiritual station starts fresh
+    localStorage.removeItem('wazan_advisor_spiritual_completed');
   } catch (err) {
     console.warn('Failed to save demo chats/goals to localStorage:', err);
   }

@@ -53,12 +53,12 @@ export const DemoModeBanner: React.FC<DemoModeBannerProps> = ({
                 <span>وضع المحكّمين • Demo Mode</span>
               </span>
               <span className="text-xs font-bold text-[#0F172A] dark:text-slate-200 truncate">
-                المستفيد التجريبي: <strong>سعود المنصور</strong> (بيانات مكتملة عبر 8 مجالات + خطة 30 يوماً + مصفوفة أيزنهاور)
+                المستفيد: <strong>سعود المنصور</strong> • تقييم أسبوعي حي ونشط بانتظار إنجازك
               </span>
             </div>
             {!isCollapsed && (
               <p className="text-[11px] text-[#64748B] dark:text-slate-400 hidden sm:block mt-0.5">
-                يمكنك التفاعل الحي مع المستشارين بالذكاء الاصطناعي، أو إعادة تعيين البيانات التجريبية، أو البدء بحساب جديد فارغ.
+                خض تجربة الحوار الحي مع المستشار الروحي لإكمال المحطة، وستُفتح مخرجات رادار الحياة وخريطة الـ 30 يوماً تلقائياً بناءً على تقييمك الفعلي.
               </p>
             )}
           </div>
