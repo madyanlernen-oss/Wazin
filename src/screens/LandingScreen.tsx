@@ -203,21 +203,52 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
   };
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const isTogglingRef = useRef(false);
 
-  const handleTogglePlay = () => {
+  const handleTogglePlay = (e?: React.SyntheticEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    // Prevent double invocation in the same event tick from bubbling or double clicks
+    if (isTogglingRef.current) return;
+    isTogglingRef.current = true;
+    setTimeout(() => {
+      isTogglingRef.current = false;
+    }, 200);
+
     if (!videoRef.current) return;
+
     if (videoRef.current.paused || videoRef.current.ended) {
       setVideoError(false);
-      videoRef.current
-        .play()
-        .then(() => {
-          setIsPlaying(true);
-          setHasStartedPlaying(true);
-        })
-        .catch((err) => {
-          console.warn('Video play interrupted:', err);
-          setIsPlaying(false);
-        });
+      const playPromise = videoRef.current.play();
+      if (playPromise !== undefined) {
+        playPromise
+          .then(() => {
+            setIsPlaying(true);
+            setHasStartedPlaying(true);
+          })
+          .catch((err) => {
+            console.warn('Video play interrupted, attempting muted playback:', err);
+            // Some browsers require muted autoplay on first interaction
+            if (videoRef.current) {
+              videoRef.current.muted = true;
+              setIsMuted(true);
+              videoRef.current
+                .play()
+                .then(() => {
+                  setIsPlaying(true);
+                  setHasStartedPlaying(true);
+                })
+                .catch((err2) => {
+                  console.error('Video play failed even when muted:', err2);
+                  setIsPlaying(false);
+                });
+            } else {
+              setIsPlaying(false);
+            }
+          });
+      }
     } else {
       videoRef.current.pause();
       setIsPlaying(false);
@@ -571,7 +602,10 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 playsInline
                 preload="auto"
                 className="absolute inset-0 w-full h-full object-cover cursor-pointer z-0"
-                onPlay={() => setIsPlaying(true)}
+                onPlay={() => {
+                  setIsPlaying(true);
+                  setHasStartedPlaying(true);
+                }}
                 onPause={() => setIsPlaying(false)}
                 onEnded={() => {
                   setIsPlaying(false);
@@ -678,7 +712,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                       aria-label="تشغيل الفيديو التعريفي"
                       title="تشغيل الفيديو التعريفي"
                     >
-                      <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform drop-shadow" />
+                      <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform drop-shadow pointer-events-none" />
                     </button>
                   </div>
 
@@ -713,7 +747,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                       aria-label="استئناف تشغيل الفيديو"
                       title="استئناف التشغيل"
                     >
-                      <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform drop-shadow" />
+                      <Play className="w-7 h-7 sm:w-8 sm:h-8 fill-white text-white ml-1 group-hover:scale-105 transition-transform drop-shadow pointer-events-none" />
                     </button>
                   </div>
                 </div>
