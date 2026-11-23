@@ -2762,6 +2762,37 @@ ${eisenhowerUserContext}
   }
 });
 
+// Rate limiting for /api/log-error (max 10 requests per minute per IP)
+const logErrorRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  statusCode: 429,
+  message: {
+    error: 'Too many error logging requests, please try again later.',
+  },
+});
+
+app.post('/api/log-error', logErrorRateLimiter, (req: Request, res: Response) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(204).end();
+  }
+
+  const knownFields = ['message', 'stack', 'componentStack', 'url', 'time'] as const;
+  const sanitized: Record<string, string> = {};
+
+  for (const field of knownFields) {
+    const val = req.body[field];
+    if (typeof val === 'string') {
+      sanitized[field] = val.slice(0, 2000);
+    }
+  }
+
+  console.error('[Client Error Log]:', sanitized);
+  return res.status(204).end();
+});
+
 // Setup Vite middlewares in development or static serve in production
 async function startServer() {
   // Always serve public static assets directly (including /videos/wazan.mp4 and /assets/)
