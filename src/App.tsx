@@ -543,6 +543,7 @@ export default function App() {
               report={appState.directorReport}
               onSaveReport={handleSaveDirectorReport}
               onBackToDashboard={() => setActiveScreen('dashboard')}
+              onNavigateToThirtyDayPlan={() => setActiveScreen('thirty_day_plan')}
               theme={theme}
             />
           )}

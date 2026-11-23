@@ -4,7 +4,6 @@ import {
   ArrowRight,
   TrendingUp,
   AlertOctagon,
-  Calendar,
   RefreshCw,
   Copy,
   Printer,
@@ -27,6 +26,7 @@ interface DirectorSummaryScreenProps {
   report: DirectorSummaryReport | null;
   onSaveReport: (report: DirectorSummaryReport) => void;
   onBackToDashboard: () => void;
+  onNavigateToThirtyDayPlan?: () => void;
   theme?: 'light' | 'dark';
 }
 
@@ -61,12 +61,12 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
   report,
   onSaveReport,
   onBackToDashboard,
+  onNavigateToThirtyDayPlan,
   theme: _theme = 'light',
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [completedRoadmapActions, setCompletedRoadmapActions] = useState<Record<string, boolean>>({});
 
   const handleGenerateReport = async () => {
     setIsGenerating(true);
@@ -208,13 +208,6 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
     }
   };
 
-  const toggleActionCheck = (actionId: string) => {
-    setCompletedRoadmapActions((prev) => ({
-      ...prev,
-      [actionId]: !prev[actionId],
-    }));
-  };
-
   const handleCopy = () => {
     if (!report) return;
     const text = `
@@ -241,10 +234,6 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
   const handlePrint = () => {
     window.print();
   };
-
-  const sortedRoadmapWeeks = [...(report?.thirtyDayRoadmap || [])].sort(
-    (a, b) => a.weekNumber - b.weekNumber
-  );
 
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 space-y-8 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
@@ -460,80 +449,33 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
           </div>
 
-          {/* Section 4: 30-Day Integrated Roadmap (خطة 30 يوماً متكاملة) */}
-          <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-6 transition-colors">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-2">
-                  <Calendar className="w-5 h-5 text-[#0F6E6E] dark:text-[#22D3EE]" />
-                  <span>خارطة طريق الـ 30 يوماً المتكاملة (أسبوعياً)</span>
-                </h2>
-                <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
-                  تدرج مدروس ينقلك خطوة بخطوة نحو التوازن الحقيقي
-                </p>
-              </div>
-            </div>
-
-            {/* 2x2 Grid in Natural Arabic RTL Order:
-                Top-Right: Week 1
-                Top-Left: Week 2
-                Bottom-Right: Week 3
-                Bottom-Left: Week 4
-            */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 items-stretch" dir="rtl">
-              {sortedRoadmapWeeks.map((week) => (
-                <div
-                  key={week.weekNumber}
-                  className="bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-5 flex flex-col justify-between space-y-4 shadow-xs h-full transition-colors"
-                >
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0] dark:border-[#1E343F]">
-                      <span className="text-xs font-black text-[#0F6E6E] dark:text-[#22D3EE] px-2.5 py-0.5 rounded-lg bg-[#0F6E6E]/10 dark:bg-cyan-950/50 border border-[#0F6E6E]/20 dark:border-cyan-800/40">
-                        الأسبوع {week.weekNumber}
-                      </span>
-                      <h4 className="font-extrabold text-xs text-[#0F172A] dark:text-[#F1F5F9]">
-                        {week.weekTitle}
-                      </h4>
-                    </div>
-
-                    <p className="text-xs text-[#0F6E6E] dark:text-[#22D3EE] font-bold">
-                      التركيز الأساسي: {renderWithIsolatedNumbers(week.coreFocus)}
-                    </p>
-                  </div>
-
-                  <div className="space-y-2 pt-1 flex-1">
-                    {(week.actions || []).map((act, aIdx) => {
-                      const actId = `w${week.weekNumber}_a${aIdx}`;
-                      const isDone = completedRoadmapActions[actId];
-
-                      return (
-                        <div
-                          key={aIdx}
-                          onClick={() => toggleActionCheck(actId)}
-                          className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition-all shadow-xs ${
-                            isDone
-                              ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 line-through opacity-75'
-                              : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] text-[#0F172A] dark:text-[#F1F5F9] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE]'
-                          }`}
-                        >
-                          <div
-                            className={`w-4 h-4 rounded-md flex items-center justify-center border mt-0.5 flex-shrink-0 transition-colors ${
-                              isDone
-                                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] border-[#0F6E6E] dark:border-[#0891B2] text-white'
-                                : 'border-slate-300 dark:border-slate-600 bg-transparent'
-                            }`}
-                          >
-                            {isDone && <Check className="w-3 h-3 stroke-[3]" />}
-                          </div>
-                          <span className="leading-relaxed">{renderWithIsolatedNumbers(act)}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+          {/* Quick Access to the dedicated 30-Day Smart Plan */}
+          {onNavigateToThirtyDayPlan && (
+            <div className="bg-gradient-to-r from-[#0F6E6E]/10 via-teal-500/5 to-transparent dark:from-cyan-950/40 dark:via-teal-950/20 dark:to-transparent border border-[#0F6E6E]/20 dark:border-cyan-800/40 rounded-3xl p-6 flex flex-col sm:flex-row items-center justify-between gap-4 transition-colors">
+              <div className="flex items-center gap-3.5 text-right w-full sm:w-auto">
+                <div className="w-12 h-12 rounded-2xl bg-[#0F6E6E]/15 dark:bg-cyan-500/20 text-[#0F6E6E] dark:text-cyan-300 flex items-center justify-center text-2xl flex-shrink-0 shadow-xs">
+                  📅
                 </div>
-              ))}
+                <div>
+                  <h3 className="text-sm font-black text-[#0F172A] dark:text-[#F1F5F9]">
+                    خطتك الذكية لـ 30 يوماً
+                  </h3>
+                  <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-0.5">
+                    خطة تفاعلية شاملة مقسمة بالأيام والمحطات لمرافقتك عملياً نحو التوازن
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={onNavigateToThirtyDayPlan}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0B5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-xs font-black transition-all shadow-sm hover:scale-105 active:scale-95 cursor-pointer flex items-center justify-center gap-2 flex-shrink-0"
+              >
+                <span>الانتقال لخطتي الذكية</span>
+                <span className="text-sm leading-none">&larr;</span>
+              </button>
             </div>
-          </div>
+          )}
 
           {/* Section 5: Golden Rule from Director (Calm, Centered, Generous Breathing Room) */}
           <div className="bg-gradient-to-b from-white to-[#F8FAFA] dark:from-[#0E1D24] dark:to-[#081318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl py-10 sm:py-14 px-6 sm:px-12 shadow-xs text-center space-y-4 transition-colors">

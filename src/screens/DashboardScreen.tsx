@@ -224,13 +224,6 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     expectedImpact: 'شحن الطاقة الذهنية والبدنية وتفادي ضغوط اللحظة الأخيرة.',
   };
 
-  const moatazRoadmapWeeks = directorReport?.thirtyDayRoadmap || [
-    { weekNumber: 1, weekTitle: `الأسبوع 1: سد فجوة ${bottleneckAdvisor.title}`, coreFocus: `إيقاف استنزاف الطاقة وضبط الركائز الأساسية لـ ${bottleneckAdvisor.title}`, actions: [`تحديد 3 إجراءات أساسية لضبط ${bottleneckAdvisor.title}`, 'تثبيت موعد النوم والاستيقاظ', 'جدولة أولويات الأسبوع في المربع الثاني'] },
-    { weekNumber: 2, weekTitle: 'الأسبوع 2: تفعيل العادات المحورية', coreFocus: 'بناء طقوس يومية صلبة تحمي المربع الثاني وتمنع الاحتراق', actions: ['تطبيق طقس المشي والترطيب اليومي', 'حجز وقت عائلي نوعي بدون شاشات', 'تفويض المهام غير المهمة'] },
-    { weekNumber: 3, weekTitle: 'الأسبوع 3: تعزيز التناغم والارتقاء', coreFocus: 'استثمار ركائز القوة لتعويض الفجوات وبناء مهارات جديدة', actions: ['استشارة المستشار المتخصص عبر التطبيق', 'قراءة 15 صفحة من كتاب نوعي', 'رصد اتساع رادار عجلة الحياة'] },
-    { weekNumber: 4, weekTitle: 'الأسبوع 4: تثبيت النظام الذاتي المستدام', coreFocus: 'ترسيخ العادات المكتسبة والتحول إلى أسلوب حياة تلقائي', actions: ['تقييم أسبوعي شامل لعجلة الحياة', 'الاحتفال بنقاط التحسن ومكافأة الذات', 'تحديث أهداف الشهر القادم بالمصفوفة'] },
-  ];
-
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 transition-colors duration-300">
       {/* Welcome & Overall Balance Banner */}
@@ -722,42 +715,29 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               </div>
             </div>
 
-            {/* 30-Day Roadmap Summary */}
-            <div className="space-y-3 pt-2">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-black text-[#0F172A] dark:text-white flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4 text-[#0B6E72] dark:text-cyan-400" />
-                  <span>خارطة طريق الـ 30 يوماً مقسمة أسبوعياً (4 أسابيع):</span>
-                </h4>
-                <button
-                  type="button"
-                  onClick={onNavigateToThirtyDayPlan || onNavigateToDirectorSummary}
-                  className="text-[11px] font-bold text-[#0B6E72] dark:text-cyan-400 hover:underline cursor-pointer flex items-center gap-1"
-                >
-                  <span>فتح خطتي الذكية لـ 30 يوماً</span>
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                </button>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                {moatazRoadmapWeeks.map((week) => (
-                  <div
-                    key={week.weekNumber}
-                    className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 space-y-2 text-xs"
-                  >
-                    <div className="flex items-center justify-between">
-                      <span className="text-[10px] font-black px-2 py-0.5 rounded-md bg-[#0B6E72]/10 dark:bg-cyan-950/60 text-[#0B6E72] dark:text-cyan-300">
-                        الأسبوع {week.weekNumber}
-                      </span>
-                    </div>
-                    <h5 className="font-black text-xs text-[#0F172A] dark:text-white line-clamp-1">
-                      {week.weekTitle}
+            {/* 30-Day Smart Plan Direct Access */}
+            <div className="pt-2">
+              <div
+                onClick={onNavigateToThirtyDayPlan || onNavigateToDirectorSummary}
+                className="p-4 rounded-2xl bg-gradient-to-r from-[#0B6E72]/10 via-teal-500/5 to-transparent dark:from-cyan-950/40 dark:via-teal-950/20 dark:to-transparent border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 cursor-pointer hover:border-[#0B6E72]/40 transition-all shadow-2xs"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#0B6E72]/15 dark:bg-cyan-500/20 text-[#0B6E72] dark:text-cyan-400 flex items-center justify-center text-xl flex-shrink-0">
+                    📅
+                  </div>
+                  <div>
+                    <h5 className="font-black text-xs text-[#0F172A] dark:text-white">
+                      خطتك الذكية لـ 30 يوماً
                     </h5>
-                    <p className="text-[11px] text-[#64748B] dark:text-slate-400 line-clamp-2 leading-relaxed">
-                      {week.coreFocus}
+                    <p className="text-[11px] text-[#64748B] dark:text-slate-400 mt-0.5">
+                      خطة عمل تفاعلية شاملة مقسمة يوماً بيوم ومحطة بمحطة لمرافقتك نحو التوازن الحقيقي
                     </p>
                   </div>
-                ))}
+                </div>
+                <div className="text-xs font-bold text-[#0B6E72] dark:text-cyan-400 flex items-center gap-1.5 flex-shrink-0">
+                  <span>فتح خطتي الذكية</span>
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </div>
               </div>
             </div>
           </div>
