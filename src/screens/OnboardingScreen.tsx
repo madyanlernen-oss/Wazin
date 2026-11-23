@@ -648,6 +648,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const currentRequestIdRef = useRef<string>('');
   const lastSentUserTextRef = useRef<string>('');
   const lastSentMsgIdRef = useRef<string>('');
+  const [dismissedPrivacyNotices, setDismissedPrivacyNotices] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     return () => {
@@ -868,13 +869,33 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const currentList = chatMessages[advisorKey] || [];
     const currentTurns = stationTurnCount[advisorKey] || 0;
 
-    // Detect numeric score (1 to 10) if present in user message
-    const ratingMatch = text.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i) || text.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
+    // Detect numeric score (1 to 10) anywhere in message ("N من 10", "N/10", "تقييمي N", or standalone number)
     let detectedScore: number | null = null;
-    if (ratingMatch) {
-      const rawNum = parseFloat(ratingMatch[1] || ratingMatch[0].replace(/[^\d.]/g, ''));
-      if (!isNaN(rawNum) && rawNum >= 1 && rawNum <= 10) {
-        detectedScore = rawNum;
+    const justNumberMatch = text.match(/^\s*(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)\s*[.!؟،,]*\s*$/);
+    if (justNumberMatch) {
+      const val = parseFloat(justNumberMatch[1]);
+      if (!isNaN(val) && val >= 1 && val <= 10) {
+        detectedScore = val;
+      }
+    }
+
+    if (detectedScore === null) {
+      const fromTenMatch = text.match(/(?:^|[^\d.])(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)\s*(?:من|\/)\s*10(?!\d)/i);
+      if (fromTenMatch) {
+        const val = parseFloat(fromTenMatch[1]);
+        if (!isNaN(val) && val >= 1 && val <= 10) {
+          detectedScore = val;
+        }
+      }
+    }
+
+    if (detectedScore === null) {
+      const teqyeemiMatch = text.match(/تقييمي\s*[:=]?\s*(?:هو\s*)?(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)(?!\d)/i);
+      if (teqyeemiMatch) {
+        const val = parseFloat(teqyeemiMatch[1]);
+        if (!isNaN(val) && val >= 1 && val <= 10) {
+          detectedScore = val;
+        }
       }
     }
 
@@ -1047,7 +1068,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       if (isStationCompleted) {
         const goldenHabit = currentAdvisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
         if (!replyContent.includes('تم اعتماد تقييم المحطة')) {
-          replyContent += `\n\n✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\nالدرجة المسجلة: (${earnedScore.toFixed(1)} من 10).\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
+          const isSpiritual = currentAdvisor.id === 'spiritual';
+          const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
+          const spiritualNote = isSpiritual ? '\n(تقدير لشعورك الحالي وليس حكماً على التزامك)' : '';
+          replyContent += `\n\n✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\n${scoreLabel}: (${earnedScore.toFixed(1)} من 10).${spiritualNote}\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
         }
       }
 
@@ -1591,6 +1615,23 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
         {/* Messages Stream */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#F7F6F2]/60 dark:bg-[#071318]/90 transition-colors">
+          {!dismissedPrivacyNotices[currentAdvisor.id] && (
+            <div className="flex items-center justify-between gap-2 px-3 py-1.5 rounded-xl bg-slate-100/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800/60 text-[11px] text-slate-500 dark:text-slate-400 select-none transition-colors">
+              <span className="leading-relaxed">
+                رسائلك تُرسل مؤقتاً إلى مزوّد الذكاء الاصطناعي لتوليد الرد، ويُحفظ تقدمك على جهازك. لا تكتب بيانات شخصية حساسة.
+              </span>
+              <button
+                type="button"
+                onClick={() => setDismissedPrivacyNotices((prev) => ({ ...prev, [currentAdvisor.id]: true }))}
+                className="p-1 rounded-md text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-black/5 dark:hover:bg-white/5 transition-colors flex-shrink-0 cursor-pointer"
+                aria-label="إغلاق التنبيه"
+                title="إغلاق"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {(() => {
             const lastUserMsgId = [...activeConversation].reverse().find((m) => m.sender === 'user')?.id;
             return activeConversation.map((msg) => {
