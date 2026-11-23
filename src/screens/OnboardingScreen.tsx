@@ -455,7 +455,7 @@ export function getClientAdvisorResponse(
   const levelText = semanticScore <= 3.5 ? 'مستوى حرج يحتاج رعاية وإسعافاً عاجلاً' : semanticScore <= 6.0 ? 'مستوى متوسط يواجه ضغوطاً وقابل لقفزة نوعية' : 'مستوى متميز وملهم يعكس اتزاناً عالياً';
 
   // إذا تم استيفاء 5 أسئلة ولكن المستخدم لم يطلب صراحة الاعتماد ولم يصل للحد الأقصى (8 أسئلة):
-  // الطبيب يعرض مسودة التقييم ويخيره بين الاعتماد أو الاستفاضة
+  // المستشار يعرض مسودة التقييم ويخيره بين الاعتماد أو الاستفاضة بالصيغة المعيارية المعتمدة
   if (!userAgreesToComplete && stationTurnCount < 8) {
     return {
       isQuestionOrInquiry: true,
@@ -463,10 +463,10 @@ export function getClientAdvisorResponse(
       score: semanticScore,
       strengths: dynamicStrengths,
       challenges: dynamicChallenges,
-      reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1}): تم استيفاء الحد الأدنى للتشخيص (${stationTurnCount + 1} محاورات). عرض مسودة التقييم (${semanticScore.toFixed(1)}/10) والتخيير بين الاعتماد أو التعمق الإضافي.`,
+      reasoning: `قاعدة الإجابة الخامسة والتقييم المرحلي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1}): تم استيفاء الحد الأدنى للتشخيص. عرض مسودة التقييم (${semanticScore.toFixed(1)}/10) والتخيير المعياري بين الاعتماد أو التعمق الإضافي.`,
       summary: `جاهزية اعتماد تقييم ${advTitle} بدرجة (${semanticScore.toFixed(1)} من 10) مع إتاحة الاستفاضة.`,
       advice: `التوازن يبدأ بخطوة واضحة ومستمرة.`,
-      reply: `أشكرك من قلبي على صراحتك وعمق إجاباتك طوال محاوراتنا السابقة يا صديقنا العزيز! 🌿\n\nلقد تشكّلت لدي الآن رؤية سريرية واضحة جداً لواقعك في **${advTitle}**:\n📊 **التقييم المستحق لواقعك**: (${semanticScore.toFixed(1)} من 10) — ${levelText}.\n\n🏆 **أبرز مواطن القوة المرصودة:**\n• ${dynamicStrengths[0]}\n• ${dynamicStrengths[1]}\n\n⚡ **فرص التطوير والتحديات:**\n• ${dynamicChallenges[0]}\n• ${dynamicChallenges[1]}\n\nهل تود أن **نعتمد هذا التقييم رسمياً** وننطلق للمحطة التالية، أم ترغب في التحدث عن زاوية أخرى في هذا الجانب؟`,
+      reply: `بعد ما شاركتني به حتى الآن، أقيّم وضعك الحالي بدرجة (${semanticScore.toFixed(1)}/10). هذا تقييم مبدئي مبني على المعلومات التي ذكرتها، وقد يتغير إذا واصلنا الاستكشاف.\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة؟`,
     };
   }
 
@@ -906,9 +906,13 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_response_${currentTurns}`, text);
     }
 
-    // Increment station turn count only for genuine diagnostic exchanges (not crisis emergency safety triggers)
+    // Increment station turn count only for genuine substantive diagnostic exchanges (exclude bare greetings, technical acks, or crisis overrides)
     const isCrisisOrDeathMsg = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(text);
-    if (!isCrisisOrDeathMsg) {
+    const isBareGreeting = /^(?:أهلاً|اهلا|هلا|مرحبا|مرحباً|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|حيّاك|أهلين)\s*(?:دكتور|دكتورة|استاذ|أستاذ|باشمهندس|كمال|سفيان)?\s*[.!؟]*$/i.test(text.trim());
+    const isPureAck = /^(?:شكراً|شكرا|يعطيك العافية|جزاك الله خير|تمام|أوك|اوك|حسناً|حسنا)\s*[.!؟]*$/i.test(text.trim());
+    const isSubstantiveExchange = !isCrisisOrDeathMsg && !isBareGreeting && !isPureAck;
+
+    if (isSubstantiveExchange) {
       setStationTurnCount((prev) => ({ ...prev, [advisorKey]: currentTurns + 1 }));
     }
 
