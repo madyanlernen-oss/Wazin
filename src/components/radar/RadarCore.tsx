@@ -352,7 +352,7 @@ export const RadarCore: React.FC<RadarCoreProps> = ({
               }
               strokeWidth={isSelected ? '2' : '1'}
               strokeDasharray={variant === 'compare' && !isSelected ? '2 2' : undefined}
-              className="motion-safe:transition-all motion-safe:duration-300"
+              className="motion-safe:transition-all motion-safe:duration-300 pointer-events-none"
             />
           );
         })}
@@ -372,7 +372,7 @@ export const RadarCore: React.FC<RadarCoreProps> = ({
             stroke={isDark ? '#22D3EE' : '#0B6E72'}
             strokeWidth="2.5"
             filter={`url(#${filterId})`}
-            className="motion-safe:transition-all motion-safe:duration-500 opacity-95 hover:opacity-100"
+            className="motion-safe:transition-all motion-safe:duration-500 opacity-95 hover:opacity-100 pointer-events-none"
           />
         )}
 
@@ -465,11 +465,28 @@ export const RadarCore: React.FC<RadarCoreProps> = ({
           {variant === 'single' ? 'المعدل' : 'الحالي'}
         </text>
 
-        {/* Unified Interactive Group per domain (Combines vertex node + outer badge without duplicate handlers) */}
+        {/* Unified Interactive Group per domain (Combines full sector slice + vertex node + outer badge) */}
         {domains.map((domain, index) => {
           const { x: axisX, y: axisY, angle } = getRadarCoordinates(center, radius, angleStep, index, 10);
           const isSelected = selectedAreaId === domain.id;
           const isHovered = hoveredArea === domain.id;
+
+          // 45-degree annular sector wedge covering the entire slice from center hub to perimeter
+          const rInner = 28;
+          const rOuter = radius + 15;
+          const startAngle = angle - angleStep / 2;
+          const endAngle = angle + angleStep / 2;
+
+          const p1x = center + rInner * Math.cos(startAngle);
+          const p1y = center + rInner * Math.sin(startAngle);
+          const p2x = center + rOuter * Math.cos(startAngle);
+          const p2y = center + rOuter * Math.sin(startAngle);
+          const p3x = center + rOuter * Math.cos(endAngle);
+          const p3y = center + rOuter * Math.sin(endAngle);
+          const p4x = center + rInner * Math.cos(endAngle);
+          const p4y = center + rInner * Math.sin(endAngle);
+
+          const sectorPath = `M ${p1x} ${p1y} L ${p2x} ${p2y} A ${rOuter} ${rOuter} 0 0 1 ${p3x} ${p3y} L ${p4x} ${p4y} A ${rInner} ${rInner} 0 0 0 ${p1x} ${p1y} Z`;
 
           const offsetDistance = 38;
           const badgeX = axisX + Math.cos(angle) * offsetDistance;
@@ -496,9 +513,39 @@ export const RadarCore: React.FC<RadarCoreProps> = ({
               onMouseLeave={() => setHoveredArea(null)}
               onKeyDown={(e) => handleKeyDown(e, index, domain.id)}
             >
+              {/* Full Sector Slice Area (Interactive Wedge covering the whole dimension sector) */}
+              <path
+                d={sectorPath}
+                fill={domain.color}
+                fillOpacity={
+                  isSelected
+                    ? isDark
+                      ? 0.18
+                      : 0.12
+                    : isHovered
+                    ? isDark
+                      ? 0.10
+                      : 0.06
+                    : 0
+                }
+                stroke={
+                  isSelected
+                    ? isDark
+                      ? '#22D3EE'
+                      : domain.color
+                    : isHovered
+                    ? `${domain.color}60`
+                    : 'transparent'
+                }
+                strokeWidth={isSelected ? 1.5 : isHovered ? 1 : 0}
+                strokeDasharray={isSelected ? '4 3' : undefined}
+                className="motion-safe:transition-all motion-safe:duration-200 cursor-pointer"
+                style={{ pointerEvents: 'all' }}
+              />
+
               {/* Single variant vertex data marker & halo */}
               {variant === 'single' && (
-                <g>
+                <g className="pointer-events-auto">
                   {(isHovered || isSelected) && (
                     <circle
                       cx={nodeX}
@@ -523,20 +570,41 @@ export const RadarCore: React.FC<RadarCoreProps> = ({
                 </g>
               )}
 
-              {/* Perimeter badge with foreignObject (no scale transform, pure border/ring transition) */}
+              {/* Invisible SVG hit-test rect behind the badge for reliable cross-browser click capture */}
+              <rect
+                x={badgeX - 60}
+                y={badgeY - 26}
+                width={120}
+                height={54}
+                rx={16}
+                fill="transparent"
+                className="cursor-pointer"
+                style={{ pointerEvents: 'all' }}
+              />
+
+              {/* Perimeter badge with foreignObject */}
               <foreignObject
                 x={badgeX - 60}
                 y={badgeY - 26}
                 width={120}
                 height={54}
-                className="overflow-visible pointer-events-none"
+                className="overflow-visible pointer-events-auto"
+                style={{ pointerEvents: 'auto' }}
               >
                 <div
-                  className={`w-full h-full flex flex-col items-center justify-center p-1.5 rounded-2xl motion-safe:transition-all motion-safe:duration-200 border text-center shadow-xs select-none group-focus-visible:ring-2 group-focus-visible:ring-[#0B6E72] dark:group-focus-visible:ring-cyan-400 ${
+                  role="button"
+                  tabIndex={0}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelectArea?.(domain.id);
+                  }}
+                  onMouseEnter={() => setHoveredArea(domain.id)}
+                  onMouseLeave={() => setHoveredArea(null)}
+                  className={`w-full h-full flex flex-col items-center justify-center p-1.5 rounded-2xl motion-safe:transition-all motion-safe:duration-200 border text-center shadow-xs select-none cursor-pointer hover:scale-105 active:scale-95 group-focus-visible:ring-2 group-focus-visible:ring-[#0B6E72] dark:group-focus-visible:ring-cyan-400 ${
                     isSelected
                       ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] shadow-md ring-2 ring-[#0B6E72] dark:ring-[#22D3EE] border-[#0B6E72] dark:border-[#22D3EE]'
                       : isHovered
-                      ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border-slate-300 dark:border-slate-600 ring-1 ring-slate-300 dark:ring-slate-700'
+                      ? 'bg-white dark:bg-[#0E1D24] text-[#0F172A] dark:text-[#F1F5F9] border-slate-300 dark:border-slate-600 ring-1 ring-slate-300 dark:ring-slate-700 shadow-sm'
                       : 'bg-white/95 dark:bg-[#0E1D24]/95 text-[#334155] dark:text-slate-200 border-[#E2E8F0] dark:border-[#1E343F]'
                   }`}
                   style={{
