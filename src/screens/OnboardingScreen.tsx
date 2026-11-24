@@ -783,6 +783,12 @@ ${specificQuestion}
         } else if (earnedScore === undefined || earnedScore <= 0) {
           earnedScore = currentAdvisor.id === 'financial' ? 5.5 : 6.0;
         }
+      } else if (currentTurns < 3) {
+        // إلزام عدم إغلاق المحطة تلقائياً خلال أول 3 ردود للمستفيد (قبل الجولة الرابعة) ما لم يطلب الاعتماد صراحة
+        isStationCompleted = false;
+        if (pendingOfferedScore !== null) {
+          earnedScore = pendingOfferedScore;
+        }
       } else if (pendingOfferedScore !== null) {
         earnedScore = pendingOfferedScore;
       }

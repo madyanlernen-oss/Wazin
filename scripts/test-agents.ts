@@ -292,15 +292,17 @@ async function testAgentBehaviors() {
       1,
       studentProfile
     );
-    assert(r2.reply.includes('نصف ساعة') || r2.reply.includes('خطوتك') || r2.reply.includes('الهدوء'), 'Should reflect user commitment');
-    assert(r2.reply.includes('اعتماد') || r2.reply.includes('المحطة التالية'), 'Should offer adoption choice');
+    assert(r2.reply.includes('نصف ساعة') || r2.reply.includes('خطوتك') || r2.reply.includes('الهدوء') || r2.reply.includes('خطوة'), 'Should reflect user commitment');
+    assert(r2.station_completed === false, 'Turn 2 must keep station_completed: false');
+    assert(!r2.reply.includes('المحطة التالية'), 'Turn 2 must not suggest moving to next station');
+    assert(r2.reply.includes('؟') || Boolean(r2.reflectionQuestion), 'Turn 2 must continue with a progressive question');
     results.push({
       suite,
       domain: 'Spiritual',
       name: 'Turn 2: Concrete Time Commitment Recognition ("نصف ساعة")',
       passed: true,
       durationMs: Date.now() - t2Start,
-      details: 'Affirms commitment and offers completion choice without infinite interrogation',
+      details: 'Affirms commitment and continues diagnostic questioning without premature closing',
     });
   } catch (err: any) {
     results.push({
@@ -446,15 +448,17 @@ async function testAgentBehaviors() {
       studentProfile
     );
 
-    assert(rf2.reply.includes('خطوة ممتازة') || rf2.reply.includes('صمام أمان') || rf2.reply.includes('التقييم'), 'Must affirm micro-step');
-    assert(rf2.reply.includes('اعتماد') || rf2.reply.includes('المحطة التالية'), 'Must offer adoption choice');
+    assert(rf2.reply.includes('خطوة ممتازة') || rf2.reply.includes('صمام أمان') || rf2.reply.includes('30') || rf2.reply.includes('التقييم'), 'Must affirm micro-step');
+    assert(rf2.station_completed === false, 'Turn 2 must keep station_completed: false');
+    assert(!rf2.reply.includes('المحطة التالية'), 'Turn 2 must not suggest moving to next station');
+    assert(rf2.reply.includes('؟') || Boolean(rf2.reflectionQuestion), 'Turn 2 must continue with a progressive question');
     results.push({
       suite,
       domain: 'Financial',
       name: 'Turn 2: Micro-step Saving Recognition ("30 ريال")',
       passed: true,
       durationMs: Date.now() - f2Start,
-      details: 'Affirms micro-saving step, presents interim score (5.5) with wrap-up choice',
+      details: 'Affirms micro-saving step, continues diagnostic questioning without premature closing',
     });
   } catch (err: any) {
     results.push({
