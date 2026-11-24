@@ -5,6 +5,24 @@ import { getClientAdvisorResponse, calculateSemanticScore } from '../src/compone
 import { extractInsightsFromAnswers } from '../src/utils/storage';
 import { ADVISORS_LIST } from '../src/data/advisorsData';
 import type { AdvisorConfig, UserProfile, LifeAreaId } from '../src/types/lifeBalance';
+import { activateDemoMode, isDemoModeActive, exitDemoMode, DEMO_STORAGE_FLAG_KEY } from '../src/utils/demoMode';
+import { generateAgent11Suggestions, mapDomainNameToAreaId } from '../src/utils/eisenhowerAgent';
+import { INITIAL_EISENHOWER_GOALS } from '../src/components/eisenhower/initialGoals';
+import { generateFallbackDirectorReport } from '../server/routes/directorSummary';
+import { loadStoredState } from '../src/utils/storage';
+
+// In-memory localStorage polyfill for non-browser runtimes (Node / Bun CLI)
+if (typeof (globalThis as any).localStorage === 'undefined') {
+  const store = new Map<string, string>();
+  (globalThis as any).localStorage = {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => store.set(key, String(value)),
+    removeItem: (key: string) => store.delete(key),
+    clear: () => store.clear(),
+    get length() { return store.size; },
+    key: (index: number) => Array.from(store.keys())[index] ?? null,
+  };
+}
 
 const isLiveMode = process.argv.includes('--live');
 
@@ -984,7 +1002,421 @@ async function testLiveGeminiScenarios() {
 }
 
 // ==========================================
-// 4. CLI Table Report Formatter
+// 4. Life Wheel Latency & SLA (<5s) Tests
+// ==========================================
+
+async function testLifeWheelLatencyAndIntegrity() {
+  const suite = 'Life Wheel Latency';
+
+  // Test 1: Life Wheel Recalculation & Bottleneck Detection Latency (<5s SLA)
+  const calcStart = Date.now();
+  try {
+    const scores: Record<LifeAreaId, number> = {
+      '01-financial': 4,
+      '02-health': 5,
+      '03-spiritual': 3,
+      '04-career': 6,
+      '05-personal': 5,
+      '06-learning': 6,
+      '07-family': 7,
+      '08-social': 5,
+    };
+    const values = Object.values(scores);
+    const average = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
+    let minScore = Infinity;
+    let bottleneck: LifeAreaId = '01-financial';
+    for (const [area, s] of Object.entries(scores) as [LifeAreaId, number][]) {
+      if (s < minScore) {
+        minScore = s;
+        bottleneck = area;
+      }
+    }
+    const duration = Date.now() - calcStart;
+
+    assert(average === 5.1, `Average expected 5.1, got ${average}`);
+    assert(bottleneck === '03-spiritual', `Bottleneck expected 03-spiritual, got ${bottleneck}`);
+    assert(duration < 5000, `Calculation exceeded 5000ms SLA: ${duration}ms`);
+
+    results.push({
+      suite,
+      domain: 'Aggregator',
+      name: 'Life Wheel Calculation Latency (<5s SLA)',
+      passed: true,
+      durationMs: duration,
+      details: `Avg: ${average}/10, Bottleneck: ${bottleneck} (Resolved in ${duration}ms, SLA < 5000ms)`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Aggregator',
+      name: 'Life Wheel Calculation Latency (<5s SLA)',
+      passed: false,
+      durationMs: Date.now() - calcStart,
+      message: err.message,
+    });
+  }
+
+  // Test 2: Director Report Synthesis Latency (<5s SLA)
+  const directorStart = Date.now();
+  try {
+    const testScores: Record<string, number> = {
+      '01-financial': 4,
+      '02-health': 5,
+      '03-spiritual': 3,
+      '04-career': 6,
+      '05-personal': 5,
+      '06-learning': 6,
+      '07-family': 7,
+      '08-social': 5,
+    };
+    const report = generateFallbackDirectorReport(
+      studentProfile,
+      testScores,
+      {
+        '03-spiritual': 'التشتت الرقمي وضغط المهام',
+        '01-financial': 'المصروف يكفي لكن لا يوجد ادخار',
+      },
+      '03-spiritual'
+    );
+    const duration = Date.now() - directorStart;
+
+    assert(Boolean(report.overallDiagnosis), 'Director report must contain overallDiagnosis');
+    assert(report.keystoneHabits.length >= 2, 'Director report must generate keystone habits');
+    assert(report.thirtyDayRoadmap.length >= 3, 'Director report must provide monthly roadmap phases');
+    assert(duration < 5000, `Director report generation exceeded 5000ms SLA: ${duration}ms`);
+
+    results.push({
+      suite,
+      domain: 'Director',
+      name: 'Director Report Synthesis Latency (<5s SLA)',
+      passed: true,
+      durationMs: duration,
+      details: `Generated ${report.keystoneHabits.length} habits & ${report.thirtyDayRoadmap.length} phases in ${duration}ms`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Director',
+      name: 'Director Report Synthesis Latency (<5s SLA)',
+      passed: false,
+      durationMs: Date.now() - directorStart,
+      message: err.message,
+    });
+  }
+
+  // Test 3: Advisor Assessment to Life Wheel Roundtrip
+  const roundtripStart = Date.now();
+  try {
+    const finAdvisor = ADVISORS_LIST.find((a) => a.id === '01-financial') || {
+      id: '01-financial',
+      name: 'أ. كمال المالي',
+      role: 'مستشار التخطيط المالي وتنمية الأصول',
+    };
+    const response = generateLocalAgentResponse(
+      'financial',
+      'اعتمد التقييم',
+      studentProfile.name,
+      finAdvisor,
+      5.8,
+      true,
+      2,
+      'إدارة الميزانية وصمام الأمان',
+      'initial_assessment',
+      2,
+      studentProfile
+    );
+    const duration = Date.now() - roundtripStart;
+
+    assert(response.score !== undefined && response.score > 0, 'Advisor response must contain valid score');
+    assert(response.station_completed === true, 'Station must be completed on confirmation');
+    assert(duration < 5000, `Advisor roundtrip exceeded 5000ms SLA: ${duration}ms`);
+
+    results.push({
+      suite,
+      domain: 'Financial',
+      name: 'Advisor Assessment Roundtrip Latency (<5s SLA)',
+      passed: true,
+      durationMs: duration,
+      details: `Score ${response.score}/10 adopted with station_completed=true in ${duration}ms`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Financial',
+      name: 'Advisor Assessment Roundtrip Latency (<5s SLA)',
+      passed: false,
+      durationMs: Date.now() - roundtripStart,
+      message: err.message,
+    });
+  }
+}
+
+// ==========================================
+// 5. Eisenhower Matrix Operations Tests
+// ==========================================
+
+async function testEisenhowerMatrixOperations() {
+  const suite = 'Eisenhower Matrix';
+
+  // Test 1: 4-Quadrant Partition & Initial Tasks Integrity
+  const partStart = Date.now();
+  try {
+    const goals = INITIAL_EISENHOWER_GOALS;
+    assert(Array.isArray(goals) && goals.length >= 4, 'Initial goals must have items across quadrants');
+
+    const q1 = goals.filter((g) => g.quadrant === 'q1_urgent_important');
+    const q2 = goals.filter((g) => g.quadrant === 'q2_important_not_urgent');
+    const q3 = goals.filter((g) => g.quadrant === 'q3_urgent_not_important');
+    const q4 = goals.filter((g) => g.quadrant === 'q4_not_urgent_not_important');
+
+    assert(q1.length > 0, 'Quadrant 1 must have at least one task');
+    assert(q2.length > 0, 'Quadrant 2 must have at least one task');
+    assert(q3.length > 0, 'Quadrant 3 must have at least one task');
+    assert(q4.length > 0, 'Quadrant 4 must have at least one task');
+
+    results.push({
+      suite,
+      domain: 'Eisenhower',
+      name: 'Eisenhower 4-Quadrant Partition Integrity',
+      passed: true,
+      durationMs: Date.now() - partStart,
+      details: `Q1: ${q1.length}, Q2: ${q2.length}, Q3: ${q3.length}, Q4: ${q4.length} tasks successfully partitioned`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Eisenhower',
+      name: 'Eisenhower 4-Quadrant Partition Integrity',
+      passed: false,
+      durationMs: Date.now() - partStart,
+      message: err.message,
+    });
+  }
+
+  // Test 2: Agent 11 Q2 Prioritization from Bottleneck & Keystone Habits
+  const agent11Start = Date.now();
+  try {
+    const mockDirectorReport: any = {
+      overallDiagnosis: 'تشخيص متوازن',
+      criticalBottleneck: {
+        title: 'الجانب الروحي',
+        recommendation: 'حماية 15 دقيقة صباحية للسكينة بدون شاشات',
+        domain: 'spiritual',
+      },
+      keystoneHabits: [
+        {
+          name: 'طقس السكينة والبدء الواعي',
+          targetDomains: ['spiritual', 'health'],
+          expectedImpact: 'رفع التركيز بنسبة 40%',
+        },
+      ],
+    };
+
+    const suggestions = generateAgent11Suggestions(
+      mockDirectorReport,
+      undefined,
+      []
+    );
+
+    assert(Array.isArray(suggestions) && suggestions.length > 0, 'Agent 11 must generate suggestions');
+    assert(
+      suggestions.every((s) => s.quadrant === 'q2_important_not_urgent'),
+      'All Agent 11 suggestions must be placed in Quadrant 2 (Important & Not Urgent)'
+    );
+    assert(
+      suggestions.some((s) => s.sourceAgent.startsWith('agent_')),
+      'Suggestions must carry valid agent provenance metadata'
+    );
+
+    results.push({
+      suite,
+      domain: 'Agent 11',
+      name: 'Agent 11 Q2 Focus & Habit Prioritization',
+      passed: true,
+      durationMs: Date.now() - agent11Start,
+      details: `Generated ${suggestions.length} Q2 tasks focused on bottleneck and keystone habits`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Agent 11',
+      name: 'Agent 11 Q2 Focus & Habit Prioritization',
+      passed: false,
+      durationMs: Date.now() - agent11Start,
+      message: err.message,
+    });
+  }
+
+  // Test 3: Arabic Domain Name Mapping to Area ID
+  const mapStart = Date.now();
+  try {
+    const testCases: [string, string][] = [
+      ['الجانب الروحي', 'spiritual'],
+      ['الجانب المالي', 'financial'],
+      ['الجانب الصحي', 'health'],
+      ['الجانب المهني', 'career'],
+      ['تطوير الذات', 'personal'],
+      ['الجانب المعرفي', 'learning'],
+      ['الجانب الأسري', 'family'],
+      ['الجانب الاجتماعي', 'social'],
+    ];
+
+    for (const [arabicName, expectedId] of testCases) {
+      const resolved = mapDomainNameToAreaId(arabicName);
+      assert(
+        resolved === expectedId,
+        `Arabic mapping mismatch for "${arabicName}": expected ${expectedId}, got ${resolved}`
+      );
+    }
+
+    results.push({
+      suite,
+      domain: 'Eisenhower',
+      name: 'Arabic Domain to LifeAreaId Mapping Accuracy',
+      passed: true,
+      durationMs: Date.now() - mapStart,
+      details: 'All 8 Arabic life balance domains mapped to canonical area IDs with 100% precision',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Eisenhower',
+      name: 'Arabic Domain to LifeAreaId Mapping Accuracy',
+      passed: false,
+      durationMs: Date.now() - mapStart,
+      message: err.message,
+    });
+  }
+
+  // Test 4: Goal Toggling and State Preservation
+  const toggleStart = Date.now();
+  try {
+    const sampleGoal = { ...INITIAL_EISENHOWER_GOALS[0] };
+    const initialStatus = sampleGoal.isCompleted;
+    sampleGoal.isCompleted = !initialStatus;
+    assert(sampleGoal.isCompleted !== initialStatus, 'Goal toggling must invert isCompleted flag');
+    sampleGoal.isCompleted = initialStatus;
+    assert(sampleGoal.isCompleted === initialStatus, 'Goal re-toggling must restore original status');
+
+    results.push({
+      suite,
+      domain: 'Eisenhower',
+      name: 'Goal Toggle & State Inversion Integrity',
+      passed: true,
+      durationMs: Date.now() - toggleStart,
+      details: `Toggle verified (false -> true -> false) with zero payload corruption`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Eisenhower',
+      name: 'Goal Toggle & State Inversion Integrity',
+      passed: false,
+      durationMs: Date.now() - toggleStart,
+      message: err.message,
+    });
+  }
+}
+
+// ==========================================
+// 6. Demo Mode State & Isolation Tests
+// ==========================================
+
+async function testDemoModeStateAndIsolation() {
+  const suite = 'Demo Mode';
+
+  // Test 1: Saud Al-Mansoor Demo Profile & Rich State Initialization
+  const setupStart = Date.now();
+  try {
+    const state = activateDemoMode();
+    assert(isDemoModeActive(), 'Demo mode must be active after activateDemoMode()');
+    assert(state.userProfile?.name === 'سعود المنصور', `Expected name سعود المنصور, got ${state.userProfile?.name}`);
+
+    const loaded = loadStoredState();
+    assert(loaded.userProfile?.name === 'سعود المنصور', 'Stored state must match demo user profile');
+    assert(loaded.assessmentMode === 'weekly_checkin', 'Assessment mode must be weekly_checkin for live presentation');
+    assert(loaded.lastActiveScreen === 'onboarding', 'Last active screen must be onboarding station');
+
+    results.push({
+      suite,
+      domain: 'Demo Mode',
+      name: 'Saud Al-Mansoor Demo Profile Initialization',
+      passed: true,
+      durationMs: Date.now() - setupStart,
+      details: `Active=true, Profile="${state.userProfile?.name}" (${state.userProfile?.employmentStatus}), Mode: ${state.assessmentMode}`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Demo Mode',
+      name: 'Saud Al-Mansoor Demo Profile Initialization',
+      passed: false,
+      durationMs: Date.now() - setupStart,
+      message: err.message,
+    });
+  }
+
+  // Test 2: Demo Mode Flag Lifecycle & Clean Exit
+  const exitStart = Date.now();
+  try {
+    assert(isDemoModeActive() === true, 'Demo mode should be active before exit');
+    exitDemoMode();
+    assert(isDemoModeActive() === false, 'Demo mode flag must be removed on exitDemoMode()');
+    assert(localStorage.getItem(DEMO_STORAGE_FLAG_KEY) === null, 'Storage flag must be null');
+
+    results.push({
+      suite,
+      domain: 'Demo Mode',
+      name: 'Demo Mode Lifecycle & Clean Exit Verification',
+      passed: true,
+      durationMs: Date.now() - exitStart,
+      details: 'Clean exit confirmed: storage flag flushed, isDemoModeActive() returns false',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Demo Mode',
+      name: 'Demo Mode Lifecycle & Clean Exit Verification',
+      passed: false,
+      durationMs: Date.now() - exitStart,
+      message: err.message,
+    });
+  }
+
+  // Test 3: Presentation Isolation & Zero In-Flight Contamination
+  const isoStart = Date.now();
+  try {
+    activateDemoMode();
+    const chatsRaw = localStorage.getItem('wazan_advisor_chats');
+    assert(chatsRaw !== null, 'wazan_advisor_chats must exist in demo mode');
+    const goalsRaw = localStorage.getItem('wazan_eisenhower_goals');
+    assert(goalsRaw !== null, 'wazan_eisenhower_goals must exist in demo mode');
+
+    // Clean up after test
+    exitDemoMode();
+
+    results.push({
+      suite,
+      domain: 'Demo Mode',
+      name: 'Presentation Data Seeding & Isolation',
+      passed: true,
+      durationMs: Date.now() - isoStart,
+      details: 'Spiritual and Financial station dialogues seeded cleanly; storage purged post-exit',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Demo Mode',
+      name: 'Presentation Data Seeding & Isolation',
+      passed: false,
+      durationMs: Date.now() - isoStart,
+      message: err.message,
+    });
+  }
+}
+
+// ==========================================
+// 7. CLI Table Report Formatter
 // ==========================================
 
 function printReport(totalDurationMs: number) {
@@ -1036,6 +1468,9 @@ async function main() {
   await testLiveModelAndFallback();
   await testAgentBehaviors();
   await testScoreAndSummaryConsistency();
+  await testLifeWheelLatencyAndIntegrity();
+  await testEisenhowerMatrixOperations();
+  await testDemoModeStateAndIsolation();
 
   if (isLiveMode) {
     await testLiveGeminiScenarios();

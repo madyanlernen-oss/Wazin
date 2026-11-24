@@ -76,27 +76,27 @@ export function generateLocalAgentResponse(
   const isGreeting = isSimpleGreeting || isAskingHowAdvisorIs;
   const advName = advisor?.name || (
     agentKey === 'spiritual' ? 'د. سفيان الروحي' :
-    agentKey === 'financial' ? 'أ. كمال المالي' :
-    agentKey === 'health' ? 'د. ريان الصحي' :
-    agentKey === 'career' ? 'م. طارق المهني' :
-    agentKey === 'personal' ? 'د. ليلى الذاتية' :
-    agentKey === 'learning' ? 'بروفيسور زياد المعرفي' :
-    agentKey === 'family' ? 'د. مريم الأسرية' :
-    agentKey === 'social' ? 'أ. سامي الاجتماعي' :
-    agentKey === 'aggregator' ? 'م. معتز التكاملي' :
-    agentKey === 'advisor' ? 'د. هاني الموجه' : 'مستشار وزان'
+      agentKey === 'financial' ? 'أ. كمال المالي' :
+        agentKey === 'health' ? 'د. ريان الصحي' :
+          agentKey === 'career' ? 'م. طارق المهني' :
+            agentKey === 'personal' ? 'د. ليلى الذاتية' :
+              agentKey === 'learning' ? 'بروفيسور زياد المعرفي' :
+                agentKey === 'family' ? 'د. مريم الأسرية' :
+                  agentKey === 'social' ? 'أ. سامي الاجتماعي' :
+                    agentKey === 'aggregator' ? 'م. معتز التكاملي' :
+                      agentKey === 'advisor' ? 'د. هاني الموجه' : 'مستشار وزان'
   );
   const advRole = advisor?.role || advisor?.title || (
     agentKey === 'spiritual' ? 'مستشار السكينة والسلام الداخلي والمعنى' :
-    agentKey === 'financial' ? 'مستشار التخطيط المالي وتنمية الأصول' :
-    agentKey === 'health' ? 'مستشار الصحة البدنية والطاقة الحيوية' :
-    agentKey === 'career' ? 'مستشار التطور الوظيفي والإنتاجية' :
-    agentKey === 'personal' ? 'أخصائية التوازن النفسي وبناء العادات' :
-    agentKey === 'learning' ? 'مستشار التعلم المستمر وإدارة المعرفة' :
-    agentKey === 'family' ? 'استشارية الترابط الأسري والذكاء العاطفي' :
-    agentKey === 'social' ? 'مستشار العلاقات والتواصل الإنساني' :
-    agentKey === 'aggregator' ? 'وكيل التجميع والتكامل الشامل ومحلل النظم الحياتية' :
-    agentKey === 'advisor' ? 'المستشار التوجيهي ورئيس الداشبورد' : 'مستشار الحياة'
+      agentKey === 'financial' ? 'مستشار التخطيط المالي وتنمية الأصول' :
+        agentKey === 'health' ? 'مستشار الصحة البدنية والطاقة الحيوية' :
+          agentKey === 'career' ? 'مستشار التطور الوظيفي والإنتاجية' :
+            agentKey === 'personal' ? 'أخصائية التوازن النفسي وبناء العادات' :
+              agentKey === 'learning' ? 'مستشار التعلم المستمر وإدارة المعرفة' :
+                agentKey === 'family' ? 'استشارية الترابط الأسري والذكاء العاطفي' :
+                  agentKey === 'social' ? 'مستشار العلاقات والتواصل الإنساني' :
+                    agentKey === 'aggregator' ? 'وكيل التجميع والتكامل الشامل ومحلل النظم الحياتية' :
+                      agentKey === 'advisor' ? 'المستشار التوجيهي ورئيس الداشبورد' : 'مستشار الحياة'
   );
 
   const formatAgentOutput = (data: {
@@ -121,7 +121,7 @@ export function generateLocalAgentResponse(
     const finalAdvice = data.advice || (data.actionSteps && data.actionSteps.length > 0 ? data.actionSteps[0] : finalReply);
     const finalSummary = data.summary || (finalReply.length > 120 ? finalReply.slice(0, 120) + '...' : finalReply);
     const finalReasoning = data.reasoning || `محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد (${userName}) في مجال (${advRole})، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي لتحقيق التوازن المستدام.`;
-    
+
     // Strict normalization to 1.0 - 10.0 scale ensuring 100% parity with Life Wheel
     const normalizeScore = (val: number | undefined): number => {
       if (val === undefined || val === null || isNaN(val)) return 5.0;
@@ -650,12 +650,12 @@ export function generateLocalAgentResponse(
     if (isFinContinueIntent) {
       const interimScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 5.8 : 5.5);
       const userMentionsRestaurants = /(مطاعم|مطعم|كافيهات|مقاهي|اكل برا|أكل برا|طلبات|هنقرستيشن|جاهز)/i.test(msg);
-      
+
       const finContinueReply = userMentionsRestaurants
         ? `أحييك على هذه الرغبة في التعمق والوضوح يا ${userName}! 💎\n\nيسعدني أن نواصل الحوار معاً للوصول إلى أدق تشخيص لواقعك المالي.\n\nبما أنك أشرت إلى مصاريف المطاعم والمقاهي: هل لاحظت في أي أيام الأسبوع أو الظروف يزداد هذا الإنفاق؟`
         : (isStudent
-            ? `أحييك على هذه الرغبة في التعمق والوضوح يا ${userName}! 💎\n\nيسعدني أن نواصل الحوار معاً للوصول إلى أدق تشخيص لواقعك المالي كطالب جامعي.\n\nبما أنك ذكرت أن ${studentIncomeTerm} يفي باحتياجاتك الأساسية لكنه قليل ولا تدخر منه لكونك لا تعمل: ما هو البند أو المستلزم الذي تشعر أنه يقتطع الحصة الأكبر منه كل شهر؟`
-            : `أحييك على هذه الرغبة في التعمق والوضوح يا ${userName}! 💎\n\nيسعدني أن نواصل الحوار معاً لتشخيص واقعك المالي بدقة: ما هو البند المالي الذي يشكل التحدي الأكبر في ميزانيتك الشهرية وتتمنى ضبطه؟`);
+          ? `أحييك على هذه الرغبة في التعمق والوضوح يا ${userName}! 💎\n\nيسعدني أن نواصل الحوار معاً للوصول إلى أدق تشخيص لواقعك المالي كطالب جامعي.\n\nبما أنك ذكرت أن ${studentIncomeTerm} يفي باحتياجاتك الأساسية لكنه قليل ولا تدخر منه لكونك لا تعمل: ما هو البند أو المستلزم الذي تشعر أنه يقتطع الحصة الأكبر منه كل شهر؟`
+          : `أحييك على هذه الرغبة في التعمق والوضوح يا ${userName}! 💎\n\nيسعدني أن نواصل الحوار معاً لتشخيص واقعك المالي بدقة: ما هو البند المالي الذي يشكل التحدي الأكبر في ميزانيتك الشهرية وتتمنى ضبطه؟`);
 
       return formatAgentOutput({
         reasoning: `المستفيد (${userName}) اختار صراحة مواصلة الحوار المالي وتعميق التشخيص ("${message}"). نرحب برغبته ونستكشف تفاصيل إضافية حول عادات الإنفاق والميزانية دون افتراضات غير واقعية.`,
@@ -664,13 +664,13 @@ export function generateLocalAgentResponse(
         reply: finContinueReply,
         actionSteps: isStudent
           ? [
-              `حصر أوجه إنفاق ${studentIncomeTerm} لمدة أسبوع لتحديد موضع التسرب`,
-              'تحديد بند واحد غير أساسي يمكن تقليصه'
-            ]
+            `حصر أوجه إنفاق ${studentIncomeTerm} لمدة أسبوع لتحديد موضع التسرب`,
+            'تحديد بند واحد غير أساسي يمكن تقليصه'
+          ]
           : [
-              'تدوين النفقات اليومية لمدة أسبوع لتحديد النمط المتكرر',
-              'وضع حد أقصى للإنفاق الترفيهي'
-            ],
+            'تدوين النفقات اليومية لمدة أسبوع لتحديد النمط المتكرر',
+            'وضع حد أقصى للإنفاق الترفيهي'
+          ],
         score: interimScore,
         station_completed: false,
         reflectionQuestion: isStudent
@@ -692,13 +692,13 @@ export function generateLocalAgentResponse(
         reply: `تم اعتماد تقييمك المالي بنجاح يا ${userName}! 💎\n\nأثبتّ وعياً كبيراً بصراحتك حول إدارة نفقاتك وخلو سجلك من أي ديون. خطتك بسيطة وفعالة: اقتطاع مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} كصمام أمان، وترشيد المصاريف غير الأساسية لإنهاء الشهر بأريحية ودون عجز.\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
         actionSteps: isStudent
           ? [
-              `اقتطاع 30 إلى 50 ريالاً شهرياً في حصالة أو حساب ادخار فرعي فور استلام ${studentIncomeTerm}`,
-              `تحديد سقف أسبوعي للمصاريف الشخصية والكمالية لحماية ميزانيتك`
-            ]
+            `اقتطاع 30 إلى 50 ريالاً شهرياً في حصالة أو حساب ادخار فرعي فور استلام ${studentIncomeTerm}`,
+            `تحديد سقف أسبوعي للمصاريف الشخصية والكمالية لحماية ميزانيتك`
+          ]
           : [
-              'تحويل مبلغ ثابت لصندوق الطوارئ فور استلام الراتب',
-              'تدوين المصروفات اليومية لمدة أسبوع لرصد مواضع الهدر'
-            ],
+            'تحويل مبلغ ثابت لصندوق الطوارئ فور استلام الراتب',
+            'تدوين المصروفات اليومية لمدة أسبوع لرصد مواضع الهدر'
+          ],
         score: finalScore,
         station_completed: true,
         reflectionQuestion: ''
@@ -826,9 +826,9 @@ export function generateLocalAgentResponse(
       actionSteps: isStudent
         ? studentActionSteps
         : [
-            'تطبيق قاعدة الـ 24 ساعة قبل شراء أي سلعة غير ضرورية',
-            'مراجعة الاشتراكات المتكررة وإلغاء ما لا يُستخدم'
-          ],
+          'تطبيق قاعدة الـ 24 ساعة قبل شراء أي سلعة غير ضرورية',
+          'مراجعة الاشتراكات المتكررة وإلغاء ما لا يُستخدم'
+        ],
       score: fallbackScore,
       reflectionQuestion: isStudent ? studentQuestion : nonStudentQuestion
     });
