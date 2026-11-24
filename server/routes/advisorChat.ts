@@ -358,7 +358,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 [ثانياً: جودة الأسئلة والتشخيص الرصين ❓]
 1. سؤال واحد فقط ومنع الحلقات اللانهائية:
    - اطرح سؤالاً واحداً فقط في كل رد، يكون محدداً، عميقاً، ومرتبطاً ارتباطاً مباشراً بآخر عبارة قالها المستخدم.
-   - منع حلقة الأسئلة اللانهائية (Prevent Infinite Loops): إذا شارك المستخدم بالفعل وضعه الحالي، مشتتاته الرئيسية، أو خطوة تهدئة صغيرة (أو أبدى رغبته في المضي قدماً)، فتوقف عن طرح أسئلة استكشافية متكررة، وقدم انعكاساً تشخيصياً موجزاً واعرض عليه اعتماد التقييم والانتقال للخطوة التالية.
+   - في الجولات الثلاث الأولى (stationTurnCount < 3): استمر في التدرج الحواري التشخيصي وطرح سؤال واحد ذكي وعميق؛ ولا تتسرع في عرض اعتماد التقييم أو إنهاء المحطة. أما ابتداءً من الجولة الرابعة (stationTurnCount >= 3)، إذا اكتملت الصورة الواقعية فاعرض التقييم المرحلي وخياري الاعتماد أو الاستمرار.
 2. ممنوع التفسير النفسي غير المدعوم:
    - يُمنع منعاً باتاً تفسير مشاعر المستخدم أو افتراض أسباب نفسية باطنة لم يذكرها بلسانه (مثل: "خوفك من رؤية الحقيقة"، "صوت المثالية بداخلك"، "هروبك من الواقع").
    - اسأله بحياد تام: "ما الذي يجعلك تشعر بذلك؟" أو "كيف ينعكس هذا التحدي على يومك؟".
@@ -667,13 +667,13 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       throw new Error('مفتاح GEMINI_API_KEY غير متوفر في متغيرات البيئة.');
     }
 
-    // اختيار النماذج العاملة والمجربة ديناميكياً مع ترتيب الأولويات ومقاومة 503/404
+    // اختيار النماذج العاملة والمجربة ديناميكياً مع إعطاء الأولوية لأسرع نموذج مستقر (gemini-3.5-flash-lite) ومقاومة 503/404
     const userGeminiModel = GEMINI_MODEL;
     const candidateModels = Array.from(
       new Set(
         [
-          userGeminiModel,
           'gemini-3.5-flash-lite',
+          userGeminiModel,
           'gemini-3.5-flash',
           'gemini-3.8-flash',
           'gemini-3.1-flash-lite',
@@ -737,16 +737,13 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
         },
         required: ['reasoning', 'advice', 'reply', 'actionSteps'],
       },
-      // 6) تعطيل/تقليل التفكير الداخلي لتسريع الاستجابة
-      thinkingConfig: {
-        thinkingBudget: 0,
-      },
     };
 
-    // 1) مهلة 10 ثوانٍ لكل استدعاء، و2) تقليل الانتظار عند 503 إلى مرة واحدة مع 500ms
+    // 1) مهلة 10 ثوانٍ لكل استدعاء، وتمرير إشارة فورية للنموذج التالي عند أي فشل 503/400/404
     const callSingleModel = async (
       model: string,
-      abortState: { aborted: boolean }
+      abortState: { aborted: boolean },
+      onEarlyError?: () => void
     ): Promise<{ response: any; model: string; durationMs: number }> => {
       let attempt = 0;
       while (attempt <= 1) {
@@ -798,6 +795,11 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             throw err;
           }
 
+          // أطلق النموذج الاحتياطي فوراً بالتوازي دون انتظار إعادة المحاولة أو المؤقت التخميني
+          if (onEarlyError) {
+            onEarlyError();
+          }
+
           const errStr = JSON.stringify(err?.message || err || '');
           const status = err?.status || err?.code;
           const is503 =
@@ -809,7 +811,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             errStr.includes('RESOURCE_EXHAUSTED') ||
             errStr.includes('UNAVAILABLE');
 
-          // 2) إعادة المحاولة عند 503 مرة واحدة فقط وبانتظار 500ms
+          // 2) إعادة المحاولة عند 503 مرة واحدة فقط وبانتظار 400ms
           if (is503 && attempt === 0) {
             attempt++;
             await new Promise((r) => setTimeout(r, 400));
@@ -865,10 +867,10 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             }
           };
 
-          // إتاحة 8 ثوانٍ للنموذج الأساسي قبل تشغيل النموذج البديل بالتوازي
-          speculativeTimer = setTimeout(triggerNext, 8000);
+          // إتاحة ثانيتين للنموذج الأول قبل إطلاق النموذج البديل بالتوازي (دون إلغاء الأول) لضمان عدم السقوط في المحرك المحلي
+          speculativeTimer = setTimeout(triggerNext, 2000);
 
-          callSingleModel(currentModel, abortState)
+          callSingleModel(currentModel, abortState, triggerNext)
             .then((result) => {
               clearTimeout(speculativeTimer);
               if (!hasResolved) {
@@ -938,7 +940,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
         });
 
         if (retryResponse.text) {
-          const reParsed = JSON.parse(retryResponse.text);
+          const reParsed = extractCleanJson(retryResponse.text);
           if (reParsed && (reParsed.reply || reParsed.advice)) {
             parsed.reply = reParsed.reply || reParsed.advice;
             if (reParsed.reasoning) parsed.reasoning = reParsed.reasoning;
@@ -1216,9 +1218,8 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
       stationTurnCount,
       effectiveUserProfile
     );
-    // 3) إضافة حقل source: "local-fallback"
+    // 3) إضافة حقل source: "local-fallback" (لا نُخزّن الردود الاحتياطية في الذاكرة المؤقتة حتى نُعطي Gemini الأولوية في المرة القادمة)
     (localFallback as any).source = 'local-fallback';
-    advisorChatCache.set(chatCacheKey, { data: localFallback, timestamp: Date.now() });
     return res.json(localFallback);
   }
 });

@@ -14,6 +14,7 @@ import {
 } from '../utils/storage';
 import { AiModelMode } from './AdvisorChatScreen';
 import { isCrisisMessage } from '../components/CrisisSupportCard';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 import {
   calculateSemanticScore,
@@ -169,6 +170,9 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // User Context Modal states (سياق المستفيد)
   const [showContextModal, setShowContextModal] = useState(false);
+  // Confirmation modal for starting a new weekly assessment
+  const [showWeeklyResetConfirm, setShowWeeklyResetConfirm] = useState(false);
+  const prevSessionIdRef = useRef(assessmentSessionId);
 
   // Check whether user context is completed
   const isContextCompleted = Boolean(
@@ -179,12 +183,12 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     (!((userProfile?.employmentStatus || userProfile?.workStatus || '').includes('موظف') || (userProfile?.employmentStatus || userProfile?.workStatus || '').includes('صاحب عمل') || (userProfile?.employmentStatus || userProfile?.workStatus || '').includes('مستقل')) || userProfile?.incomeStability?.trim())
   );
 
-  // إظهار نافذة سياق المستفيد دائماً عند فتح التقييم الأسبوعي أو إذا كانت البيانات غير مكتملة
+  // إظهار نافذة سياق المستفيد تلقائياً إذا كانت البيانات غير مكتملة فقط (حتى لا تحجب رسالة الترحيب عند بدء تقييم جديد)
   useEffect(() => {
-    if (assessmentMode === 'weekly_checkin' || !isContextCompleted) {
+    if (!isContextCompleted) {
       setShowContextModal(true);
     }
-  }, [assessmentSessionId, assessmentMode, isContextCompleted]);
+  }, [assessmentSessionId, isContextCompleted]);
 
   // Banner dismissed state persisted in localStorage
   const [isBannerDismissed, setIsBannerDismissed] = useState<boolean>(() => {
@@ -442,17 +446,42 @@ ${specificQuestion}
     };
   };
 
-  useEffect(() => {
-    if (completedAdvisors.length === 0) {
-      const firstAdvisor = ADVISORS_LIST[0];
-      const firstStationConfig = getAdaptiveStationConfig(firstAdvisor.id, userProfile) || currentStationConfig;
-      const initialOpeningMsg = getOpeningMessage(firstAdvisor, firstStationConfig, 1);
-      setChatMessages({ [firstAdvisor.id]: [initialOpeningMsg] });
-      setStationInsights({});
-      setStationTurnCount({ [firstAdvisor.id]: 0 });
-      setCurrentAdvisorIndex(0);
+  // إعادة تصفير كافة المحطات والعودة الفورية للمحطة 1 من 8 (الجانب الروحي) مع رسالة الترحيب الأولى
+  const resetToFirstStation = () => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
     }
-  }, [completedAdvisors.length]);
+    setIsAdvisorReplying(false);
+    setShowCelebration(false);
+    setInputText('');
+    setDismissedChoiceTurns({});
+    const firstAdvisor = ADVISORS_LIST[0];
+    const firstStationConfig = getAdaptiveStationConfig(firstAdvisor.id, userProfile) || currentStationConfig;
+    const initialOpeningMsg = getOpeningMessage(firstAdvisor, firstStationConfig, 1);
+    setChatMessages({ [firstAdvisor.id]: [initialOpeningMsg] });
+    setStationInsights({});
+    setStationTurnCount({ [firstAdvisor.id]: 0 });
+    setCurrentAdvisorIndex(0);
+    try {
+      localStorage.removeItem('wazan_eval_chats');
+      localStorage.removeItem('wazan_eval_insights');
+      localStorage.removeItem('wazan_current_eval_advisor');
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    const isNewSession = assessmentSessionId !== undefined && assessmentSessionId !== prevSessionIdRef.current;
+    if (isNewSession) {
+      prevSessionIdRef.current = assessmentSessionId;
+      resetToFirstStation();
+      return;
+    }
+    if (completedAdvisors.length === 0) {
+      resetToFirstStation();
+    }
+  }, [completedAdvisors.length, assessmentSessionId]);
 
   // تحديث رسالة الافتتاح عند اكتمال أو تعديل سياق المستفيد إذا لم تبدأ المحادثة بعد
   useEffect(() => {
@@ -654,17 +683,17 @@ ${specificQuestion}
       let responseSource: 'gemini' | 'groq' | 'local-fallback' = 'gemini';
 
       try {
-        const cleanUserProfile = userProfile ? {
-          name: userProfile.name,
-          ...(userProfile.email?.trim() ? { email: userProfile.email.trim() } : {}),
-          ...(userProfile.ageGroup?.trim() ? { ageGroup: userProfile.ageGroup.trim() } : {}),
-          ...(userProfile.employmentStatus?.trim() ? { employmentStatus: userProfile.employmentStatus.trim() } : {}),
-          ...(userProfile.workStatus?.trim() ? { workStatus: userProfile.workStatus.trim() } : {}),
-          ...(userProfile.hasDependents?.trim() ? { hasDependents: userProfile.hasDependents.trim() } : {}),
-          ...(userProfile.incomeSource?.trim() ? { incomeSource: userProfile.incomeSource.trim() } : {}),
-          ...(userProfile.incomeStability?.trim() ? { incomeStability: userProfile.incomeStability.trim() } : {}),
-          ...(userProfile.currentFocus?.trim() ? { currentFocus: userProfile.currentFocus.trim() } : {}),
-        } : undefined;
+        const cleanUserProfile = {
+          name: userProfile?.name || 'صديقنا',
+          ...(userProfile?.email?.trim() ? { email: userProfile.email.trim() } : {}),
+          ...(userProfile?.ageGroup?.trim() ? { ageGroup: userProfile.ageGroup.trim() } : {}),
+          employmentStatus: userProfile?.employmentStatus?.trim() || userProfile?.workStatus?.trim() || 'غير محدد',
+          ...(userProfile?.workStatus?.trim() ? { workStatus: userProfile.workStatus.trim() } : {}),
+          ...(userProfile?.hasDependents?.trim() ? { hasDependents: userProfile.hasDependents.trim() } : {}),
+          ...(userProfile?.incomeSource?.trim() ? { incomeSource: userProfile.incomeSource.trim() } : {}),
+          ...(userProfile?.incomeStability?.trim() ? { incomeStability: userProfile.incomeStability.trim() } : {}),
+          ...(userProfile?.currentFocus?.trim() ? { currentFocus: userProfile.currentFocus.trim() } : {}),
+        };
 
         const res = await fetch('/api/gemini/advisor-chat', {
           method: 'POST',
@@ -971,8 +1000,8 @@ ${specificQuestion}
   }
 
   const currentStationTurns = stationTurnCount[currentAdvisor.id] || 0;
-  // المستشار يصبح جاهزاً لتقدير الدرجة بعد 4 جولات تقريباً (currentStationTurns >= 3) أو إذا ذكر درجة صريحة
-  const isAdvisorReadyForScoring = !isCompleted && (lastOfferedScore !== null || currentStationTurns >= 3);
+  // شريط التقييم المقترح مع زرّي (اعتماد التقييم / الاستمرار في الحوار) يظهر ابتداءً من الجولة الرابعة (4 ردود من المستفيد)
+  const isAdvisorReadyForScoring = !isCompleted && currentStationTurns >= 4;
   const effectiveOfferedScore = lastOfferedScore ?? (currentAdvisorScore > 0 ? currentAdvisorScore : (currentAdvisor.id === 'financial' ? 5.5 : 6.0));
   const isChoiceTemporarilyDismissed = dismissedChoiceTurns[currentAdvisor.id] === currentStationTurns;
 
@@ -1062,7 +1091,7 @@ ${specificQuestion}
       />
 
       {/* Main Assessment Window */}
-      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl overflow-hidden shadow-xs flex flex-col h-[680px] transition-colors">
+      <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl overflow-hidden shadow-xs flex flex-col min-h-[680px] h-[calc(100vh-11rem)] max-h-[820px] transition-colors">
         {/* Advisor Header Bar & Progress */}
         <AdvisorStationHeader
           currentAdvisor={currentAdvisor}
@@ -1078,7 +1107,7 @@ ${specificQuestion}
           onOpenContextModal={() => setShowContextModal(true)}
           onDismissBanner={handleDismissBanner}
           onReopenStation={handleReopenStation}
-          onStartNewWeeklyAssessment={onStartNewWeeklyAssessment}
+          onStartNewWeeklyAssessment={onStartNewWeeklyAssessment ? () => setShowWeeklyResetConfirm(true) : undefined}
         />
 
         {/* Messages Stream */}
@@ -1139,6 +1168,24 @@ ${specificQuestion}
         onClose={handleCloseContextModal}
         onSave={handleSaveContext}
       />
+
+      {/* Confirmation Dialog for Starting a New Weekly Assessment */}
+      {onStartNewWeeklyAssessment && (
+        <ConfirmDialog
+          open={showWeeklyResetConfirm}
+          title="بدء تقييم أسبوعي جديد"
+          description="سيتم تصفير المحطة الحالية والعودة فوراً إلى المحطة 1 من 8 (الجانب الروحي) ومسح رسائل المحادثات السابقة والدرجات غير المعتمدة. هل تريد المتابعة؟"
+          confirmLabel="نعم، بدء تقييم جديد"
+          cancelLabel="إلغاء"
+          variant="warning"
+          onCancel={() => setShowWeeklyResetConfirm(false)}
+          onConfirm={() => {
+            setShowWeeklyResetConfirm(false);
+            resetToFirstStation();
+            onStartNewWeeklyAssessment();
+          }}
+        />
+      )}
     </div>
   );
 };

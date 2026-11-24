@@ -146,7 +146,7 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
             </div>
 
             {/* Quick Chips */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {[
                 { label: 'طالب جامعي 🎓', val: 'طالب جامعي' },
                 { label: 'موظف 💼', val: 'موظف' },
@@ -172,24 +172,6 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
                 </button>
               ))}
             </div>
-
-            <select
-              value={workStatusInput}
-              onChange={(e) => {
-                setWorkStatusInput(e.target.value);
-                setContextError('');
-              }}
-              className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-xl px-3 py-2 min-h-[40px] text-xs font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] transition-all cursor-pointer"
-              dir="rtl"
-            >
-              <option value="">أو اختر من القائمة التفصيلية...</option>
-              <option value="طالب جامعي">طالب جامعي</option>
-              <option value="موظف">موظف</option>
-              <option value="صاحب عمل/مستقل">صاحب عمل/مستقل</option>
-              <option value="متقاعد">متقاعد</option>
-              <option value="باحث عن عمل">باحث عن عمل</option>
-              <option value="غير ذلك">غير ذلك</option>
-            </select>
           </div>
 
           {/* Conditional 1: Student Income Source */}

@@ -389,6 +389,45 @@ async function testAgentBehaviors() {
     });
   }
 
+  // Turn 4.5: No false prayer neglect or grief hallucination on "القلق والذنب"
+  const tGuiltStart = Date.now();
+  try {
+    const rGuilt = generateLocalAgentResponse(
+      'spiritual',
+      'أشعر بالقلق والذنب بسبب ضغط الدراسة والتأخير',
+      'سعود المنصور',
+      advSpiritual,
+      5,
+      true,
+      1,
+      'حضور القلب والسكينة',
+      'initial_assessment',
+      0,
+      studentProfile
+    );
+    assert(!rGuilt.reply.includes('التقصير في الصلاة'), 'MUST NOT hallucinate prayer neglect when user mentions "الذنب"');
+    assert(!rGuilt.reply.includes('بهذا الحزن'), 'MUST NOT force grief template when user mentions "القلق"');
+    assert(!rGuilt.reply.includes('سؤالك في غاية الأهمية'), 'MUST NOT use canned "سؤالك في غاية الأهمية" template');
+    assert(rGuilt.station_completed === false, 'Must remain open in Turn 1');
+    results.push({
+      suite,
+      domain: 'Spiritual',
+      name: 'No-False-Trigger Guard ("القلق والذنب")',
+      passed: true,
+      durationMs: Date.now() - tGuiltStart,
+      details: 'Avoids false prayer-neglect, grief, and canned question templates',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Spiritual',
+      name: 'No-False-Trigger Guard ("القلق والذنب")',
+      passed: false,
+      durationMs: Date.now() - tGuiltStart,
+      message: err.message,
+    });
+  }
+
   // --- 2.2 Financial Advisor (أ. كمال المالي) ---
   const advFinancial = getAdvisor('financial');
 

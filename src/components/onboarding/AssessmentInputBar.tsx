@@ -107,17 +107,23 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
 
       {/* Explicit Adopt Score & Continue Action Bar (زرّان واضحان: اعتماد التقييم / الاستمرار في الحوار) */}
       {!isCompleted && !isChoiceDismissed && offeredScore !== undefined && offeredScore !== null && offeredScore > 0 && (
-        <div className="px-4 py-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 dark:from-emerald-950/70 dark:via-cyan-950/50 dark:to-emerald-950/70 border-b border-emerald-300 dark:border-emerald-700/60 flex items-center justify-between gap-3 flex-wrap transition-all shadow-xs">
-          <div className="flex items-center gap-2.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-ping" />
-            <span className="text-xs sm:text-sm font-black text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5">
+        <div
+          dir="rtl"
+          className="px-5 sm:px-6 py-3 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 dark:from-emerald-950/70 dark:via-cyan-950/50 dark:to-emerald-950/70 border-b border-emerald-300 dark:border-emerald-700/60 flex items-center justify-between gap-3 flex-wrap transition-all shadow-xs"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <span className="relative flex h-2.5 w-2.5 flex-shrink-0 ms-0.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600 dark:bg-emerald-400" />
+            </span>
+            <span className="text-xs sm:text-sm font-black text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5 flex-wrap">
               <span>التقييم المقترح من المستشار:</span>
               <span dir="ltr" className="font-mono text-sm px-2.5 py-0.5 rounded-lg bg-emerald-200/90 dark:bg-emerald-900/90 text-emerald-950 dark:text-emerald-100 font-black shadow-xs">
                 {offeredScore.toFixed(1)} / 10
               </span>
             </span>
           </div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-shrink-0">
             <button
               type="button"
               disabled={isAdvisorReplying}
@@ -152,31 +158,35 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
       )}
 
       {/* Quick Choices bar */}
-      <div className="px-4 py-2.5 bg-[#F7F6F2] dark:bg-[#0B161C] border-b border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors">
-        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-1">
+      <div
+        dir="rtl"
+        className="px-5 sm:px-6 py-2.5 bg-[#F7F6F2] dark:bg-[#0B161C] border-b border-[#E2E8F0] dark:border-[#1E343F] flex-shrink-0 transition-colors space-y-2"
+      >
+        <div className="flex items-center gap-2 overflow-x-auto scrollbar-none pb-0.5 pe-2">
           <span className="text-[11px] font-black text-[#334155] dark:text-[#CBD5E1] flex items-center gap-1 flex-shrink-0">
             <Sparkles className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
             <span>اختر تقييمك (من 1 إلى 10):</span>
           </span>
 
           {/* 1 to 10 Rating Pills */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+          <div className="flex items-center gap-1.5 flex-shrink-0 pe-3">
             {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
               <button
                 key={num}
                 type="button"
                 disabled={isAdvisorReplying}
                 onClick={() => onSendAnswer(`تقييمي: ${num} من 10`)}
-                className="min-w-[36px] sm:min-w-[40px] min-h-[36px] sm:min-h-[40px] px-2.5 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] hover:bg-emerald-50/50 dark:hover:bg-cyan-950/30 text-xs sm:text-sm font-black transition-all shadow-xs cursor-pointer font-mono flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 disabled:opacity-40 disabled:pointer-events-none"
+                className="min-w-[34px] sm:min-w-[38px] min-h-[34px] sm:min-h-[38px] px-2 py-1 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] hover:bg-emerald-50/50 dark:hover:bg-cyan-950/30 text-xs sm:text-sm font-black transition-all shadow-xs cursor-pointer font-mono flex items-center justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 disabled:opacity-40 disabled:pointer-events-none"
                 dir="ltr"
               >
                 {num}
               </button>
             ))}
           </div>
+        </div>
 
-          {/* Suggested Clinical & Rapid Context Responses */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
+        {/* Suggested Clinical & Rapid Context Responses - Wrapped cleanly so no chip is ever clipped on the left */}
+        <div className="flex items-center gap-1.5 flex-wrap">
             {/* Domain-specific rapid input shortcuts */}
             {currentAdvisor.id === 'financial' && (
               <>
@@ -252,7 +262,6 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
                 {chip}
               </button>
             ))}
-          </div>
         </div>
       </div>
 

@@ -27,6 +27,7 @@ import { YearlyAndWeeklyAnalytics } from '../components/YearlyAndWeeklyAnalytics
 import { DirectorSummaryReport, LifeAreaId, UserProfile } from '../types/lifeBalance';
 import { extractInsightsFromAnswers } from '../utils/storage';
 import { isolateNumbersInText } from '../components/FormattedChatMessage';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 
 interface DashboardScreenProps {
   userProfile: UserProfile | null;
@@ -69,6 +70,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [addedHaniGoals, setAddedHaniGoals] = useState<Record<string, boolean>>({});
   const [completedHaniGoals, setCompletedHaniGoals] = useState<Record<string, boolean>>({});
+  const [showWeeklyResetConfirm, setShowWeeklyResetConfirm] = useState(false);
   const toastTimeoutRef = useRef<any>(null);
 
   const completedCount = completedAdvisors.length;
@@ -331,7 +333,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 {onStartNewWeeklyAssessment && (
                   <button
                     type="button"
-                    onClick={onStartNewWeeklyAssessment}
+                    onClick={() => setShowWeeklyResetConfirm(true)}
                     className="flex items-center gap-1.5 px-4 py-4 rounded-2xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0B6E72] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] font-bold text-xs sm:text-sm shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] transition-all cursor-pointer"
                     title="بدء دورة تقييم أسبوعي جديدة وإعادة فحص المحطات"
                   >
@@ -962,6 +964,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <CheckCircle className="w-4 h-4 text-emerald-400 dark:text-emerald-600 flex-shrink-0" />
           <span>{toastMessage}</span>
         </div>
+      )}
+
+      {onStartNewWeeklyAssessment && (
+        <ConfirmDialog
+          open={showWeeklyResetConfirm}
+          title="بدء تقييم أسبوعي جديد"
+          description="سيتم تصفير التقييم الحالي والعودة فوراً إلى المحطة 1 من 8 (الجانب الروحي) ومسح رسائل المحادثات السابقة والدرجات غير المعتمدة. هل تريد المتابعة؟"
+          confirmLabel="نعم، بدء تقييم جديد"
+          cancelLabel="إلغاء"
+          variant="warning"
+          onCancel={() => setShowWeeklyResetConfirm(false)}
+          onConfirm={() => {
+            setShowWeeklyResetConfirm(false);
+            onStartNewWeeklyAssessment();
+          }}
+        />
       )}
     </div>
   );

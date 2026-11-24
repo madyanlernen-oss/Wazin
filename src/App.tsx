@@ -313,16 +313,18 @@ export default function App() {
         resetScores[adv.id] = 0;
       });
 
-      return {
+      const nextState: StoredAppState = {
         ...prev,
         assessmentMode: 'weekly_checkin',
         completedAdvisors: [],
         completedDates: {},
         answers: {},
-        scores: resetScores,
+        scores: resetScores as Record<LifeAreaId, number>,
         directorReport: null,
         selectedAdvisorId: 'spiritual',
       };
+      saveStoredState(nextState);
+      return nextState;
     });
 
     try {
