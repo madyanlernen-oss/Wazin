@@ -18,7 +18,9 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 
 import {
   calculateSemanticScore,
+  extractExplicitRating,
   getClientAdvisorResponse,
+  resetClientFallbackTracker,
   EvaluationChatMessage,
   StationDynamicInsights,
   OnboardingProgressHeader,
@@ -40,7 +42,7 @@ interface OnboardingScreenProps {
   userProfile?: UserProfile | null;
   onUpdateProfile?: (updated: Partial<UserProfile>) => void;
   onSaveAnswer: (advisorId: LifeAreaId, questionId: string, value: any) => void;
-  onFinishAdvisor: (advisorId: LifeAreaId, score: number) => void;
+  onFinishAdvisor: (advisorId: LifeAreaId, score: number) => boolean | void;
   onResetAdvisor?: (advisorId: LifeAreaId) => void;
   onStartNewWeeklyAssessment?: () => void;
   onCompleteAll: () => void;
@@ -462,6 +464,7 @@ ${specificQuestion}
     setStationInsights({});
     setStationTurnCount({ [firstAdvisor.id]: 0 });
     setCurrentAdvisorIndex(0);
+    resetClientFallbackTracker();
     try {
       localStorage.removeItem('wazan_eval_chats');
       localStorage.removeItem('wazan_eval_insights');
@@ -590,35 +593,8 @@ ${specificQuestion}
     const currentList = chatMessages[advisorKey] || [];
     const currentTurns = stationTurnCount[advisorKey] || 0;
 
-    // Detect numeric score (1 to 10) anywhere in message
-    let detectedScore: number | null = null;
-    const justNumberMatch = text.match(/^\s*(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)\s*[.!؟،,]*\s*$/);
-    if (justNumberMatch) {
-      const val = parseFloat(justNumberMatch[1]);
-      if (!isNaN(val) && val >= 1 && val <= 10) {
-        detectedScore = val;
-      }
-    }
-
-    if (detectedScore === null) {
-      const fromTenMatch = text.match(/(?:^|[^\d.])(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)\s*(?:من|\/)\s*10(?!\d)/i);
-      if (fromTenMatch) {
-        const val = parseFloat(fromTenMatch[1]);
-        if (!isNaN(val) && val >= 1 && val <= 10) {
-          detectedScore = val;
-        }
-      }
-    }
-
-    if (detectedScore === null) {
-      const teqyeemiMatch = text.match(/تقييمي\s*[:=]?\s*(?:هو\s*)?(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)(?!\d)/i);
-      if (teqyeemiMatch) {
-        const val = parseFloat(teqyeemiMatch[1]);
-        if (!isNaN(val) && val >= 1 && val <= 10) {
-          detectedScore = val;
-        }
-      }
-    }
+    // التقاط التقييم الصريح فقط (مثل "تقييمي: 7 من 10" أو "8/10") ومنع التقاط أرقام عادية مثل "25 دقيقة" أو "ساعتين"
+    let detectedScore: number | null = extractExplicitRating(text);
 
     // إذا كان المستخدم يطلب صراحة مواصلة الحوار أو الاستمرار أو إطالة الاستكشاف (عدم إنهاء المحطة)
     const isExplicitContinue = /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار)/i.test(text.trim()) && !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل)/i.test(text.trim());
@@ -640,9 +616,9 @@ ${specificQuestion}
       }
     }
 
-    // Save answer turn in state
-    if (detectedScore !== null) {
-      onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, detectedScore);
+    // حفظ الإجابة النصية، ولا نعتمد درجة التقييم الرسمية في المحطة إلا عند الاعتماد الفعلي بعد بلوغ الحد الأدنى من الجولات
+    if (detectedScore !== null && currentTurns >= 3) {
+      onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_self_rating`, detectedScore);
     } else {
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_response_${currentTurns}`, text);
     }
@@ -805,7 +781,9 @@ ${specificQuestion}
         if (local.challenges && local.challenges.length > 0) dynamicChallenges = local.challenges;
       }
 
-      if (isExplicitContinue) {
+      const isMinimumRoundsReached = currentTurns >= 3; // الجولة الرابعة (3 ردود سابقة + الرد الرابع الحالي)
+      if (isExplicitContinue || !isMinimumRoundsReached) {
+        // منع أي تقييم تلقائي أو إنهاء للمحطة قبل بلوغ الحد الأدنى من الجولات (4 جولات)
         isStationCompleted = false;
       } else if (isExplicitAdoption) {
         isStationCompleted = true;
@@ -822,22 +800,59 @@ ${specificQuestion}
         }
       }
 
-      // If station completed by AI advisor or explicit adoption:
+      // التحقق من صلاحية الدرجة وتنفيذ State Commit أولاً قبل إصدار أي رسالة اعتماد
+      let stateCommitSucceeded = false;
+      const goldenHabit = getDynamicGoldenHabit(
+        currentAdvisor,
+        [...(chatMessages[advisorKey] || []), { id: 'latest_user', sender: 'user', text, timestamp: '' }],
+        adviceContent
+      );
+
       if (isStationCompleted) {
         if (pendingOfferedScore !== null) {
           earnedScore = pendingOfferedScore;
         }
-        const goldenHabit = getDynamicGoldenHabit(
-          currentAdvisor,
-          [...(chatMessages[advisorKey] || []), { id: 'latest_user', sender: 'user', text, timestamp: '' }],
-          adviceContent
-        );
+        const normalizedFinalScore = Number((earnedScore || 0).toFixed(1));
+        const isScoreValid = !isNaN(normalizedFinalScore) && normalizedFinalScore >= 1 && normalizedFinalScore <= 10;
+
+        if (isMinimumRoundsReached && isScoreValid) {
+          onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, normalizedFinalScore);
+          const finishResult = onFinishAdvisor(currentAdvisor.id, normalizedFinalScore);
+          stateCommitSucceeded = finishResult !== false;
+          if (stateCommitSucceeded) {
+            earnedScore = normalizedFinalScore;
+          }
+        }
+      }
+
+      if (!stateCommitSucceeded) {
+        // إذا رفض شرط الحماية حفظ الدرجة أو لم ينجح تحديث الحالة، يُمنع إصدار أي رسالة اعتماد في المحادثة!
+        isStationCompleted = false;
+        replyContent = replyContent
+          .replace(/✨?\s*\*?\*?تم اعتماد تقييم[^\n]*\*?\*?/gi, '')
+          .replace(/تم اعتماد تقييمك[^\n.]*[.!؟]?/gi, '')
+          .replace(/تم تحديث عجلة حياتك بنجاح!?/gi, '')
+          .trim();
+      } else {
+        // تم تحديث الحالة وحفظ الدرجة وتحديث شريط التقدم بنجاح — الآن فقط نصدر رسالة الاعتماد
         if (!replyContent.includes('تم اعتماد تقييم المحطة')) {
           const isSpiritual = currentAdvisor.id === 'spiritual';
           const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
           const spiritualNote = isSpiritual ? '\n(تقدير لشعورك الحالي وليس حكماً على التزامك)' : '';
           replyContent += `\n\n✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\n${scoreLabel}: (${earnedScore.toFixed(1)} من 10).${spiritualNote}\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
         }
+        if (onAddEisenhowerGoal) {
+          onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
+        }
+        const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, earnedScore, answers);
+        setStationInsights((prev) => ({
+          ...prev,
+          [currentAdvisor.id]: {
+            score: earnedScore,
+            strengths: dynamicStrengths.length > 0 ? dynamicStrengths : (fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب']),
+            challenges: dynamicChallenges.length > 0 ? dynamicChallenges : [goldenHabit],
+          },
+        }));
       }
 
       const nextAdvisorMsg: EvaluationChatMessage = {
@@ -857,30 +872,7 @@ ${specificQuestion}
         [advisorKey]: [...(prev[advisorKey] || []), nextAdvisorMsg],
       }));
 
-      // Only trigger station completion and show modal when AI EXPLICITLY returns station_completed === true
-      if (isStationCompleted) {
-        onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, earnedScore);
-
-        const goldenHabit = getDynamicGoldenHabit(
-          currentAdvisor,
-          [...(chatMessages[advisorKey] || []), { id: 'latest_user', sender: 'user', text, timestamp: '' }],
-          adviceContent
-        );
-        if (onAddEisenhowerGoal) {
-          onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
-        }
-        
-        const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, earnedScore, answers);
-        setStationInsights((prev) => ({
-          ...prev,
-          [currentAdvisor.id]: {
-            score: earnedScore,
-            strengths: dynamicStrengths.length > 0 ? dynamicStrengths : (fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب']),
-            challenges: dynamicChallenges.length > 0 ? dynamicChallenges : [goldenHabit],
-          },
-        }));
-
-        onFinishAdvisor(currentAdvisor.id, earnedScore);
+      if (isStationCompleted && stateCommitSucceeded) {
         confetti({
           particleCount: 70,
           spread: 70,
@@ -1013,11 +1005,21 @@ ${specificQuestion}
     handleSendAnswer('أرغب في الاستمرار في الحوار ومناقشة تفاصيل إضافية حول هذا الجانب');
   };
 
-  // معالج الاعتماد المباشر للدرجة وإتمام المحطة
+  // معالج الاعتماد المباشر للدرجة وإتمام المحطة: التزام صارم بترتيب State Commit أولاً ثم رسالة الاعتماد
   const handleAdoptScoreAndComplete = (scoreToAdopt: number) => {
     const finalScore = Number(scoreToAdopt.toFixed(1));
+    if (isNaN(finalScore) || finalScore < 1 || finalScore > 10) {
+      return;
+    }
+
+    // 1. حفظ الدرجة وتحديث حالة الإنجاز وشريط التقدم والمخزن أولاً (State Commit)
     onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, finalScore);
-    
+    const finishCommitted = onFinishAdvisor(currentAdvisor.id, finalScore);
+    if (finishCommitted === false) {
+      // إذا رفض شرط الحماية حفظ الدرجة، نمتنع تماماً عن إصدار رسالة الاعتماد
+      return;
+    }
+
     const currentAdvisorMsgs = chatMessages[currentAdvisor.id] || [];
     const goldenHabit = getDynamicGoldenHabit(currentAdvisor, currentAdvisorMsgs);
     if (onAddEisenhowerGoal) {
@@ -1034,7 +1036,7 @@ ${specificQuestion}
       },
     }));
 
-    // إضافة رسالة تأكيد الاعتماد في المحادثة
+    // 2. بعد نجاح حفظ الدرجة وتحديث التقدم والعلامة فقط، نصدر رسالة تأكيد الاعتماد في المحادثة
     const isSpiritual = currentAdvisor.id === 'spiritual';
     const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
     const spiritualNote = isSpiritual ? '\n(تقدير لشعورك الحالي وليس حكماً على التزامك)' : '';
@@ -1059,7 +1061,6 @@ ${specificQuestion}
       [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), userConfirmationMsg, advisorConfirmationMsg],
     }));
 
-    onFinishAdvisor(currentAdvisor.id, finalScore);
     confetti({
       particleCount: 70,
       spread: 70,

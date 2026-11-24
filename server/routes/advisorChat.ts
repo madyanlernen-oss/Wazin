@@ -6,6 +6,7 @@ import { loadAgentPrompt } from '../agents/agentLoader';
 import { generateLocalAgentResponse } from '../agents/localAdvisorEngine';
 import {
   calculateSemanticScore,
+  extractExplicitRating,
   processAndReconcileScore,
   sanitizeStrengths,
   sanitizeAdvisorReply,
@@ -191,8 +192,10 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const effectiveAnswers = answers || userAnswers || {};
   const effectiveGoals = goals || userGoals || [];
   const historyMsgTexts = Array.isArray(history) ? history.map((h: any) => h.content || '') : [];
-  const ratingMatchInMsg = message.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i);
-  const explicitRatingInMsg = ratingMatchInMsg ? parseFloat(ratingMatchInMsg[1]) : (userScore && userScore > 0 ? userScore : undefined);
+  const parsedExplicitRating = extractExplicitRating(message);
+  const explicitRatingInMsg = parsedExplicitRating !== null
+    ? parsedExplicitRating
+    : (userScore && userScore > 0 ? userScore : undefined);
 
   // رابعاً: استخراج التقييم الذاتي للمستخدم لضبط الدرجة النهائية بدقة
   let userSelfScore: number | undefined = explicitRatingInMsg;
@@ -907,8 +910,11 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     if (forcedIncomplete || isContinueIntent) {
       parsed.station_completed = false;
     }
-    if (isAdoptionIntent) {
-      parsed.station_completed = true;
+    if (!parsed.station_completed && typeof parsed.reply === 'string') {
+      parsed.reply = parsed.reply
+        .replace(/✨?\s*\*?\*?تم اعتماد تقييم[^\n]*\*?\*?/gi, '')
+        .replace(/تم اعتماد تقييمك[^\n.]*[.!؟]?/gi, '')
+        .trim();
     }
 
     if (!parsed.reply && (parsed.advice || parsed.summary)) {
@@ -1098,6 +1104,12 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         if (forcedIncomplete || isContinueIntent) {
           parsed.station_completed = false;
+        }
+        if (!parsed.station_completed && typeof parsed.reply === 'string') {
+          parsed.reply = parsed.reply
+            .replace(/✨?\s*\*?\*?تم اعتماد تقييم[^\n]*\*?\*?/gi, '')
+            .replace(/تم اعتماد تقييمك[^\n.]*[.!؟]?/gi, '')
+            .trim();
         }
 
         if (!parsed.reply && (parsed.advice || parsed.summary)) {

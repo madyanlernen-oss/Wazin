@@ -1,3 +1,38 @@
+/**
+ * يستخرج درجة التقييم الصريحة (1-10) فقط عند وجود صيغة تقييم واضحة،
+ * ويمنع تماماً التقاط أي رقم عادي داخل الكلام مثل "25 دقيقة" أو "ساعتين" أو "30 ريال".
+ */
+export function extractExplicitRating(text: string): number | null {
+  if (!text || typeof text !== 'string') return null;
+
+  // 1. صيغة تقييم صريحة مع "من 10" أو "/ 10"
+  const explicitPhraseMatch = text.match(
+    /(?:تقييمي|أقيّم نفسي|اقيم نفسي|درجتي|أعطيه|اعطيه)\s*[:=]?\s*(?:هو\s*)?(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)\s*(?:من|\/)\s*10\b/i
+  );
+  if (explicitPhraseMatch) {
+    const val = parseFloat(explicitPhraseMatch[1]);
+    if (!isNaN(val) && val >= 1 && val <= 10) return Number(val.toFixed(1));
+  }
+
+  // 2. رقم بصيغة صريحة "X من 10" أو "X/10" بحدود كلمات كاملة
+  const fromTenMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(?:من|\/)\s*10\b/i);
+  if (fromTenMatch) {
+    const val = parseFloat(fromTenMatch[1]);
+    if (!isNaN(val) && val >= 1 && val <= 10) return Number(val.toFixed(1));
+  }
+
+  // 3. صيغة تقييم صريحة بدون "من 10" بشرط ألا تتبعها وحدة قياس زمنية أو مالية
+  const labelOnlyMatch = text.match(
+    /(?:تقييمي|أقيّم نفسي|اقيم نفسي|درجتي|أعطيه|اعطيه)\s*[:=]?\s*(?:هو\s*)?(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)(?![\d.]|\s*(?:دقيقة|دقائق|ساعة|ساعات|ريال|يوم|أيام|شهر|أشهر|سنة|سنوات|%))/i
+  );
+  if (labelOnlyMatch) {
+    const val = parseFloat(labelOnlyMatch[1]);
+    if (!isNaN(val) && val >= 1 && val <= 10) return Number(val.toFixed(1));
+  }
+
+  return null;
+}
+
 // Semantic scoring and sentiment patterns
 export function calculateSemanticScore(
   text: string,

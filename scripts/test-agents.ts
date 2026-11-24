@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { GEMINI_API_KEY, GEMINI_MODEL, GROQ_API_KEY, GROQ_MODEL } from '../server/config/env';
-import { generateLocalAgentResponse } from '../server/agents/localAdvisorEngine';
-import { getClientAdvisorResponse, calculateSemanticScore } from '../src/components/onboarding/clientIntelligence';
+import { generateLocalAgentResponse, resetLocalFallbackTracker } from '../server/agents/localAdvisorEngine';
+import { extractExplicitRating as extractServerExplicitRating } from '../server/middleware/validation';
+import { getClientAdvisorResponse, calculateSemanticScore, extractExplicitRating as extractClientExplicitRating } from '../src/components/onboarding/clientIntelligence';
 import { extractInsightsFromAnswers } from '../src/utils/storage';
 import { ADVISORS_LIST } from '../src/data/advisorsData';
 import type { AdvisorConfig, UserProfile, LifeAreaId } from '../src/types/lifeBalance';
@@ -424,6 +425,67 @@ async function testAgentBehaviors() {
       name: 'No-False-Trigger Guard ("القلق والذنب")',
       passed: false,
       durationMs: Date.now() - tGuiltStart,
+      message: err.message,
+    });
+  }
+
+  // Turn 4.6: Strict Rating Regex Guard (prevent "25 دقيقة" or "ساعتين" capture)
+  const regexStart = Date.now();
+  try {
+    assert(extractServerExplicitRating('أخصص 25 دقيقة للمشي يومياً') === null, 'MUST NOT capture "25 دقيقة" as score');
+    assert(extractServerExplicitRating('قضيت ساعتين في الدراسة و 5 ساعات نوم') === null, 'MUST NOT capture "5 ساعات" as score');
+    assert(extractClientExplicitRating('أحتاج ادخار 30 ريال') === null, 'Client MUST NOT capture "30 ريال" as score');
+    assert(extractServerExplicitRating('تقييمي: 7 من 10') === 7, 'Must capture "تقييمي: 7 من 10"');
+    assert(extractServerExplicitRating('أقيّم نفسي هو 8.5/10') === 8.5, 'Must capture "أقيّم نفسي هو 8.5/10"');
+    assert(extractClientExplicitRating('درجتي 6 من 10') === 6, 'Client must capture "درجتي 6 من 10"');
+
+    const prematureClient = getClientAdvisorResponse(advSpiritual, 'أخصص 25 دقيقة للمشي الهادئ يومياً', 1, 5, 1, [], studentProfile);
+    assert(prematureClient.station_completed === false, 'Client fallback MUST NOT complete on Round 2');
+    assert(prematureClient.score < 10, 'Client fallback MUST NOT turn "25 دقيقة" into score 10');
+
+    results.push({
+      suite,
+      domain: 'All Domains',
+      name: 'Strict Rating Regex & Minimum Rounds Guard',
+      passed: true,
+      durationMs: Date.now() - regexStart,
+      details: 'Blocks "25 دقيقة"/"5 ساعات"/"30 ريال", captures explicit X/10 ratings, enforces Round 4 minimum',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'All Domains',
+      name: 'Strict Rating Regex & Minimum Rounds Guard',
+      passed: false,
+      durationMs: Date.now() - regexStart,
+      message: err.message,
+    });
+  }
+
+  // Turn 4.7: Non-Repeating Fallback Rotation across consecutive rounds
+  const loopStart = Date.now();
+  try {
+    resetLocalFallbackTracker();
+    const rA = generateLocalAgentResponse('spiritual', 'أحاول تنظيم يومي', 'سعود المنصور', advSpiritual, 5, false, 1, '', 'weekly_checkin', 0, studentProfile);
+    const rB = generateLocalAgentResponse('spiritual', 'ما زلت أرتب أولوياتي', 'سعود المنصور', advSpiritual, 5, false, 1, '', 'weekly_checkin', 0, studentProfile);
+    const rC = generateLocalAgentResponse('spiritual', 'أرغب بالاستمرار', 'سعود المنصور', advSpiritual, 5, false, 1, '', 'weekly_checkin', 1, studentProfile);
+    assert(rA.reply !== rB.reply, 'Consecutive fallback rounds (same turn count) MUST NOT repeat same reply');
+    assert(rB.reply !== rC.reply, 'Consecutive fallback rounds MUST rotate cleanly across 4 distinct replies');
+    results.push({
+      suite,
+      domain: 'Spiritual',
+      name: 'Fallback Anti-Loop Rotation (Zero Consecutive Repeats)',
+      passed: true,
+      durationMs: Date.now() - loopStart,
+      details: '4 distinct neutral responses rotated via lastFallbackIndex tracker',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Spiritual',
+      name: 'Fallback Anti-Loop Rotation (Zero Consecutive Repeats)',
+      passed: false,
+      durationMs: Date.now() - loopStart,
       message: err.message,
     });
   }

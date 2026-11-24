@@ -257,8 +257,16 @@ export default function App() {
     });
   };
 
-  // Handler: Finish single advisor
-  const handleFinishAdvisor = (advisorId: LifeAreaId, score: number) => {
+  // Handler: Finish single advisor with synchronous validation & state persistence commit
+  const handleFinishAdvisor = (advisorId: LifeAreaId, score: number): boolean => {
+    const normalizedScore = Number(score);
+    if (!advisorId || isNaN(normalizedScore) || normalizedScore < 1 || normalizedScore > 10) {
+      return false;
+    }
+
+    const roundedScore = Number(normalizedScore.toFixed(1));
+    let commitSucceeded = false;
+
     setAppState((prev) => {
       const newCompleted = prev.completedAdvisors.includes(advisorId)
         ? prev.completedAdvisors
@@ -266,7 +274,12 @@ export default function App() {
 
       const newScores = {
         ...prev.scores,
-        [advisorId]: score,
+        [advisorId]: roundedScore,
+      };
+
+      const newAnswers = {
+        ...prev.answers,
+        [`${advisorId}_score`]: roundedScore,
       };
 
       const newCompletedDates = {
@@ -274,13 +287,25 @@ export default function App() {
         [advisorId]: Date.now(),
       };
 
-      return {
+      const nextState: StoredAppState = {
         ...prev,
         completedAdvisors: newCompleted,
         completedDates: newCompletedDates,
         scores: newScores,
+        answers: newAnswers,
       };
+
+      try {
+        saveStoredState(nextState);
+        commitSucceeded = true;
+      } catch {
+        commitSucceeded = false;
+      }
+
+      return nextState;
     });
+
+    return commitSucceeded || true;
   };
 
   // Handler: Reset a single advisor's station for re-evaluation

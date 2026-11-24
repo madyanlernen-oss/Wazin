@@ -19,6 +19,49 @@ export interface StationDynamicInsights {
   challenges: string[];
 }
 
+// متغير يتتبع آخر index مستخدم للـ Fallback في الجلسة الحالية لمنع التكرار الحرفي في جولتين متتاليتين
+const lastClientFallbackIndexBySession = new Map<string, number>();
+
+export function resetClientFallbackTracker(sessionKey?: string): void {
+  if (sessionKey) {
+    lastClientFallbackIndexBySession.delete(sessionKey);
+  } else {
+    lastClientFallbackIndexBySession.clear();
+  }
+}
+
+/**
+ * يستخرج درجة التقييم الصريحة (1-10) فقط عند وجود صيغة تقييم واضحة،
+ * ويمنع تماماً التقاط أرقام عادية مثل "25 دقيقة" أو "ساعتين" أو "30 ريال".
+ */
+export function extractExplicitRating(text: string): number | null {
+  if (!text || typeof text !== 'string') return null;
+
+  const explicitPhraseMatch = text.match(
+    /(?:تقييمي|أقيّم نفسي|اقيم نفسي|درجتي|أعطيه|اعطيه)\s*[:=]?\s*(?:هو\s*)?(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)\s*(?:من|\/)\s*10\b/i
+  );
+  if (explicitPhraseMatch) {
+    const val = parseFloat(explicitPhraseMatch[1]);
+    if (!isNaN(val) && val >= 1 && val <= 10) return Number(val.toFixed(1));
+  }
+
+  const fromTenMatch = text.match(/\b(\d+(?:\.\d+)?)\s*(?:من|\/)\s*10\b/i);
+  if (fromTenMatch) {
+    const val = parseFloat(fromTenMatch[1]);
+    if (!isNaN(val) && val >= 1 && val <= 10) return Number(val.toFixed(1));
+  }
+
+  const labelOnlyMatch = text.match(
+    /(?:تقييمي|أقيّم نفسي|اقيم نفسي|درجتي|أعطيه|اعطيه)\s*[:=]?\s*(?:هو\s*)?(?:بـ?|ب)?\s*(\d+(?:\.\d+)?)(?![\d.]|\s*(?:دقيقة|دقائق|ساعة|ساعات|ريال|يوم|أيام|شهر|أشهر|سنة|سنوات|%))/i
+  );
+  if (labelOnlyMatch) {
+    const val = parseFloat(labelOnlyMatch[1]);
+    if (!isNaN(val) && val >= 1 && val <= 10) return Number(val.toFixed(1));
+  }
+
+  return null;
+}
+
 // Helper: Psychometric semantic scoring engine (Linguistic sentiment & distress analysis with decimal precision)
 export function calculateSemanticScore(
   text: string,
@@ -275,25 +318,24 @@ export function getClientAdvisorResponse(
     };
   }
 
-  // 1. استخراج الدرجة بالتحليل الدلالي الحقيقي (Semantic Decimal Scoring)
-  const ratingMatch = msg.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)?\s*10)?$/i) || msg.match(/^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i);
-  const explicitNum = ratingMatch ? parseFloat(ratingMatch[1] || ratingMatch[0].replace(/[^\d.]/g, '')) : undefined;
+  // 1. استخراج الدرجة بالتحليل الدلالي الحقيقي (فقط عند وجود صيغة تقييم صريحة)
+  const explicitNum = extractExplicitRating(text) ?? undefined;
 
   // حساب الدرجة الدلالية الحقيقية بالأعشار بناءً على المشاعر والتحديات
   const semanticScore = calculateSemanticScore(text, historyTexts, explicitNum);
 
   // 2. فحص عمق ووضوح إجابة المستفيد
-  const isVagueOrShort = (!explicitNum && msg.length < 20) || /^(ماشي|عادي|تمام|لا أدري|ما ادري|ما اعرف|شوية|تعبان وبس|مدري)$/i.test(msg);
+  const isVagueOrShort = (explicitNum === undefined && msg.length < 20) || /^(ماشي|عادي|تمام|لا أدري|ما ادري|ما اعرف|شوية|تعبان وبس|مدري)$/i.test(msg);
   // فحص ما إذا كان المستفيد يطلب صراحة مواصلة الحوار، التعمق، أو إطالة الاستكشاف (الخيار الثاني في التخيير)
   const isContinueDialogue = /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار|المزيد|فهم\s*أكثر|فهم\s*اكثر|تقييم\s*أدق|تقييم\s*ادق)/i.test(msg) && !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل\s*للمحطة|ننتقل\s*للتالية|المحطة التالية)/i.test(msg);
   const userWantsMoreDepth = isContinueDialogue || /(أريد التعمق أكثر|اريد التعمق|تعمق معي|اسألني أكثر|اسالني اكثر|أريد توضيح أكثر|ابي اتعمق|لسه مو واضح)/i.test(msg);
 
   // فحص ما إذا كان المستخدم يحدد خطوة تهدئة أو التزاماً أو رغبة صريحة في المضي قدماً
   const isConcreteCommitment = !userWantsMoreDepth && /(نصف\s*ساعة|ساعة|ربع\s*ساعة|\d+\s*دقيقة|\d+\s*دقائق|أمشي|امشي|مشي|تأمل|تامل|صلاة|ذكر|تنفس|خلوة|رياضة|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|وفر|أوفر|ادخر|أدخر|حصالة|50|100)/i.test(msg);
-  const userAgreesToComplete = !userWantsMoreDepth && (/(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي\s*بهذا|نكتفي|خلاص\s*اعتمد|المحطة التالية|ننتقل\s*للمحطة|جاهز\s*للمحطة)/i.test(msg) || (isConcreteCommitment && stationTurnCount >= 1));
+  const userAgreesToComplete = !userWantsMoreDepth && stationTurnCount >= 3 && /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي\s*بهذا|نكتفي|خلاص\s*اعتمد|المحطة التالية|ننتقل\s*للمحطة|جاهز\s*للمحطة)/i.test(msg);
 
-  // إذا قدم المستفيد التزاماً محدداً أو خطوة عملية واضحة (مثل نصف ساعة يومياً أو تجربة 50 ريال)
-  if (isConcreteCommitment && stationTurnCount >= 1 && !userWantsMoreDepth) {
+  // إذا قدم المستفيد التزاماً محدداً أو خطوة عملية واضحة: لا نغلق قبل الجولة الرابعة!
+  if (isConcreteCommitment && stationTurnCount >= 3 && !userWantsMoreDepth) {
     const isFin = advisor.id === 'financial';
     const scoreVal = isFin ? (isStudent ? 5.8 : 5.5) : Math.max(semanticScore, 7.5);
     const studentIncomeTerm = incomeSrc?.includes('مكافأة')
@@ -356,12 +398,12 @@ export function getClientAdvisorResponse(
 
     return {
       isQuestionOrInquiry: false,
-      station_completed: true,
+      station_completed: false,
       score: scoreVal,
       strengths: commitmentStrengths,
       challenges: commitmentChallenges,
-      reasoning: `تم تقديم التزام وخطوة ميسرة قابلة للتطبيق ("${text}"). اعتماد التقييم وإغلاق المحطة بسلاسة وتأكيد الخطوة دون أسئلة استدراجية متكررة.`,
-      summary: `تحديد خطوة عملية واعدة واعتماد تقييم ${advTitle}.`,
+      reasoning: `تم تقديم التزام وخطوة ميسرة قابلة للتطبيق ("${text}"). عرض التقييم المقترح بدون إغلاق تلقائي حتى يختار المستفيد الاعتماد صراحة.`,
+      summary: `تحديد خطوة عملية واعدة وعرض تقييم ${advTitle}.`,
       advice: chosenAdvice,
       reply: chosenReply,
     };
@@ -488,17 +530,28 @@ export function getClientAdvisorResponse(
   };
 
   const domainQuestions = clinicalInquiries[advisor.id] || clinicalInquiries.personal;
-  const currentQuestionIdx = Math.min(stationTurnCount, domainQuestions.length - 1);
-  const nextRawQuestion = domainQuestions[currentQuestionIdx];
+  const sessionKey = `${userProfile?.email || userProfile?.name || 'default'}:${advisor.id}`;
+  const lastClientIdx = lastClientFallbackIndexBySession.get(sessionKey);
+  let nextIdx = stationTurnCount % domainQuestions.length;
+  if (lastClientIdx !== undefined && nextIdx === lastClientIdx) {
+    nextIdx = (lastClientIdx + 1) % domainQuestions.length;
+  }
+  // تحقق إضافي من آخر ردود المحادثة لمنع أي تطابق حرفي مع آخر سؤال مطروح
+  const lastHistoryText = historyTexts[historyTexts.length - 1] || '';
+  if (lastHistoryText && lastHistoryText.includes(domainQuestions[nextIdx])) {
+    nextIdx = (nextIdx + 1) % domainQuestions.length;
+  }
+  lastClientFallbackIndexBySession.set(sessionKey, nextIdx);
+  const nextRawQuestion = domainQuestions[nextIdx];
 
   // فحص استفسارات المستفيد المتخصصة لكل مجال مع مراعاة سياق وخلفية المستفيد
   const directInquiryAnswer = answerUserInquiry(advisor.id, text, userProfile);
 
-  // شروط إغلاق المحطة: السماح بالانتقال السلس وعدم إجبار المستخدم على أسئلة تعسفية
+  // شروط مواصلة الحوار: إلزام الاستمرار في الحوار حتى الجولة الرابعة (stationTurnCount < 3) قبل عرض خيار التقييم
   const shouldContinue = !userAgreesToComplete && (
     isBareGreetingOnly ||
     userWantsMoreDepth ||
-    (stationTurnCount === 0 && !explicitNum)
+    stationTurnCount < 3
   );
 
   if (shouldContinue) {
@@ -521,7 +574,16 @@ export function getClientAdvisorResponse(
       challenges: ['الحاجة لاستكمال المحاور التشخيصية الخمسة لبناء التوازن'],
       reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1} من 5+): متابعة الحوار الاستكشافي المتعمق. ${directInquiryAnswer ? 'تم رصد وإجابة استفسار المستفيد مباشرة.' : ''} الدرجة المحسوبة دلالياً: ${semanticScore.toFixed(1)}/10. لا يتم الإغلاق لضمان استيفاء المعطيات التشخيصية.`,
       summary: `حوار استكشافي مستمر في ${advTitle} (المحاورة ${stationTurnCount + 1}).`,
-      advice: `ركز في إجابتك القادمة على أدق تفاصيل يومك لنشخص الواقع بدقة سريرية.`,
+      advice:
+        advisor.id === 'spiritual'
+          ? 'احرص على تخصيص مساحة يومية هادئة بعيداً عن الشاشات لصفاء ذهنك وحضور قلبك.'
+          : advisor.id === 'financial'
+          ? 'ابدأ بمراقبة بنود الصرف واقتطاع مبلغ رمزي كأول صمام أمان مالي.'
+          : advisor.id === 'health'
+          ? 'ركز على تثبيت موعد النوم وشرب الماء والحركة اليومية لرفع طاقتك البدنية.'
+          : advisor.id === 'career'
+          ? 'احمِ وقت تركيزك العميق اليومي لإنجاز مهامك المهنية الأساسية.'
+          : `ركز في إجابتك القادمة على تفاصيل ${advTitle} لنشخص الواقع بدقة سريرية.`,
       reply: nextProbe,
     };
   }
@@ -562,7 +624,7 @@ export function getClientAdvisorResponse(
 
   const levelText = semanticScore >= 8 ? 'ممتاز ومتألق 🌟' : semanticScore >= 6 ? 'جيد وواعد 🚀' : 'يحتاج عناية وتأسيس 💡';
 
-  if (!userAgreesToComplete && stationTurnCount < 8) {
+  if (!userAgreesToComplete) {
     return {
       isQuestionOrInquiry: false,
       station_completed: false,

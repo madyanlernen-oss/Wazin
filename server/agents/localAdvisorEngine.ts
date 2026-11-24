@@ -1,3 +1,86 @@
+import { extractExplicitRating } from '../middleware/validation';
+
+// مصفوفة من 4 ردود استكشافية محايدة ومختلفة لكل محطة من المحطات الثماني لمنع التكرار عند اللجوء للمحرك المحلي
+export const STATION_NEUTRAL_FALLBACKS: Record<string, string[]> = {
+  spiritual: [
+    'أسمعك باهتمام وهدوء. متى كانت آخر لحظة شعرت فيها بصفاء ذهني وسلام داخلي حقيقي بعيداً عن صخب المهام والشاشات؟ وما الذي ساعدك وقتها؟',
+    'أقدر صراحتك ووضوحك. في زحام يومك المعتاد، ما هو المشتت الأكبر الذي يسرق حضور قلبك وهدوءك النفسي أكثر من غيره؟',
+    'تأملك في واقعك هو بداية التوازن. إذا أتيحت لك 10 دقائق فقط يومياً للانفصال عن الهاتف والضوضاء، أي وقت في يومك تراه الأنسب لتثبيتها؟',
+    'حديثك يوضح وعيك بما تحتاج إليه نفسك. ما العادة البسيطة والخفيفة التي تشعر أنها قريبة من قلبك ويمكن أن تمنحك طمأنينة أسبوعية دون ضغط؟',
+  ],
+  financial: [
+    'أقدر صراحتك في وصف واقعك المالي. ما هو البند اليومي أو الأسبوعي الذي تلاحظ أنه يسحب النسبة الأكبر من ميزانيتك دون أن تشعر؟',
+    'الوضوح المالي يبدأ خطوة بخطوة. كيف تتصرف عادةً عندما يقترب الشهر من نهايته وتقل السيولة المتاحة بين يديك؟',
+    'أفهم طبيعة التحدي المالي في مرحلتك الحالية. هل جربت سابقاً تخصيص مبلغ رمزي ثابت في مكان منفصل فور استلام دخلك، وما الذي أعاق استمراره؟',
+    'نظرتك الواقعية ممتازة. لو أردنا وضع خطوة مالية واحدة خفيفة للأسبوع القادم تحمي ميزانيتك دون تضييق، ما الإجراء الأقرب لواقعك؟',
+  ],
+  health: [
+    'أسمعك باهتمام يا صديقنا. كيف يبدو إيقاع نومك واستيقاظك في الأيام الأخيرة، وهل تستيقظ بطاقة كافية لبدء يومك؟',
+    'الجسد يرسل إشاراته بوضوح عندما يرهق. خلال ساعات يومك المعتاد، متى تلاحظ هبوط طاقتك الجسدية أو حاجتك إلى حركة وتنفس؟',
+    'أقدّر مشاركتك لتفاصيل صحتك. كيف تصف علاقتك بشرب الماء والنشاط الحركي البسيط وسط انشغالك اليومي؟',
+    'العناية بالبدن لا تتطلب مجهوداً شاقاً. ما العادة الصحية الصغيرة (في النوم أو المشي أو الغذاء) التي ترى أنها ستنعش نشاطك هذا الأسبوع؟',
+  ],
+  career: [
+    'أسمعك بتركيز. في مسارك المهني ومهامك اليومية الحالية، ما الشيء الذي يستهلك وقتك وطاقتك الأكبر دون أن تشعر أنه يقربك من أهداف العمل الأساسية؟',
+    'وضوح البوصلة يصنع الفارق. ما هو الجزء من عملك أو دراستك الذي تشعر فيه بأعلى تركيز وإنجاز، ومتى يتشتت انتباهك عادة؟',
+    'أفهم ما تمر به من ضغط أو تشتت. كيف تحمي وقت تركيزك العميق من المقاطعات المفاجئة أو الإشعارات المتكررة خلال اليوم؟',
+    'خطوة واحدة واضحة قد تفتح آفاقاً كبيرة. ما هي المهارة أو المهمة المؤجلة التي لو خصصت لها 30 دقيقة منتظمة لارتفع رضاك المهني؟',
+  ],
+  personal: [
+    'أسمعك بتفهم واحتواء. عندما يمر عليك يوم مثقل بالمهام أو الضغوط، كيف تتعامل مع نفسك داخلياً في تلك اللحظات؟',
+    'وعي الإنسان بمشاعره علامة نضج. هل تمنح نفسك مساحة خاصة للراحة الذهنية واستعادة توازنك دون الشعور بتأنيب أو ضغط؟',
+    'تقدير الذات يبدأ بالإنصات الصادق. ما النمط أو الفكرة المتكررة التي تلاحظ أنها تستهلك طاقتك النفسية أكثر من غيرها؟',
+    'الخطوات الصغيرة تصنع أثراً ثابتاً. ما الإجراء البسيط الذي لو التزمت به لنفسك هذا الأسبوع لشعرت بقدر أكبر من الاتزان الداخلي؟',
+  ],
+  learning: [
+    'شغف التطور يبدأ بالفضول الصادق. في هذه المرحلة من حياتك، ما هي المهارة أو المجال المعرفي الذي تود التعمق فيه أكثر؟',
+    'أقدّر صراحتك. ما الذي يقف عادةً بينك وبين تخصيص وقت ثابت للقراءة أو التعلم العميق خلال الأسبوع؟',
+    'التعلم التراكمي الهادئ أفضل من الاندفاع المؤقت. كم دقيقة يومياً تظن أنها واقعية ومريحة لك للقراءة أو الاستماع لمحتوى نافع؟',
+    'ربط المعرفة بالواقع يثبتها. ما الفكرة أو المهارة التي تعلمتها مؤخراً وتود تحويلها إلى تطبيق عملي في يومك؟',
+  ],
+  family: [
+    'أسمعك باهتمام وتقدير. كيف تصف جودة الوقت الهادئ الذي تقضيه مع عائلتك بعيداً عن انشغال الهواتف والمهام؟',
+    'الدفء الأسري يُبنى في التفاصيل البسيطة. ما التحدي الأكبر الذي يصعّب عليكم الجلوس معاً والتواصل بأريحية خلال الأسبوع؟',
+    'التفاهم داخل البيت يحتاج مساحة إنصات. عندما يقع توتر أو اختلاف عابر في الأسرة، ما الأسلوب الذي يساعدكم على تهدئة الأجواء؟',
+    'اللحظات المشتركة تترك أثراً عميقاً. ما النشاط أو الجلسة البسيطة التي تتمنى إحياءها مع أسرتك في الأيام القادمة؟',
+  ],
+  social: [
+    'أسمعك بصدق واهتمام. هل تشعر أن دائرتك الاجتماعية الحالية تمنحك دعماً وإلهاماً متوازناً، أم تستنزف طاقتك؟',
+    'التوازن الاجتماعي فن لطيف. كيف تدير التوفيق بين تلبية واجباتك الاجتماعية وحماية وقتك الشخصي للراحة؟',
+    'العلاقات النوعية تتفوق على الكثرة. ما الصفة الأهم التي تجعلك ترتاح وتثق بمن تتواصل معهم في محيطك؟',
+    'خطوة تواصل صغيرة قد تصنع فرقاً كبيراً. ما المبادرة الودية أو الحد الصحي الذي تود تطبيقه في علاقاتك هذا الأسبوع؟',
+  ],
+};
+
+// متغير يتتبع آخر index مستخدم للـ Fallback في الجلسة الحالية لمنع تكرار نفس الرد في جولتين متتاليتين
+const lastFallbackIndexBySession = new Map<string, number>();
+
+export function resetLocalFallbackTracker(sessionKey?: string): void {
+  if (sessionKey) {
+    lastFallbackIndexBySession.delete(sessionKey);
+  } else {
+    lastFallbackIndexBySession.clear();
+  }
+}
+
+export function pickNonRepeatingFallbackReply(
+  agentKey: string,
+  turnCount: number = 0,
+  sessionIdentifier: string = 'default'
+): { reply: string; index: number } {
+  const pool = STATION_NEUTRAL_FALLBACKS[agentKey] || STATION_NEUTRAL_FALLBACKS.personal;
+  const trackerKey = `${sessionIdentifier}:${agentKey}`;
+  const lastIdx = lastFallbackIndexBySession.get(trackerKey);
+
+  let nextIdx = turnCount >= 0 ? turnCount % pool.length : 0;
+  if (lastIdx !== undefined && nextIdx === lastIdx) {
+    nextIdx = (lastIdx + 1) % pool.length;
+  }
+
+  lastFallbackIndexBySession.set(trackerKey, nextIdx);
+  return { reply: pool[nextIdx], index: nextIdx };
+}
+
 export function generateLocalAgentResponse(
   agentKey: string,
   message: string,
@@ -71,9 +154,10 @@ export function generateLocalAgentResponse(
     (/(^|\s)ممكن(\s|\?|؟|$)/i.test(msg) && !/(نصف\s*ساعة|ساعة|ربع\s*ساعة|\d+\s*دقيقة|\d+\s*دقائق|أبدأ|ابدأ|أجرب|اجرب|أحاول|احاول|مشي|رياضة|تأمل|تخفيف)/i.test(msg))
   );
 
-  // 7. الإجابة التقييمية الصريحة (فقط إذا لم يكن محادثة حرة أو سؤالاً أو طوارئ أو أزمة أو تجاوز حدود تخصص)
-  const isRatingAns = /(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i.test(msg) || /^(?:تقييمي:?\s*)?\d+(?:\.\d+)?/i.test(msg);
-  const isAnswerToEvaluation = !isCrisisOrDeath && !isDomainBoundaryQuery && !isGriefOrExhaustion && !isCurseOrAnger && !isFinancialDistress && !isHealthDistress && !isCareerDistress && !isSpiritualDistress && !isPersonalDistress && !isSocialDistress && !isAskingHowAdvisorIs && !isSimpleGreeting && !isDirectQuestion && (isRatingAns || msg.startsWith('تقييمي:'));
+  // 7. الإجابة التقييمية الصريحة (فقط عند وجود صيغة تقييم صريحة، ومنع التقاط أرقام عادية مثل 25 دقيقة)
+  const explicitRatingScore = extractExplicitRating(message);
+  const isRatingAns = explicitRatingScore !== null;
+  const isAnswerToEvaluation = !isCrisisOrDeath && !isDomainBoundaryQuery && !isGriefOrExhaustion && !isCurseOrAnger && !isFinancialDistress && !isHealthDistress && !isCareerDistress && !isSpiritualDistress && !isPersonalDistress && !isSocialDistress && !isAskingHowAdvisorIs && !isSimpleGreeting && !isDirectQuestion && isRatingAns;
 
   const isGreeting = isSimpleGreeting || isAskingHowAdvisorIs;
   const advName = advisor?.name || (
@@ -636,16 +720,19 @@ export function generateLocalAgentResponse(
       });
     }
 
+    const sessionId = userProfile?.email || userName || 'default';
+    const spiritualFallback = pickNonRepeatingFallbackReply('spiritual', stationTurnCount, sessionId);
     return formatAgentOutput({
-      reasoning: `تحليل عام للمدخلات الروحية: رصد رغبة المستفيد في السلام الداخلي ومقارنتها بضغوطات العصر. الحل يكمن في تغذية النفس بالاستراحات الواعية والمشي الذهني الهادئ.`,
-      summary: `تأكيد أهمية التغذية الهادئة للنفس والمداومة على القليل الدائم لتحقيق التوازن الروحي.`,
-      advice: `اجعل العبادة استراحة للنفس من ضغوط العمل والحياة وليس واجباً إضافياً.`,
-      reply: `أسمعك بوعي تام يا ${userName}. ما طرحته: "${message}" يعكس تساؤلاً مشروعاً في رحلة البحث عن الاتزان الروحي.\nالنفس كالطائر؛ تحتاج إلى التغذية الهادئة والمداومة على القليل الدائم. لا تجعل العبادة عبئاً ثقيلاً، بل اجعلها استراحة تتنفس بها من ضغوط العالم.`,
+      reasoning: `استكشاف روحي محايد ومتدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${spiritualFallback.index + 1}) دون تكرار حرفي.`,
+      summary: `استكشاف واقع السكينة والحضور القلبي مع المستفيد بأسلوب محايد ومتدرج.`,
+      advice: `خصص بضع دقائق هادئة يومياً بعيداً عن المشتتات لاستعادة صفاء الذهن.`,
+      reply: spiritualFallback.reply,
       actionSteps: [
-        'المشي لمدة 15 دقيقة مع الاستماع لشيء يلهم روحك ويهدئ فكرك',
-        'تخصيص وقت استراحة بين المهام لاستعادة التنفس الهادئ'
+        'تخصيص 5 دقائق هدوء وتنفس بعيداً عن الهاتف',
+        'تحديد وقت يومي ثابت لاستراحة ذهنية قصيرة'
       ],
-      reflectionQuestion: 'ما الذي يمنعك اليوم من الشعور بالسلام الداخلي؟'
+      station_completed: false,
+      reflectionQuestion: ''
     });
   }
 
@@ -888,7 +975,7 @@ export function generateLocalAgentResponse(
         `تخصيص مبلغ رمزي ميسر (30 إلى 50 ريالاً فقط) كحصالة أمان فور استلام ${studentIncomeTerm} القادم`,
         `حصر المستلزمات الأساسية شهرياً للحفاظ على كفايتها دون هدر`
       ];
-      studentQuestion = stationTurnCount >= 1
+      studentQuestion = stationTurnCount >= 3
         ? `هل ترغب في اعتماد هذا التقييم وخطة البداية برمزية بسيطة (30-50 ريالاً) والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`
         : `ما رأيك في تجربة اقتطاع هذا المبلغ الرمزي البسيط (30-50 ريالاً) من ${studentIncomeTerm} القادم كأول حصالة أمان جامعي؟ هل تراه مناسباً لواقعك؟`;
     } else if (userMentionsRestaurants) {
@@ -897,33 +984,38 @@ export function generateLocalAgentResponse(
         `تخصيص مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} القادم`,
         `تحديد سقف لمصاريف المطاعم والمقاهي لحماية ميزانيتك`
       ];
-      studentQuestion = stationTurnCount >= 1
+      studentQuestion = stationTurnCount >= 3
         ? `هل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`
         : `ما الخطوة البسيطة التي ترى أنها ستساعدك في ضبط هذا البند حتى نهاية الشهر؟`;
     } else {
-      studentReply = `أسمعك باهتمام يا ${userName}.\n\nالواقع المالي في المرحلة الجامعية لا يتطلب تعقيداً أو ضغطاً، بل خطوة ميسرة تناسب واقعك كطالب: اقتطاع مبلغ رمزي بسيط من ${studentIncomeTerm} ليكون أول صمام أمان جامعي لك، مع إدارة المصاريف بهدوء.`;
+      const finSessionId = userProfile?.email || userName || 'default';
+      const finFallback = pickNonRepeatingFallbackReply('financial', stationTurnCount, finSessionId);
+      studentReply = stationTurnCount === 0
+        ? `أسمعك باهتمام يا ${userName}.\n\nفي المرحلة الجامعية لا يتطلب الأمر تعقيداً، بل خطوة ميسرة تناسب واقعك كطالب لتأسيس أول صمام أمان جامعي من ${studentIncomeTerm}.\n\n${finFallback.reply}`
+        : finFallback.reply;
       studentActionSteps = [
         `تخصيص مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} القادم كصمام أمان`,
         `تدوين المصاريف الشخصية أسبوعياً لرصد الأولويات`
       ];
-      studentQuestion = stationTurnCount >= 1
+      studentQuestion = stationTurnCount >= 3
         ? `هل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`
-        : `ما هي العادة البسيطة التي تشعر أنها ستمنحك راحة مالية أكبر خلال هذا الفصل الدراسي؟`;
+        : '';
     }
 
-    const nonStudentQuestion = stationTurnCount >= 1
-      ? 'هل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية؟'
-      : 'لو توقف دخلك الحالي مؤقتاً، ما أول إجراء تتخذه لحماية استقرارك؟';
+    const finGeneralSessionId = userProfile?.email || userName || 'default';
+    const nonStudentFallback = !isStudent
+      ? pickNonRepeatingFallbackReply('financial', stationTurnCount, finGeneralSessionId)
+      : null;
 
     return formatAgentOutput({
-      reasoning: `تحليل مالي متكيف (${status}): فحص مدخلات المستفيد ("${message}") وتوجيهه نحو الخطوة المالية الميسرة وصمام الأمان دون تكرار أسئلة معلبة ودون افتراض مصاريف لم يذكرها.`,
+      reasoning: `تحليل مالي متكيف (${status}): فحص مدخلات المستفيد ("${message}") وتوجيهه نحو الخطوة المالية الميسرة وصمام الأمان دون تكرار حرفي.`,
       summary: `التركيز على العادات المالية البسيطة المنتظمة كأقوى رافعة للأمان والاستقرار المالي.`,
       advice: isStudent
         ? `البدء باقتطاع رمزي بسيط (30-50 ريالاً) من ${studentIncomeTerm} في حصالة لكسر حاجز البداية.`
         : `تطبيق قاعدة التريث لمدة 24 ساعة قبل شراء أي سلعة غير ضرورية.`,
       reply: isStudent
         ? studentReply
-        : `أفهم مقصدك تماماً يا ${userName}. التحدي الحقيقي في المال ليس معرفة القواعد، بل الالتزام بالعادات الصغيرة المنتظمة وحماية صمام الأمان.`,
+        : (nonStudentFallback?.reply || `أفهم مقصدك تماماً يا ${userName}. كيف تدير عادة التوفيق بين التزاماتك اليومية والادخار الاحتياطي؟`),
       actionSteps: isStudent
         ? studentActionSteps
         : [
@@ -931,7 +1023,8 @@ export function generateLocalAgentResponse(
           'مراجعة الاشتراكات المتكررة وإلغاء ما لا يُستخدم'
         ],
       score: fallbackScore,
-      reflectionQuestion: isStudent ? studentQuestion : nonStudentQuestion
+      station_completed: false,
+      reflectionQuestion: isStudent ? studentQuestion : ''
     });
   }
 
@@ -965,16 +1058,19 @@ export function generateLocalAgentResponse(
       });
     }
 
+    const sessionId = userProfile?.email || userName || 'default';
+    const healthFallback = pickNonRepeatingFallbackReply('health', stationTurnCount, sessionId);
     return formatAgentOutput({
-      reasoning: `تحليل اللياقة اليومية المستدامة: التأكيد على أن الصحة البدنية لا تتطلب بالضرورة تمارينات شاقة، بل تقوم على الحركة المستمرة وقطع فترات الخمول والجلوس الممتد.`,
-      summary: `بناء نشاط حركي يومي متصل ومقاومة الجلوس الممتد لرفع اللياقة والنشاط.`,
-      advice: `الوقوف والحركة لمدة 3 دقائق كل ساعة أثناء العمل المكتبي.`,
-      reply: `كلامك في محله يا ${userName}. اللياقة والصحة لا تعني قضاء ساعات طويلة في النادي الرياضي، بل تعني بناء نشاط حركي مستمر خلال اليوم ومقاومة الجلوس الممتد.`,
+      reasoning: `استكشاف صحي متدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${healthFallback.index + 1}) دون تكرار حرفي.`,
+      summary: `متابعة استكشاف العادات الصحية والطاقة البدنية اليومية بتدرج محايد.`,
+      advice: `الحركة المنتظمة والنوم المتزن وشرب الماء هي ركائز الطاقة المستدامة.`,
+      reply: healthFallback.reply,
       actionSteps: [
-        'الوقوف والحركة لمدة 3 دقائق كل ساعة أثناء العمل',
-        'استبدال المشروبات الغازية بالماء المنعش'
+        'الوقوف والحركة لمدة 3 دقائق كل ساعة أثناء العمل أو الدراسة',
+        'شرب كوب ماء بانتظام وتثبيت موعد النوم'
       ],
-      reflectionQuestion: 'كيف يمكنك جعل الحركة اليومية عادة ممتعة وليست واجباً ثقيلاً؟'
+      station_completed: false,
+      reflectionQuestion: ''
     });
   }
 
@@ -1048,15 +1144,17 @@ export function generateLocalAgentResponse(
       }
     }
 
+    const sessionId = userProfile?.email || userName || 'default';
+    const careerFallback = pickNonRepeatingFallbackReply('career', stationTurnCount, sessionId);
     return formatAgentOutput({
-      reasoning: `تحليل إنتاجية المستفيد المهنية (${userName}): تفكيك التحديات وتقديم أسلوب العمل العميق.`,
-      summary: `توجيه المستفيد نحو التخلص من التشتت وتثبيت جلسات العمل العميق.`,
-      advice: 'قاعدة الـ 5 دقائق الذهبية: ابدأ العمل على المهمة فوراً لخمس دقائق لكسر حاجز التسويف.',
-      reply: `أسمعك باهتمام يا ${userName}.\n\nالإنتاجية الحقيقية ليست بكثرة ساعات الانشغال السطحي، بل في حماية ساعات العمل المركز (Deep Work). خطوتك الأولى هي حماية 45 دقيقة يومياً تنجز فيها أهم مهمة بدون أي مشتتات.\n\nما هي المهمة التي تؤجلها حالياً وتود إنجازها اليوم؟`,
+      reasoning: `استكشاف مهني متدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${careerFallback.index + 1}) دون تكرار حرفي.`,
+      summary: `توجيه المستفيد لاستكشاف أولوياته وحماية ساعات التركيز دون تكرار.`,
+      advice: 'التركيز المنهجي في فترة قصيرة يومياً يتفوق على ساعات طويلة مشتتة.',
+      reply: careerFallback.reply,
       actionSteps: ['تقسيم المهام الكبيرة إلى أجزاء صغيرة لا تتجاوز 30 دقيقة', 'إبعاد الإشعارات وقت العمل المركز'],
       score: score > 0 ? (score > 10 ? score / 10 : score) : 6.0,
       station_completed: false,
-      reflectionQuestion: 'ما هي المهمة التي تؤجلها حالياً وتود إنجازها اليوم؟'
+      reflectionQuestion: ''
     });
   }
 
@@ -1327,11 +1425,11 @@ export function generateLocalAgentResponse(
 
   // 6. مسار جلسات التقييم الحواري التكيفي (Doctor-Like Clinical Evaluation Session)
   if (isEvaluationSession) {
-    const ratingMatch = message.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?/i) || message.match(/(\d+(?:\.\d+)?)/);
-    const parsedScore = ratingMatch ? Math.min(10, Math.max(1, parseFloat(ratingMatch[1]))) : (score || 7.5);
+    const explicitEvalRating = extractExplicitRating(message);
+    const parsedScore = explicitEvalRating !== null ? explicitEvalRating : (score > 0 ? (score > 10 ? score / 10 : score) : 6.0);
     const isGreeting = /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(message) && message.length < 25;
-    const isShortVague = (message.length < 25 || isGreeting) && !ratingMatch;
-    const isUserAsking = /[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(message);
+    const isShortVague = (message.length < 25 || isGreeting) && explicitEvalRating === null;
+    const isUserAsking = /[؟?]/.test(message) || /^(?:كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)(?:\s|$)/i.test(coreMsg);
 
     // إذا طرح المستفيد سؤالاً أو استفساراً، نجيب عليه فوراً كطبيب خبير
     let directAnswer = '';
@@ -1433,18 +1531,12 @@ export function generateLocalAgentResponse(
         });
       }
 
-      let followUpQuestion = `ما هو أكبر عائق واجهته مؤخراً يؤثر على استقرارك في هذا الجانب؟ وكيف تقيّم رضاك ومستواك الحالي من 1 إلى 10؟`;
-      if (stationTurnCount === 1) {
-        followUpQuestion = `أين يتسرب الوقت أو الطاقة في هذا الجانب تحديداً؟ وكيف ينعكس ذلك على يومك؟`;
-      } else if (stationTurnCount === 2) {
-        followUpQuestion = `ما العادة اليومية البسيطة التي لو ثبتّها ستحدث فارقاً ملموساً هنا؟`;
-      } else if (stationTurnCount === 3) {
-        followUpQuestion = `إذا تأملت في أسبوعك الماضي، ما الموقف الذي شعرت فيه بأقصى درجات الضغط؟ وما الذي يساعدك على تجاوزه؟`;
-      }
+      const sessionId = userProfile?.email || userName || 'default';
+      const rotatedFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId);
 
-      let dynamicReply = `أسمعك بتركيز واهتمام.\n\nلنواصل استكشاف واقعك في ${advRole} بدقة:\n${followUpQuestion}`;
+      let dynamicReply = rotatedFallback.reply;
       if (directAnswer) {
-        dynamicReply = `💡 **إجابة عن استفسارك:**\n${directAnswer}\n\n🌿 **والآن لنواصل استكشاف واقعك في ${advRole}:**\n${followUpQuestion}`;
+        dynamicReply = `💡 **إجابة عن استفسارك:**\n${directAnswer}\n\n🌿 **ولنواصل استكشاف واقعك في ${advRole}:**\n${rotatedFallback.reply}`;
       }
 
       return formatAgentOutput({
@@ -1453,12 +1545,12 @@ export function generateLocalAgentResponse(
         station_completed: false,
         strengths: [],
         challenges: [],
-        reasoning: `تحليل استشاري تكيفي (المحطة ${evaluationStep || 1} من 8: ${advRole} - المحاورة ${stationTurnCount + 1}): مواصلة الحوار الاستكشافي المباشر.`,
+        reasoning: `تحليل استشاري تكيفي (المحطة ${evaluationStep || 1} من 8: ${advRole} - المحاورة ${stationTurnCount + 1}، رد #${rotatedFallback.index + 1}): مواصلة الحوار الاستكشافي المباشر دون تكرار.`,
         summary: `متابعة استيضاحية تكيفية لتشخيص جانب (${advRole}).`,
         advice: `التشخيص الاستشاري الدقيق لواقعك اليومي هو الخطوة الأولى لتحديد احتياجك الفعلي.`,
         reply: dynamicReply,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
-        reflectionQuestion: 'ما هو التحدي الأبرز في هذا الجانب وما تقييمك له من 1 إلى 10؟'
+        reflectionQuestion: ''
       });
     }
 
@@ -1500,17 +1592,20 @@ export function generateLocalAgentResponse(
   };
 
   const advInfo = fallbackAdvisors[agentKey] || { role: advisor?.role || 'مستشار توازن الحياة', name: advName };
+  const sessionId = userProfile?.email || userName || 'default';
+  const domainFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId);
 
   return formatAgentOutput({
     agent_name: advInfo.name,
-    reasoning: `تحليل استشاري متعدد الأبعاد: دراسة مدخلات المستفيد (${userName}) في مجال (${advInfo.role}) ومقارنتها بمؤشرات عجلة الحياة. التفكير المنطقي يقتضي تجزئة الهدف الكبير إلى إجراء يومي ملموس يمكن البدء به خلال 24 ساعة.`,
-    summary: `تحويل الطموح والهموم المتراكمة في جانب ${advInfo.role} إلى إجراء تنفيذي ملموس يدرج في مصفوفة أيزنهاور.`,
+    reasoning: `تحليل استشاري متدرج (رد #${domainFallback.index + 1}): استكشاف واقع المستفيد (${userName}) في مجال (${advInfo.role}) دون تكرار حرفي.`,
+    summary: `متابعة استكشافية متوازنة في جانب ${advInfo.role}.`,
     advice: `تحديد إجراء واحد واضح يمكنك تنفيذه خلال 24 ساعة وإدراجه في المربع الثاني بمصفوفة أيزنهاور.`,
-    reply: `أهلاً بك يا ${userName}، معك ${advInfo.name} (${advInfo.role}).\n\nتأملت في رسالتك: "${message}".\nما تطرحه يعبر عن رغبة حقيقية في النمو والتطور. لتحقيق نقلة نوعية في هذا الجانب، نحتاج للتركيز على الخطوة الإجرائية التالية المباشرة بدلاً من حمل الهموم دفعة واحدة.`,
+    reply: domainFallback.reply,
     actionSteps: [
       'تحديد إجراء واحد ملموس يمكنك تنفيذه خلال الـ 24 ساعة القادمة',
       'إسقاط هذا الهدف في المربع الثاني بمصفوفة أيزنهاور لمتابعته'
     ],
-    reflectionQuestion: 'ما هي العقبة الحقيقية التي تحول بينك وبين تنفيذ هذه الخطوة اليوم؟'
+    station_completed: false,
+    reflectionQuestion: ''
   });
 }
