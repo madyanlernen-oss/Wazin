@@ -151,6 +151,8 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // Track turn count per advisor station for the adaptive clinical flow
   const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>({});
+  // Track temporary dismissal of score adoption choice when user clicks "الاستمرار في الحوار"
+  const [dismissedChoiceTurns, setDismissedChoiceTurns] = useState<Record<string, number>>({});
 
   // Dynamic insights per station in memory only (never saved to localStorage across sessions)
   const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>({});
@@ -783,14 +785,12 @@ ${specificQuestion}
         } else if (earnedScore === undefined || earnedScore <= 0) {
           earnedScore = currentAdvisor.id === 'financial' ? 5.5 : 6.0;
         }
-      } else if (currentTurns < 3) {
-        // إلزام عدم إغلاق المحطة تلقائياً خلال أول 3 ردود للمستفيد (قبل الجولة الرابعة) ما لم يطلب الاعتماد صراحة
+      } else {
+        // لا تُغلق المحطة تلقائياً أبداً! يجب ألا تُغلق المحطة إلا إذا طلب المستفيد صراحة اعتماد التقييم
         isStationCompleted = false;
         if (pendingOfferedScore !== null) {
           earnedScore = pendingOfferedScore;
         }
-      } else if (pendingOfferedScore !== null) {
-        earnedScore = pendingOfferedScore;
       }
 
       // If station completed by AI advisor or explicit adoption:
@@ -956,7 +956,7 @@ ${specificQuestion}
   const staticFallbackInsights = extractInsightsFromAnswers(currentAdvisor, currentAdvisorScore, answers);
   const activeConversation = chatMessages[currentAdvisor.id] || [];
 
-  // فحص ما إذا كانت آخر رسالة للمستشار تحتوي على درجة مقترحة للاعتماد
+  // فحص ما إذا كانت آخر رسالة للمستشار تحتوي على درجة مقترحة للاعتماد أو المستشار جاهز (بعد 4 جولات)
   let lastOfferedScore: number | null = null;
   const lastAdvisorMessage = [...activeConversation].reverse().find((m) => m.sender === 'advisor');
   if (lastAdvisorMessage && !isCompleted) {
@@ -969,6 +969,20 @@ ${specificQuestion}
       }
     }
   }
+
+  const currentStationTurns = stationTurnCount[currentAdvisor.id] || 0;
+  // المستشار يصبح جاهزاً لتقدير الدرجة بعد 4 جولات تقريباً (currentStationTurns >= 3) أو إذا ذكر درجة صريحة
+  const isAdvisorReadyForScoring = !isCompleted && (lastOfferedScore !== null || currentStationTurns >= 3);
+  const effectiveOfferedScore = lastOfferedScore ?? (currentAdvisorScore > 0 ? currentAdvisorScore : (currentAdvisor.id === 'financial' ? 5.5 : 6.0));
+  const isChoiceTemporarilyDismissed = dismissedChoiceTurns[currentAdvisor.id] === currentStationTurns;
+
+  const handleContinueDialogue = () => {
+    setDismissedChoiceTurns((prev) => ({
+      ...prev,
+      [currentAdvisor.id]: currentStationTurns,
+    }));
+    handleSendAnswer('أرغب في الاستمرار في الحوار ومناقشة تفاصيل إضافية حول هذا الجانب');
+  };
 
   // معالج الاعتماد المباشر للدرجة وإتمام المحطة
   const handleAdoptScoreAndComplete = (scoreToAdopt: number) => {
@@ -1092,8 +1106,10 @@ ${specificQuestion}
           currentActiveInsights={currentActiveInsights}
           currentStationConfig={currentStationConfig}
           currentAdvisorIndex={currentAdvisorIndex}
-          offeredScore={lastOfferedScore}
+          offeredScore={isAdvisorReadyForScoring ? effectiveOfferedScore : null}
+          isChoiceDismissed={isChoiceTemporarilyDismissed}
           onAdoptScoreAndComplete={handleAdoptScoreAndComplete}
+          onContinueDialogue={handleContinueDialogue}
           onChangeInput={setInputText}
           onSendAnswer={handleSendAnswer}
           onStopAnswer={handleStopAnswer}

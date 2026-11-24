@@ -765,8 +765,8 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
 
           const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
-              reject(new Error(`تجاوزت مهلة الاستجابة السريعة (3.5 ثوانٍ) للنموذج: ${model}`));
-            }, 3500);
+              reject(new Error(`تجاوزت مهلة استجابة Gemini API (10 ثوانٍ) للنموذج: ${model}`));
+            }, 10000);
 
             const onClientAbort = () => {
               clearTimeout(timeoutHandle);
@@ -829,10 +829,20 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
         let completedCount = 0;
         let hasResolved = false;
 
+        // سقف الأمان الإجمالي 12 ثانية لجميع نماذج ومحاولات Gemini API
+        const safetyCeilingTimer = setTimeout(() => {
+          if (!hasResolved) {
+            hasResolved = true;
+            abortState.aborted = true;
+            reject(new Error('تجاوزت مهلة سقف الأمان لـ Gemini API (12 ثانية)'));
+          }
+        }, 12000);
+
         const clientAbortHandler = () => {
           if (!hasResolved) {
             hasResolved = true;
             abortState.aborted = true;
+            clearTimeout(safetyCeilingTimer);
             reject(new Error('أغلق العميل الاتصال'));
           }
         };
@@ -855,7 +865,8 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             }
           };
 
-          speculativeTimer = setTimeout(triggerNext, 2000);
+          // إتاحة 8 ثوانٍ للنموذج الأساسي قبل تشغيل النموذج البديل بالتوازي
+          speculativeTimer = setTimeout(triggerNext, 8000);
 
           callSingleModel(currentModel, abortState)
             .then((result) => {
@@ -863,6 +874,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
               if (!hasResolved) {
                 hasResolved = true;
                 abortState.aborted = true;
+                clearTimeout(safetyCeilingTimer);
                 resolve(result);
               }
             })
@@ -871,6 +883,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
               triggerNext();
               completedCount++;
               if (completedCount === candidateModels.length && !hasResolved) {
+                clearTimeout(safetyCeilingTimer);
                 reject(new Error('جميع نماذج Gemini فشلت أو تجاوزت المهلة المحددة.'));
               }
             });
@@ -887,7 +900,8 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     parsed.summary = parsed.summary || '';
     parsed.advice = parsed.advice || '';
     parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
-    parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
+    // لا تُغلق المحطة تلقائياً أبداً إلا إذا طلب المستخدم الاعتماد صراحة
+    parsed.station_completed = Boolean(isEvaluationSession) && Boolean(isAdoptionIntent);
     if (forcedIncomplete || isContinueIntent) {
       parsed.station_completed = false;
     }
@@ -1078,13 +1092,10 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
         parsed.summary = parsed.summary || '';
         parsed.advice = parsed.advice || '';
         parsed.score = parsed.score !== undefined ? parsed.score : effectiveScore;
-        parsed.station_completed = Boolean(isEvaluationSession) && Boolean(parsed.station_completed);
+        parsed.station_completed = Boolean(isEvaluationSession) && Boolean(isAdoptionIntent);
 
         if (forcedIncomplete || isContinueIntent) {
           parsed.station_completed = false;
-        }
-        if (isAdoptionIntent) {
-          parsed.station_completed = true;
         }
 
         if (!parsed.reply && (parsed.advice || parsed.summary)) {

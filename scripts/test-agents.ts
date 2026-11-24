@@ -431,6 +431,45 @@ async function testAgentBehaviors() {
     });
   }
 
+  // Turn 1.5: Student Obligations & No-Debt Template ("التزامات دراسية وبدون ديون")
+  const fObligStart = Date.now();
+  try {
+    const rOblig = generateLocalAgentResponse(
+      'financial',
+      'أنا طالب وعندي التزامات دراسية ومصاريف كتب ولكن بدون ديون',
+      'سعود المنصور',
+      advFinancial,
+      5,
+      true,
+      2,
+      'إدارة الميزانية وصمام الأمان',
+      'initial_assessment',
+      0,
+      studentProfile
+    );
+
+    assert(!rOblig.reply.includes('كرة الثلج'), 'MUST NOT trigger debt snowball template for student obligations');
+    assert(!rOblig.reply.includes('البطاقات الائتمانية'), 'MUST NOT recommend freezing credit cards to debt-free student');
+    assert(rOblig.reply.includes('طالب') || rOblig.reply.includes('الجامعية') || rOblig.reply.includes('صمام أمان'), 'Must respect student context');
+    results.push({
+      suite,
+      domain: 'Financial',
+      name: 'Turn 1.5: Student Obligations & No-Debt Template ("التزامات دراسية وبدون ديون")',
+      passed: true,
+      durationMs: Date.now() - fObligStart,
+      details: 'Clean student financial guidance without credit cards or debt snowball triggers',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Financial',
+      name: 'Turn 1.5: Student Obligations & No-Debt Template ("التزامات دراسية وبدون ديون")',
+      passed: false,
+      durationMs: Date.now() - fObligStart,
+      message: err.message,
+    });
+  }
+
   // Turn 2: Micro-step saving agreement ("حسنا سأجرب ادخار 30 ريال")
   const f2Start = Date.now();
   try {
