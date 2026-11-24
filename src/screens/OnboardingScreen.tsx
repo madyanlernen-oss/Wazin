@@ -65,66 +65,35 @@ function getDynamicGoldenHabit(
   messages: EvaluationChatMessage[] = [],
   latestAdvice?: string
 ): string {
-  // 1. إذا توفرت نصيحة أو خطوة مباشرة معتمدة من المستشار في الرد
-  if (latestAdvice && latestAdvice.trim().length > 10 && latestAdvice.trim().length < 150) {
+  // 1. إذا توفرت توصية أو خطوة مخصصة معتمدة من Gemini أو المستشار
+  if (latestAdvice && latestAdvice.trim().length > 10 && latestAdvice.trim().length < 320) {
     return latestAdvice.trim();
   }
 
-  // 2. البحث في رسائل المستشار الأخيرة عن نصيحة مستخلصة
+  // 2. البحث أولاً في كلام المستفيد نفسه عن العادة أو الخطة المحددة التي اقترحها خلال الحوار
+  const userMessages = messages.filter((m) => m.sender === 'user').map((m) => m.text.trim());
+  const proposalPattern = /(?:^|\s)(?:سأخصص|ساخصص|سأبدأ|سابدا|سأجرب|ساجرب|سأحاول|ساحاول|سألتزم|سالتزم|سأنظم|سانظم|سأتواصل|ساتواصل|سأمشي|سامشي|سأقرأ|ساقرا|سأدخر|سادخر|سأوفر|ساوفر|سأغلق|ساغلق|أخطط|اخطط|أنوي|انوي|قررت)(?:\s|$)/i;
+  for (let i = userMessages.length - 1; i >= 0; i--) {
+    const u = userMessages[i];
+    if (
+      u.length >= 10 &&
+      !/^(?:اعتمد\s*التقييم|نعم\s*اعتمد|أرغب في الاستمرار)/i.test(u) &&
+      (proposalPattern.test(u) || /(\d+\s*(?:دقيقة|دقائق|ساعة|ساعات|صفحة|صفحات|ريال|مرات)|أسبوعياً|يومياً)/i.test(u))
+    ) {
+      return `تطبيق الخطة التي اقترحتها في الحوار: "${u.slice(0, 140)}${u.length > 140 ? '...' : ''}"`;
+    }
+  }
+
+  // 3. البحث في رسائل المستشار الأخيرة عن نصيحة مستخلصة
   const advisorWithAdvice = [...messages]
     .reverse()
-    .find((m) => m.sender === 'advisor' && m.advice && m.advice.trim().length > 10 && m.advice.trim().length < 150);
+    .find((m) => m.sender === 'advisor' && m.advice && m.advice.trim().length > 10 && m.advice.trim().length < 320);
   if (advisorWithAdvice?.advice) {
     return advisorWithAdvice.advice.trim();
   }
 
-  // 3. استخراج الالتزام المخصص من سياق الحوار الفعلي للمحطة
-  const allTexts = messages.map((m) => m.text).join(' ');
-
-  if (advisor.id === 'spiritual') {
-    const hasThreeMin = /(ثلاث|3)\s*دقائق/i.test(allTexts);
-    const hasFiveMin = /(خمس|5)\s*دقائق/i.test(allTexts);
-    const hasTenMin = /(عشر|10)\s*دقائق/i.test(allTexts);
-    const hasPrayer = /(صلاة|الصلاة|دعاء|الدعاء|خلوة)/i.test(allTexts);
-
-    if (hasThreeMin) {
-      return hasPrayer
-        ? 'تخصيص 3 دقائق كل صباح دون هاتف لمراقبة التنفس مع صلاة أو دعاء قصير لربط القلب بالخالق.'
-        : 'تخصيص 3 دقائق كل صباح في مكان هادئ دون هاتف لمراقبة التنفس وصفاء الذهن.';
-    }
-    if (hasFiveMin) {
-      return hasPrayer
-        ? 'تخصيص 5 دقائق يومياً في بداية اليوم للصلاة والتأمل القلبي الهادئ بعيداً عن المشتتات.'
-        : 'تخصيص 5 دقائق يومياً في بداية الصباح لمراقبة التنفس واستحضار السكينة.';
-    }
-    if (hasTenMin) {
-      return 'تخصيص 10 دقائق يومياً للخلوة الروحية الهادئة واستحضار حضور القلب والسلام الداخلي.';
-    }
-  }
-
-  if (advisor.id === 'financial') {
-    if (/(مكافأة|مكافاه|مصروف|طالب)/i.test(allTexts) && /(ادخار|حساب فرعي|حصالة|50|100)/i.test(allTexts)) {
-      return 'اقتطاع 50 إلى 100 ريال شهرياً من المكافأة في حساب ادخار فرعي منفصل كصمام أمان جامعي.';
-    }
-    if (/(تدفق نقدي|مستقل|صاحب عمل|فصل)/i.test(allTexts)) {
-      return 'الفصل الصارم التام بين أموال العمل والمال الشخصي وبناء احتياطي طوارئ يغطي 6 أشهر.';
-    }
-    if (/(50\/30\/20|راتب|أقساط)/i.test(allTexts)) {
-      return 'تطبيق قاعدة 50/30/20 وأتمتة ادخار جزء ثابت من الراتب فور نزوله.';
-    }
-  }
-
-  if (advisor.id === 'health') {
-    if (/(مشي|20 دقيقة|15 دقيقة|خطوات)/i.test(allTexts)) {
-      return 'المشي اليومي النشط لمدة 15 إلى 20 دقيقة في الهواء الطلق.';
-    }
-    if (/(نوم|شاشات|أرق)/i.test(allTexts)) {
-      return 'إغلاق الشاشات قبل موعد النوم بـ 45 دقيقة وتثبيت موعد الاستيقاظ.';
-    }
-  }
-
-  // 4. البديل الافتراضي المعتمد
-  return advisor.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
+  // 4. البديل المعتمد المخصص للمحطة عند غياب خطة مصرح بها
+  return advisor.defaultGoals?.[0] || 'تحديد خطوة عملية واحدة صغيرة ومحددة تناسب واقعك في هذا الجانب';
 }
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
@@ -643,7 +612,7 @@ ${specificQuestion}
     setIsAdvisorReplying(true);
 
     try {
-      const history = currentList.slice(-12).map((m) => ({
+      const history = currentList.slice(-40).map((m) => ({
         role: m.sender === 'user' ? 'user' : 'model',
         content: m.text,
       }));
@@ -707,7 +676,7 @@ ${specificQuestion}
           adviceContent = data.advice || '';
           replyContent = data.reply || adviceContent || summaryContent || '';
           isStationCompleted = Boolean(data.station_completed);
-          
+
           if (data.score !== undefined && !isNaN(Number(data.score))) {
             const raw = Number(data.score);
             earnedScore = raw > 10 ? Math.round(raw / 10) : raw;
@@ -845,13 +814,19 @@ ${specificQuestion}
         if (onAddEisenhowerGoal) {
           onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
         }
-        const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, earnedScore, answers);
+        const fallbackInsights = extractInsightsFromAnswers(
+          currentAdvisor,
+          earnedScore,
+          answers,
+          [...(chatMessages[advisorKey] || []).map((m) => m.text), text]
+        );
         setStationInsights((prev) => ({
           ...prev,
           [currentAdvisor.id]: {
             score: earnedScore,
-            strengths: dynamicStrengths.length > 0 ? dynamicStrengths : (fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب']),
+            strengths: dynamicStrengths.length > 0 ? dynamicStrengths : (fallbackInsights?.strengths || ['الصراحة والوضوح في توصيف واقع هذا الجانب']),
             challenges: dynamicChallenges.length > 0 ? dynamicChallenges : [goldenHabit],
+            goldenRecommendation: goldenHabit,
           },
         }));
       }
@@ -1006,8 +981,8 @@ ${specificQuestion}
     handleSendAnswer('أرغب في الاستمرار في الحوار ومناقشة تفاصيل إضافية حول هذا الجانب');
   };
 
-  // معالج الاعتماد المباشر للدرجة وإتمام المحطة: التزام صارم بترتيب State Commit أولاً ثم رسالة الاعتماد
-  const handleAdoptScoreAndComplete = (scoreToAdopt: number) => {
+  // معالج الاعتماد المباشر للدرجة وإتمام المحطة: تمرير سجل المحادثة الكامل إلى Gemini API لتوليد الملخص والتوصية الذهبية مع التزام State Commit أولاً
+  const handleAdoptScoreAndComplete = async (scoreToAdopt: number) => {
     const finalScore = Number(scoreToAdopt.toFixed(1));
     if (isNaN(finalScore) || finalScore < 1 || finalScore > 10) {
       return;
@@ -1022,22 +997,72 @@ ${specificQuestion}
     }
 
     const currentAdvisorMsgs = chatMessages[currentAdvisor.id] || [];
-    const goldenHabit = getDynamicGoldenHabit(currentAdvisor, currentAdvisorMsgs);
+    const fallbackInsights = extractInsightsFromAnswers(
+      currentAdvisor,
+      finalScore,
+      answers,
+      currentAdvisorMsgs.map((m) => m.text)
+    );
+    let goldenHabit = getDynamicGoldenHabit(currentAdvisor, currentAdvisorMsgs);
+    let finalStrengths = fallbackInsights?.strengths || ['الصراحة في توصيف واقع هذا الجانب'];
+    let finalChallenges = [goldenHabit, ...(fallbackInsights?.challenges?.slice(1) || [])];
+
+    // 2. تمرير سجل محادثة المستخدم الكامل في هذه المحطة إلى Gemini API لتخصيص نقاط القوة وفرص التحسين والتوصية العلاجية الذهبية
+    setIsAdvisorReplying(true);
+    try {
+      const summaryController = new AbortController();
+      const summaryTimer = setTimeout(() => summaryController.abort(), 4500);
+      const summaryRes = await fetch('/api/gemini/station-summary', {
+        method: 'POST',
+        signal: summaryController.signal,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          advisor: currentAdvisor,
+          agentKey: currentAdvisor.id,
+          userProfile,
+          userName: userProfile?.name?.trim() || 'عزيزي',
+          score: finalScore,
+          history: currentAdvisorMsgs.map((m) => ({
+            role: m.sender === 'user' ? 'user' : 'model',
+            content: m.text,
+          })),
+        }),
+      });
+      clearTimeout(summaryTimer);
+
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json();
+        if (typeof summaryData.goldenRecommendation === 'string' && summaryData.goldenRecommendation.trim().length > 5) {
+          goldenHabit = summaryData.goldenRecommendation.trim();
+        }
+        if (Array.isArray(summaryData.strengths) && summaryData.strengths.length > 0) {
+          finalStrengths = summaryData.strengths;
+        }
+        if (Array.isArray(summaryData.challenges) && summaryData.challenges.length > 0) {
+          finalChallenges = summaryData.challenges;
+        }
+      }
+    } catch (summaryErr) {
+      console.warn('[OnboardingScreen] تعذر الاتصال بنقطة station-summary، تفعيل الاستخلاص المرتبط بسجل الحوار:', summaryErr);
+    } finally {
+      setIsAdvisorReplying(false);
+    }
+
     if (onAddEisenhowerGoal) {
       onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
     }
 
-    const fallbackInsights = extractInsightsFromAnswers(currentAdvisor, finalScore, answers);
     setStationInsights((prev) => ({
       ...prev,
       [currentAdvisor.id]: {
         score: finalScore,
-        strengths: fallbackInsights?.strengths || ['وعي طيب وشفافية في تشخيص واقع هذا الجانب'],
-        challenges: [goldenHabit, ...(fallbackInsights?.challenges?.slice(1) || [])],
+        strengths: finalStrengths,
+        challenges: finalChallenges,
+        goldenRecommendation: goldenHabit,
       },
     }));
 
-    // 2. بعد نجاح حفظ الدرجة وتحديث التقدم والعلامة فقط، نصدر رسالة تأكيد الاعتماد في المحادثة
+    // 3. بعد نجاح حفظ الدرجة وتوليد التوصية المخصصة، نصدر رسالة تأكيد الاعتماد في المحادثة
     const isSpiritual = currentAdvisor.id === 'spiritual';
     const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
     const spiritualNote = isSpiritual ? '\n(تقدير لشعورك الحالي وليس حكماً على التزامك)' : '';

@@ -76,11 +76,11 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     });
   }
 
-  // 2) التحقق من صحة حقل history (مصفوفة أقصاها 20 عنصراً)
+  // 2) التحقق من صحة حقل history (مصفوفة أقصاها 40 عنصراً لتمرير سجل المحطة الكامل)
   if (history !== undefined && history !== null) {
-    if (!Array.isArray(history) || history.length > 20) {
+    if (!Array.isArray(history) || history.length > 40) {
       return res.status(400).json({
-        error: 'سجل المحادثة (history) يجب أن يكون مصفوفة لا تتجاوز 20 عنصراً.',
+        error: 'سجل المحادثة (history) يجب أن يكون مصفوفة لا تتجاوز 40 عنصراً.',
       });
     }
     for (const item of history) {
@@ -420,9 +420,14 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
    - التزم بأن تكون الدرجة قريبة من تقييم المستخدم الذاتي (بفارق أقصاه ±1.0) إلا إذا ذكر أدلة واضحة على ممارسة فعلية مستمرة أو مشكلة خطيرة واقعية.
    - لا ترفع الدرجة بسبب نوايا أو خطط مستقبلية ("سأفعل"، "لن أجلد نفسي")؛ الخطط تُذكر كفرصة تطوير وليست دليل قدرة أو إنجاز قائم.
 2. نقاط القوة (strengths):
-   - صياغة معتدلة مبنية حصراً على ممارسة ذكرها المستخدم فعلاً في حديثه؛ لا تستخدم "عالية" أو "كامل" إلا بدليل صريح.
-   - تجنب أي تناقض مع كلام المستخدم (مثل كتابة "ينتقد ذاته بلطف" وهو قال إنه يقسو على نفسه).
-3. قاعدة الجولات الأربع والتقييم المرحلي (إلزامية صارمة):
+   - صياغة معتدلة مبنية حصراً على ممارسة أو وعي حقيقي ذكره المستخدم فعلاً في حديثه؛ لا تستخدم "عالية" أو "كامل" إلا بدليل صريح.
+   - ⛔ يُمنع منعاً باتاً كتابة نقاط قوة تتعارض مع شكوى المستخدم (مثلاً: لا تكتب "حضور اجتماعي متوازن" إذا اشتكى من الفتور والانعزال، بل اكتب "الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل").
+3. التوصية العلاجية الذهبية (advice و actionSteps[0]):
+   - راجع سجل المحادثة الكامل لهذه المحطة؛ عند اكتمال المحطة أو اقتراح التوصية النهائية، اذكر في حقل "advice" العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار (وليس حكمة عامة أو نصيحة جاهزة).
+4. تجنب المدح المعلب والافتراضات غير المدعومة:
+   - لا تفترض أعراضاً لم يذكرها المستفيد (مثل زيادة الوزن، حرق الدهون، أو ضعف الثقة) ولا تمدحه على التزام بعادة لم يقم بها فعلياً.
+   - التزم في الردود الاستكشافية بالحياد والاعتراف بضغط المستخدم وطرح سؤال مفتوح يخص المحطة الحالية دون افتراضات مسبقة.
+5. قاعدة الجولات الأربع والتقييم المرحلي (إلزامية صارمة):
    - خلال أول 3 ردود فعلية للمستفيد في المحطة (عندما stationTurnCount < 3):
      أ) ⛔ ممنوع منعاً باتاً إنهاء المحطة أو وضع station_completed: true، حتى لو ذكر رقماً أو التزاماً وقتياً (مثل 3 دقائق أو 30 ريال).
      ب) ⛔ ممنوع منعاً باتاً اقتراح إنهاء المحطة أو عرض نافذة اعتماد التقييم ("هل ترغب في اعتماد التقييم...").
@@ -622,8 +627,8 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
   // تطهير وبناء تسلسل المحادثة التفاعلية بما يتوافق بدقة مع متطلبات Google GenAI
   const contents: { role: 'user' | 'model'; parts: { text: string }[] }[] = [];
 
-  // 5) الاقتصار على آخر 12 رسالة من history لتعميق الذاكرة الحوارية وربط السياق
-  const recentHistory = Array.isArray(history) ? history.slice(-12) : [];
+  // تمرير سجل المحادثة الكامل للمحطة (حتى 40 رسالة) لتعميق الذاكرة الحوارية واستخلاص التوصية العلاجية الذهبية ونقاط القوة بدقة
+  const recentHistory = Array.isArray(history) ? history.slice(-40) : [];
   for (const h of recentHistory) {
     if (!h) continue;
     const role: 'user' | 'model' =
@@ -721,7 +726,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
           },
           advice: {
             type: Type.STRING,
-            description: 'نصيحة عملية سريعة وموجهة',
+            description: 'التوصية العلاجية الذهبية: عند اكتمال المحطة اذكر العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار وليس حكمة عامة',
           },
           reply: {
             type: Type.STRING,
@@ -730,7 +735,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
           actionSteps: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
-            description: 'خطوات إجرائية سريعة يمكن إضافتها لقائمة الأهداف',
+            description: 'خطوات إجرائية سريعة مستمدة من كلام المستخدم يمكن إضافتها لقائمة الأهداف',
           },
           reflectionQuestion: {
             type: Type.STRING,
@@ -743,12 +748,12 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
           strengths: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
-            description: '1 to 3 dynamic key strengths extracted from what the user actually said in this session',
+            description: '1 to 3 realistic strengths strictly consistent with user complaints (never contradict complaints)',
           },
           challenges: {
             type: Type.ARRAY,
             items: { type: Type.STRING },
-            description: '1 to 3 dynamic key challenges/growth areas extracted from what the user actually said in this session',
+            description: '1 to 3 improvement opportunities/challenges extracted from what the user actually said in this session',
           },
         },
         required: ['reasoning', 'advice', 'reply', 'actionSteps'],
@@ -1030,16 +1035,16 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
         // 2) استدعاء Groq بنفس systemInstruction وآخر 12 رسالة من history، مع response_format: { type: "json_object" }
         const groqSystemPrompt = `${systemInstruction || ''}
 
-IMPORTANT: You must respond in valid JSON format with the following fields:
+IMPORTANT: You must respond in valid JSON format with all text fields written strictly in Arabic (العربية الدافئة الواضحة) using the following fields:
 {
   "agent_name": "${advisorName}",
   "reasoning": "تحليل واستبصار عميق وخطوات تفكير منطقية",
   "score": ${effectiveScore},
   "summary": "ملخص الوضع",
   "advice": "نصيحة عملية سريعة وموجهة",
-  "reply": "نص الرد الحواري المشخصن والتفاعلي المباشر من المستشار",
+  "reply": "نص الرد الحواري المشخصن والتفاعلي المباشر من المستشار باللغة العربية",
   "actionSteps": ["خطوة عملية أولى", "خطوة عملية ثانية"],
-  "reflectionQuestion": "سؤال تأملي ذكي للمستفيد",
+  "reflectionQuestion": "سؤال تأملي ذكي للمستفيد باللغة العربية",
   "station_completed": false,
   "strengths": ["نقاط القوة"],
   "challenges": ["فرصة تطوير من كلامه"]
@@ -1047,7 +1052,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         groqMessages.push({ role: 'system', content: groqSystemPrompt });
 
-        const recentHistory = Array.isArray(history) ? history.slice(-12) : [];
+        const recentHistory = Array.isArray(history) ? history.slice(-40) : [];
         for (const h of recentHistory) {
           if (!h) continue;
           const role =
@@ -1089,7 +1094,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
         });
 
         const groqTimeoutPromise = new Promise<globalThis.Response>((_, reject) =>
-          setTimeout(() => reject(new Error('مهلة استجابة مزود Groq (2.5 ثوانٍ) تجاوزت الحد المسموح')), 2500)
+          setTimeout(() => reject(new Error('مهلة استجابة مزود Groq (5 ثوانٍ) تجاوزت الحد المسموح')), 5000)
         );
 
         const groqRes: globalThis.Response = await Promise.race([groqCall, groqTimeoutPromise]);
@@ -1246,5 +1251,256 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
     // 3) إضافة حقل source: "local-fallback" (لا نُخزّن الردود الاحتياطية في الذاكرة المؤقتة حتى نُعطي Gemini الأولوية في المرة القادمة)
     (localFallback as any).source = 'local-fallback';
     return res.json(localFallback);
+  }
+});
+
+// Helper: Extract user-proposed concrete habit/plan and non-contradictory insights from full station dialogue
+export function buildConversationAwareStationSummary(
+  agentKey: string,
+  stationTitle: string,
+  history: any[],
+  userScore?: number
+): {
+  strengths: string[];
+  challenges: string[];
+  goldenRecommendation: string;
+  source: 'fallback';
+} {
+  const userUtterances: string[] = [];
+  if (Array.isArray(history)) {
+    for (const h of history) {
+      if (!h) continue;
+      const role = h.role || h.sender;
+      if (role !== 'user') continue;
+      const text = String(h.content || h.text || '').trim();
+      if (!text) continue;
+      // استثناء رسائل الترحيب القصيرة جداً ورسائل زر الاعتماد الآلية
+      if (/^(?:اعتمد\s*التقييم(?:\s*بدرجة.*)?|نعم\s*اعتمد|أرغب في الاستمرار)/i.test(text)) continue;
+      userUtterances.push(text);
+    }
+  }
+
+  const allUserText = userUtterances.join(' ').trim();
+
+  // 1. البحث عن العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار (عكسياً من الأحدث للأقدم)
+  const proposalPattern = /(?:^|\s)(?:سأخصص|ساخصص|سأبدأ|سابدا|سأجرب|ساجرب|سأحاول|ساحاول|سألتزم|سالتزم|سأنظم|سانظم|سأتواصل|ساتواصل|سأمشي|سامشي|سأقرأ|ساقرا|سأدخر|سادخر|سأوفر|ساوفر|سأغلق|ساغلق|أخطط|اخطط|أنوي|انوي|قررت|اتفقنا على|فكرت في|خطة|ممكن أبدأ|أفضل أن)(?:\s|$)/i;
+  let userProposedPlan = '';
+  for (let i = userUtterances.length - 1; i >= 0; i--) {
+    const u = userUtterances[i];
+    if (proposalPattern.test(u) && u.length >= 10) {
+      userProposedPlan = u.replace(/^(?:نعم،?|حسناً،?|تمام،?|أجل،?|طيب،?)\s*/i, '').trim();
+      break;
+    }
+  }
+
+  // إن لم توجد جملة بصيغة مستقبلية صريحة، نبحث عن جملة تحتوي مدة زمنية أو خطوة عملية ذكرها المستخدم
+  if (!userProposedPlan) {
+    for (let i = userUtterances.length - 1; i >= 0; i--) {
+      const u = userUtterances[i];
+      if (/(\d+\s*(?:دقيقة|دقائق|ساعة|ساعات|صفحة|صفحات|ريال|مرات)|أسبوعياً|يومياً|تخصيص\s+وقت|تنظيم\s+وقت)/i.test(u) && u.length >= 12) {
+        userProposedPlan = u.trim();
+        break;
+      }
+    }
+  }
+
+  const goldenRecommendation = userProposedPlan
+    ? `تطبيق الخطة التي اقترحتها في الحوار: "${userProposedPlan.slice(0, 140)}${userProposedPlan.length > 140 ? '...' : ''}"`
+    : `البدء بخطوة عملية واحدة صغيرة ومحددة تعالج التحدي الذي وصفته في ${stationTitle}`;
+
+  // 2. نقاط القوة: متوافقة تماماً مع شكوى المستخدم دون أي تناقض
+  const isSocialStruggle = /(فتور|انعزال|عزلة|وحيد|وحدة|قطيعة|انقطاع|قلة\s*تواصل|مقص[ّ]?ر\s*مع\s*أصدق|انطواء|تراجع\s*(?:في\s*)?التواصل)/i.test(allUserText);
+  const rawStrengths: string[] = [];
+
+  if (agentKey === 'social' && isSocialStruggle) {
+    rawStrengths.push(
+      'الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل',
+      'الوضوح في تحديد طبيعة الفتور الاجتماعي دون التهرب منه'
+    );
+  } else if (userProposedPlan) {
+    rawStrengths.push(
+      'المبادرة بوضع خطة عملية محددة تناسب واقعك الحالي',
+      `الوضوح والصدق في توصيف واقعك ضمن ${stationTitle}`
+    );
+  } else if (userScore !== undefined && userScore >= 7.5 && allUserText.length > 0 && !/(ضغط|تشتت|أرق|إرهاق|ديون|عجز|فتور|انعزال)/i.test(allUserText)) {
+    rawStrengths.push(
+      `الالتزام والانتظام فيما ذكرته خلال حوار ${stationTitle}`,
+      'الوضوح في تحديد أولوياتك الحالية'
+    );
+  } else {
+    rawStrengths.push(
+      `الوضوح والصراحة في تشخيص واقع ${stationTitle}`,
+      'الرغبة الصادقة في معالجة التحديات الحالية بخطوات واقعية'
+    );
+  }
+
+  const strengths = sanitizeStrengths(rawStrengths, allUserText, userUtterances);
+
+  // 3. فرص التحسين بناءً على ما ورد في الحوار
+  const challenges: string[] = [];
+  if (userProposedPlan) {
+    challenges.push(`حماية وتثبيت خطتك المحددة (${userProposedPlan.slice(0, 80)}${userProposedPlan.length > 80 ? '...' : ''})`);
+  }
+  if (isSocialStruggle) {
+    challenges.push('تقليص الفتور والانعزال عبر جدول تواصل بسيط ومريح مع المقربين');
+  } else if (/(نوم|أرق|إرهاق|تعب|سهر)/i.test(allUserText)) {
+    challenges.push('ضبط إيقاع النوم والراحة لتقليل الإرهاق اليومي');
+  } else if (/(تشتت|شاشات|هاتف|تسويف)/i.test(allUserText)) {
+    challenges.push('تقليل المشتتات اليومية وحماية وقت التركيز');
+  } else if (/(عجز|لا أدخر|لا ادخر|ديون|قليل|مصروف)/i.test(allUserText)) {
+    challenges.push('تثبيت آلية ميسرة لضبط الأولويات والادخار التدريجي');
+  }
+
+  if (challenges.length === 0) {
+    challenges.push(`المداومة على الخطوة العملية التي اخترتها في ${stationTitle}`);
+  }
+
+  return {
+    strengths: strengths.slice(0, 3),
+    challenges: challenges.slice(0, 3),
+    goldenRecommendation,
+    source: 'fallback',
+  };
+}
+
+// Endpoint: Station Completion Summary (Achievement Card & Golden Recommendation via Full Station History)
+advisorChatRouter.post('/station-summary', async (req: Request, res: Response) => {
+  const clientAbortController = new AbortController();
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      clientAbortController.abort();
+    }
+  });
+
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    return res.status(400).json({ error: 'بيانات الطلب غير صالحة.' });
+  }
+
+  const { advisor, agentKey: rawAgentKey, userProfile, userName, score, history } = req.body;
+  const agentKey = rawAgentKey || (typeof advisor === 'string' ? advisor : advisor?.id) || 'spiritual';
+  const defaultMeta = AGENT_INFO_MAP[agentKey] || {
+    name: 'مستشار وزان',
+    role: 'مستشار توازن الحياة',
+  };
+  const stationTitleMap: Record<string, string> = {
+    spiritual: 'الجانب الروحي والسكينة',
+    financial: 'الجانب المالي والاستقلال',
+    career: 'الجانب المهني والوظيفي',
+    personal: 'الجانب الشخصي والوعي بالذات',
+    learning: 'الجانب التعليمي والمعرفي',
+    family: 'الجانب الأسري والعائلي',
+    social: 'الجانب الاجتماعي والعلاقات',
+    health: 'الجانب الصحي والبدني',
+  };
+  const advisorName = (advisor && typeof advisor === 'object' && advisor.name) ? advisor.name : defaultMeta.name;
+  const stationTitle = (advisor && typeof advisor === 'object' && advisor.title)
+    ? advisor.title
+    : (stationTitleMap[agentKey] || defaultMeta.role);
+
+  const safeHistory = Array.isArray(history) ? history.slice(-40) : [];
+  const historyTexts: string[] = [];
+  const transcriptLines: string[] = [];
+
+  for (const h of safeHistory) {
+    if (!h) continue;
+    const role = h.role || h.sender;
+    const content = String(h.content || h.text || '').trim();
+    if (!content) continue;
+    const label = role === 'model' || role === 'advisor' ? `المستشار (${advisorName})` : 'المستفيد';
+    transcriptLines.push(`${label}: ${content}`);
+    if (role === 'user') {
+      historyTexts.push(content);
+    }
+  }
+
+  const allUserText = historyTexts.join(' ');
+  const deterministicFallback = buildConversationAwareStationSummary(agentKey, stationTitle, safeHistory, Number(score));
+
+  if (!GEMINI_API_KEY || transcriptLines.length === 0) {
+    return res.json(deterministicFallback);
+  }
+
+  const summaryInstruction = `
+أنت "${advisorName}" في منصة وزان، ومهمتك الآن توليد بطاقة الإنجاز وملخص نهاية محطة "${stationTitle}" بناءً على سجل المحادثة الكامل أدناه.
+
+سياق المستفيد:
+- الاسم: ${userProfile?.name || userName || 'المستفيد'}
+- حالة العمل: ${userProfile?.employmentStatus || userProfile?.workStatus || 'غير محدد'}
+- الدرجة المعتمدة: ${score ?? 'غير محددة'}/10
+
+⚠️ تعليمات صارمة وملزمة لا يجوز مخالفتها:
+1. التوصية العلاجية الذهبية (goldenRecommendation):
+   - اذكر فيها **العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار** (وليس حكمة عامة أو نصيحة جاهزة).
+   - استخرج عبارته وخطته بدقة واضحة وعملية وقابلة للتنفيذ.
+2. نقاط القوة (strengths - من 2 إلى 3 نقاط):
+   - يجب أن تستند حصراً لما ذكره المستخدم بلسانه في الحوار.
+   - ⛔ يُمنع منعاً باتاً كتابة نقاط قوة تتعارض مع شكوى المستخدم (مثلاً: لا تكتب "حضور اجتماعي متوازن" إذا اشتكى من الفتور والانعزال، بل اكتب "الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل").
+3. فرص التحسين (challenges - من 2 إلى 3 نقاط):
+   - اذكر التحديات الفعلية وفرص التحسين المرتبطة مباشرة بشكوى المستخدم في الحوار.
+`;
+
+  const userPrompt = `سجل المحادثة الكامل لمحطة "${stationTitle}":\n\n${transcriptLines.join('\n\n')}`;
+
+  try {
+    const modelName = GEMINI_MODEL || 'gemini-3.5-flash-lite';
+    let timeoutHandle: any;
+    const apiPromise = ai.models.generateContent({
+      model: modelName,
+      contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+      config: {
+        systemInstruction: summaryInstruction,
+        responseMimeType: 'application/json',
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            strengths: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: '2 to 3 strengths grounded strictly in the user dialogue without contradicting any complaint',
+            },
+            challenges: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: '2 to 3 improvement opportunities grounded in the user dialogue',
+            },
+            goldenRecommendation: {
+              type: Type.STRING,
+              description: 'التوصية العلاجية الذهبية: العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار وليس حكمة عامة',
+            },
+          },
+          required: ['strengths', 'challenges', 'goldenRecommendation'],
+        },
+      },
+    });
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timeoutHandle = setTimeout(() => reject(new Error('Summary Gemini timeout (4500ms)')), 4500);
+    });
+
+    const response = await Promise.race([apiPromise, timeoutPromise]);
+    clearTimeout(timeoutHandle);
+
+    const parsed = extractCleanJson(response?.text || '{}');
+    const finalStrengths = sanitizeStrengths(
+      Array.isArray(parsed.strengths) && parsed.strengths.length > 0 ? parsed.strengths : deterministicFallback.strengths,
+      allUserText,
+      historyTexts
+    );
+    const finalChallenges = Array.isArray(parsed.challenges) && parsed.challenges.length > 0
+      ? parsed.challenges.map((c: any) => String(c || '').trim()).filter(Boolean)
+      : deterministicFallback.challenges;
+    const finalGolden = typeof parsed.goldenRecommendation === 'string' && parsed.goldenRecommendation.trim().length > 5
+      ? parsed.goldenRecommendation.trim()
+      : deterministicFallback.goldenRecommendation;
+
+    return res.json({
+      strengths: finalStrengths.slice(0, 3),
+      challenges: finalChallenges.slice(0, 3),
+      goldenRecommendation: finalGolden,
+      source: 'gemini',
+    });
+  } catch (err: any) {
+    console.warn('[Station Summary] تعذر توليد الملخص عبر Gemini، استخدام الاستخلاص المحلي المرتبط بسجل الحوار:', err?.message || err);
+    return res.json(deterministicFallback);
   }
 });

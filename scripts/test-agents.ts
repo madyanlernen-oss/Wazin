@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from '@google/genai';
 import { GEMINI_API_KEY, GEMINI_MODEL, GROQ_API_KEY, GROQ_MODEL } from '../server/config/env';
 import { generateLocalAgentResponse, resetLocalFallbackTracker } from '../server/agents/localAdvisorEngine';
-import { extractExplicitRating as extractServerExplicitRating } from '../server/middleware/validation';
+import { extractExplicitRating as extractServerExplicitRating, sanitizeStrengths } from '../server/middleware/validation';
+import { buildConversationAwareStationSummary } from '../server/routes/advisorChat';
 import { getClientAdvisorResponse, calculateSemanticScore, extractExplicitRating as extractClientExplicitRating } from '../src/components/onboarding/clientIntelligence';
 import { extractInsightsFromAnswers } from '../src/utils/storage';
 import { ADVISORS_LIST } from '../src/data/advisorsData';
@@ -546,6 +547,140 @@ async function testAgentBehaviors() {
       name: 'Unified User Name & Station Title Variables (No Role Leak / No "يا صديقنا")',
       passed: false,
       durationMs: Date.now() - tplStart,
+      message: err.message,
+    });
+  }
+
+  // --- 2.1c Neutral Fallbacks & Personalized Achievement Card Summary ---
+  const neutralStart = Date.now();
+  try {
+    // 1. Health distress must not assume unmentioned weight gain or fat burning
+    const healthSleepOnly = generateLocalAgentResponse(
+      'health',
+      'أعاني من قلة النوم والإرهاق هذه الأيام',
+      'نورة العتيبي',
+      getAdvisor('health'),
+      5,
+      true,
+      8,
+      '',
+      'initial_assessment',
+      1,
+      studentProfile
+    );
+    assert(!healthSleepOnly.reply.includes('زيادة الوزن') && !healthSleepOnly.reply.includes('حرق الدهون'), 'Health fallback must NOT assume unmentioned weight gain or fat burning');
+    assert(healthSleepOnly.reply.includes('؟'), 'Health fallback must remain exploratory with an open question');
+
+    // 2. Personal distress must not assume unmentioned low self-confidence or calling user failed
+    const personalStressOnly = generateLocalAgentResponse(
+      'personal',
+      'أشعر بضغط وتسويف في يومي',
+      'نورة العتيبي',
+      getAdvisor('personal'),
+      5,
+      true,
+      4,
+      '',
+      'initial_assessment',
+      1,
+      studentProfile
+    );
+    assert(!personalStressOnly.reply.includes('ضعف الثقة') && !personalStressOnly.reply.includes('فاشل'), 'Personal fallback must NOT assume unmentioned low self-confidence');
+    assert(personalStressOnly.reply.includes('؟'), 'Personal fallback must ask an open exploratory question');
+
+    // 3. Learning & Social complaints must NOT trigger canned praise
+    const learningComplaint = generateLocalAgentResponse(
+      'learning',
+      'لا أقرأ أي كتاب ولا أجد وقتاً لتعلم مهارة جديدة',
+      'نورة العتيبي',
+      getAdvisor('learning'),
+      4,
+      true,
+      5,
+      '',
+      'initial_assessment',
+      1,
+      studentProfile
+    );
+    assert(!learningComplaint.reply.includes('اختيار حكيم ومثمر'), 'Learning complaint MUST NOT trigger canned praise "اختيار حكيم ومثمر"');
+
+    const socialComplaint = generateLocalAgentResponse(
+      'social',
+      'أعاني من فتور وانعزال وتباعد في التواصل مع أصدقائي',
+      'نورة العتيبي',
+      getAdvisor('social'),
+      5,
+      true,
+      7,
+      '',
+      'initial_assessment',
+      1,
+      studentProfile
+    );
+    assert(!socialComplaint.reply.includes('خطوة اجتماعية راقية') && !socialComplaint.reply.includes('انتقاء الصحبة'), 'Social complaint MUST NOT trigger canned praise for unperformed habits');
+
+    // 4. Client intelligence engine must not praise negated/unperformed habits
+    const clientNoExercise = getClientAdvisorResponse(
+      getAdvisor('health'),
+      'لا أمارس رياضة ولا أمشي أبداً',
+      8,
+      undefined,
+      3,
+      [],
+      studentProfile
+    );
+    assert(!clientNoExercise.reply.includes('خطوة مباركة'), 'Client fallback MUST NOT praise negated exercise');
+
+    // 5. Station summary goldenRecommendation captures user-proposed plan and avoids contradictory strengths
+    const stationSummary = buildConversationAwareStationSummary(
+      'social',
+      'الجانب الاجتماعي والعلاقات',
+      [
+        { role: 'user', content: 'أشعر بالفتور والانعزال عن أصدقائي هذه الفترة' },
+        { role: 'model', content: 'أسمعك باهتمام. ما الشكل الأنسب للتواصل في هذه المرحلة؟' },
+        { role: 'user', content: 'سأخصص مساء كل خميس للقاء أصدقائي المقربين لمدة ساعة واحدة' },
+      ],
+      6.0
+    );
+    assert(
+      stationSummary.goldenRecommendation.includes('مساء كل خميس') && stationSummary.goldenRecommendation.includes('أصدقائي المقربين'),
+      'Golden recommendation MUST capture the specific habit proposed by the user'
+    );
+    assert(
+      !stationSummary.strengths.some((s) => s.includes('حضور اجتماعي متوازن')),
+      'Strengths MUST NOT contradict social isolation/apathy complaints'
+    );
+    assert(
+      stationSummary.strengths.some((s) => s.includes('الأصدقاء المقربين') || s.includes('الوعي')),
+      'Strengths must reflect grounded awareness such as valuing close friends'
+    );
+
+    // 6. Sanitizer guards contradictory LLM output too
+    const sanitizedSocial = sanitizeStrengths(
+      ['حضور اجتماعي متوازن يحقق الانتماء دون استنزاف'],
+      'أشتكي من الفتور والانعزال في علاقاتي',
+      []
+    );
+    assert(
+      !sanitizedSocial.some((s) => s.includes('حضور اجتماعي متوازن')),
+      'sanitizeStrengths must rewrite contradictory social strength'
+    );
+
+    results.push({
+      suite,
+      domain: 'Neutrality & Summary',
+      name: 'Neutral Fallbacks (No Presumed Symptoms/Praise) & User-Plan Golden Summary',
+      passed: true,
+      durationMs: Date.now() - neutralStart,
+      details: 'Verified zero symptom assumptions, zero canned praise, user-proposed golden plan, and non-contradictory strengths',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Neutrality & Summary',
+      name: 'Neutral Fallbacks (No Presumed Symptoms/Praise) & User-Plan Golden Summary',
+      passed: false,
+      durationMs: Date.now() - neutralStart,
       message: err.message,
     });
   }

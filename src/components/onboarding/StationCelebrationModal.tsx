@@ -108,6 +108,17 @@ export const StationCelebrationModal: React.FC<StationCelebrationModalProps> = (
               ))}
             </ul>
           </div>
+
+          {currentActiveInsights.goldenRecommendation && (
+            <div className="pt-2 border-t border-[#E2E8F0] dark:border-[#1E343F]">
+              <span className="font-bold text-[#0B6E72] dark:text-cyan-400 block mb-1">
+                💡 التوصية العلاجية الذهبية:
+              </span>
+              <p className="text-[#0F172A] dark:text-[#F1F5F9] leading-relaxed font-medium">
+                {isolateNumbersInText(currentActiveInsights.goldenRecommendation.replace(/\*\*/g, ''))}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Continue CTA */}
