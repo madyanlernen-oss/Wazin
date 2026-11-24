@@ -490,6 +490,66 @@ async function testAgentBehaviors() {
     });
   }
 
+  // --- 2.1b Unified Greeting & Station Title Parity (Stations 4-8) ---
+  const tplStart = Date.now();
+  try {
+    const stationIds = ['personal', 'learning', 'family', 'social', 'health'] as const;
+    for (const stId of stationIds) {
+      const adv = getAdvisor(stId);
+      const qReply = generateLocalAgentResponse(
+        stId,
+        'كيف أبدأ خطوة عملية في هذا الجانب؟',
+        'نورة العتيبي',
+        adv,
+        5,
+        true,
+        5,
+        '',
+        'initial_assessment',
+        1,
+        studentProfile
+      );
+      assert(!qReply.reply.includes('صديقنا'), `${stId} question reply must use actual userName instead of "صديقنا"`);
+      assert(!qReply.reply.includes(adv.role), `${stId} question reply must NOT leak advisor role "${adv.role}" as station name`);
+      assert(qReply.reply.includes(adv.title), `${stId} question reply must use station title "${adv.title}"`);
+
+      const adoptReply = generateLocalAgentResponse(
+        stId,
+        'اعتمد التقييم',
+        'نورة العتيبي',
+        adv,
+        7.5,
+        true,
+        5,
+        '',
+        'initial_assessment',
+        3,
+        studentProfile
+      );
+      assert(adoptReply.station_completed === true, `${stId} explicit adoption must complete station`);
+      assert(adoptReply.reply.includes(adv.title), `${stId} adoption reply must use station title "${adv.title}"`);
+      assert(!adoptReply.reply.includes(adv.role), `${stId} adoption reply must NOT use advisor role "${adv.role}" in station phrase`);
+      assert(adoptReply.reply.includes('نورة العتيبي'), `${stId} adoption reply must address user by actual name`);
+    }
+    results.push({
+      suite,
+      domain: 'All Stations (4-8)',
+      name: 'Unified User Name & Station Title Variables (No Role Leak / No "يا صديقنا")',
+      passed: true,
+      durationMs: Date.now() - tplStart,
+      details: 'Verified personal, learning, family, social, health replies use advisor.title and user.name',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'All Stations (4-8)',
+      name: 'Unified User Name & Station Title Variables (No Role Leak / No "يا صديقنا")',
+      passed: false,
+      durationMs: Date.now() - tplStart,
+      message: err.message,
+    });
+  }
+
   // --- 2.2 Financial Advisor (أ. كمال المالي) ---
   const advFinancial = getAdvisor('financial');
 

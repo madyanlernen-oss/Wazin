@@ -273,7 +273,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
 
             <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white transition-colors">
-              مرحباً بك، {userProfile?.name || 'صديقنا'} 👋
+              مرحباً بك، {userProfile?.name?.trim() || 'عزيزي'} 👋
             </h1>
 
             <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-300 max-w-2xl leading-relaxed transition-colors">

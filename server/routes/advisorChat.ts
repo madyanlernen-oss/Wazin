@@ -157,7 +157,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'نوع حقل incomeStability غير صالح، يجب أن يكون نصاً.' });
   }
 
-  const effectiveUserProfile = userProfile || { name: userName || 'صديقنا' };
+  const effectiveUserProfile = userProfile || { name: userName || 'عزيزي' };
 
   // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون، الدخل)
   let workStatus = (
@@ -238,6 +238,19 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 
   advisorName = (advisor && typeof advisor === 'object' && advisor.name) ? advisor.name : defaultMeta.name;
   const advisorRole = (advisor && typeof advisor === 'object' && (advisor.role || advisor.title)) ? (advisor.role || advisor.title) : defaultMeta.role;
+  const stationTitleMap: Record<string, string> = {
+    spiritual: 'الجانب الروحي والسكينة',
+    financial: 'الجانب المالي والاستقلال',
+    career: 'الجانب المهني والوظيفي',
+    personal: 'الجانب الشخصي والوعي بالذات',
+    learning: 'الجانب التعليمي والمعرفي',
+    family: 'الجانب الأسري والعائلي',
+    social: 'الجانب الاجتماعي والعلاقات',
+    health: 'الجانب الصحي والبدني',
+    aggregator: 'التكامل والتوازن الشامل',
+    advisor: 'التوجيه التنفيذي الشامل',
+  };
+  const stationTitle = (advisor && typeof advisor === 'object' && advisor.title) ? advisor.title : (stationTitleMap[agentKey] || advisorRole);
 
   // فحص ما إذا كان المستخدم يطلب صراحة مواصلة الحوار، التعمق، أو إطالة النقاش (عدم إنهاء المحطة)
   const isContinueIntent = /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار|المزيد|فهم\s*أكثر|فهم\s*اكثر|تقييم\s*أدق|تقييم\s*ادق)/i.test(message) && !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل\s*للمحطة|ننتقل\s*للتالية|المحطة التالية)/i.test(message);
@@ -344,12 +357,12 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   // أولاً: حدود الأدوار والتخصص الحصري
   const roleBoundariesGuideline = `
 [أولاً: حدود الأدوار والتخصص الحصري 🎯]
-1. اختصاصك الحصري: أنت تتحدث بصفتك "${advisorName}"، واختصاصك الوحيد والمحصور هو (${advisorRole}) فقط، وفق ميثاقك.
+1. اختصاصك الحصري: أنت تتحدث بصفتك "${advisorName}" (${advisorRole})، واختصاصك الوحيد والمحصور هو (${stationTitle}) فقط، وفق ميثاقك.
 2. ⛔ ممنوع منعاً باتاً:
    - ذكر أرقام المحطات أو ترتيبها (مثل: "لننتقل للجانب الرابع" أو "المحطة السابعة").
    - فتح موضوع أو طرح أسئلة تخص وكيلاً آخر (العلاقات للاجتماعي/الأسري، المال للمالي، الصحة للبدني، الروح للروحي، الوظيفة للمهني...).
 3. إذا ذكر المستخدم موضوعاً خارج اختصاصك:
-   - اعترف بما قاله في جملة واحدة فقط (مثال: "أقدّر أثر هذا التحدي عليك")، ثم عُد فوراً وبسلاسة إلى صميم تخصصك (${advisorRole}).
+   - اعترف بما قاله في جملة واحدة فقط (مثال: "أقدّر أثر هذا التحدي عليك")، ثم عُد فوراً وبسلاسة إلى صميم تخصصك (${stationTitle}).
 4. خصوصية المستشار الروحي (د. سفيان الروحي):
    - دورك مرشد للسكينة، التأمل القيمي، والسلام الداخلي، وحضور القلب، وخفض مشتتات النفس.
    - ⛔ احترام حدود التخصص: يُمنع منعاً باتاً تحويل الاستشارة الروحية إلى إدارة مهام، جداول إنتاجية، مصفوفات أداء، أو تنظيم عمل مكتبي؛ التزم حصراً بالمساحة الروحية والصفاء النفسي.
@@ -427,7 +440,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   if (isEvaluationSession) {
     let stationStateGuideline = `المحطة في مرحلة الاستكشاف والتشخيص التدرجي (التبادل ${stationTurnCount + 1} من 4+)؛ ⛔ يُمنع إنهاء المحطة أو اقتراح الاعتماد قبل الجولة الرابعة، واطرح سؤالاً استكشافياً واحداً محدداً مرتبطاً بكلامه.`;
     if (isContinueIntent) {
-      stationStateGuideline = `[المستفيد اختار صراحة مواصلة الحوار والتعمق ("${message}")]: المستفيد رفض إنهاء المحطة وفضّل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة وإطالة الاستكشاف. ⛔ يُمنع منعاً باتاً إنهاء المحطة أو وضع "station_completed": true! اجعل "station_completed": false حتماً. رحب برغبته في الاستمرار في جملة دافئة، ثم اطرح سؤالاً تشخيصياً نوعياً جديداً في صميم اختصاصك (${advisorRole}) لتعميق فهم واقعه.`;
+      stationStateGuideline = `[المستفيد اختار صراحة مواصلة الحوار والتعمق ("${message}")]: المستفيد رفض إنهاء المحطة وفضّل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة وإطالة الاستكشاف. ⛔ يُمنع منعاً باتاً إنهاء المحطة أو وضع "station_completed": true! اجعل "station_completed": false حتماً. رحب برغبته في الاستمرار في جملة دافئة، ثم اطرح سؤالاً تشخيصياً نوعياً جديداً في صميم اختصاصك (${stationTitle}) لتعميق فهم واقعه.`;
     } else if (isAdoptionIntent) {
       stationStateGuideline = `[طلب اعتماد صريح للمحطة!] المستفيد يطلب صراحة وبشكل مباشر اعتماد التقييم وإنهاء المحطة والانتقال ("${message}"). يجب إلزامياً وضع "station_completed": true، وتقديم الدرجة والملخص التشخيصي والنصيحة الختامية دون طرح أي سؤال على الإطلاق! (يُمنع منعاً باتاً طرح أي سؤال جديد).`;
     } else if (stationTurnCount < 3) {
@@ -438,7 +451,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 
     evaluationSessionGuideline = `
 [بروتوكول جلسة الاستشارة والتقييم الحواري التكيفي 🌿]
-المستفيد يخوض جلسة استشارية تقييمية لمحطة (${advisorName})${evaluationQuestionTitle ? ` - وسؤال المحطة: "${evaluationQuestionTitle}"` : ''}.
+المستفيد يخوض جلسة استشارية تقييمية لمحطة ${stationTitle} (${advisorName})${evaluationQuestionTitle ? ` - وسؤال المحطة: "${evaluationQuestionTitle}"` : ''}.
 - عدد التبادلات الحوارية التي تمت حتى الآن في هذه المحطة (stationTurnCount): ${stationTurnCount}.
 - حالة إتمام المحطة: ${stationStateGuideline}
 
@@ -452,7 +465,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 [بروتوكول جلسة الاستشارة المفتوحة المستقلة 💬]
 المستفيد حالياً في غرفة الاستشارة الحرة المستمرة معك (${advisorName}).
 1. ⚠️ إلزام صارم: يجب أن تكون قيمة "station_completed": false دائماً في هذه الجلسة.
-2. ركز على الإجابة الاستشارية المعمقة، الإرشاد المستمر، والعصف الذهني في مجال (${advisorRole}).
+2. ركز على الإجابة الاستشارية المعمقة، الإرشاد المستمر، والعصف الذهني في مجال (${stationTitle}).
 `;
   }
 
@@ -490,7 +503,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 
   const userContextBlock = `
 [سياق المستفيد وخلفيته الحياتية الأساسية 🎯]:
-- الاسم: ${effectiveUserProfile?.name || userName || 'صديقنا'}
+- الاسم: ${effectiveUserProfile?.name || userName || 'عزيزي'}
 - حالة العمل: ${workStatus}
 ${ageGroup ? `- الفئة العمرية: ${ageGroup}` : ''}
 ${dependentsText ? `- المعالون: ${dependentsText}` : ''}
@@ -579,7 +592,7 @@ ${domainSpecificContextGuideline}
 
 ${agentRoleDescription}
 
-أنت الآن في محادثة استشارية حية بصفتك: "${advisorName}" (${advisorRole}) ضمن منصة وزان.
+أنت الآن في محادثة استشارية حية بصفتك: "${advisorName}" (${advisorRole}) لمحطة "${stationTitle}" ضمن منصة وزان.
 تحدث كشخصية واعية، حكيمة ودافئة، تفهم بذكاء الإنسان أمامها وتفكر معه بصدق ورصانة.
 
 ${modeGuideline}
@@ -591,7 +604,7 @@ ${scoringAndCompletionGuideline}
 ${evaluationSessionGuideline}
 
 سياق المستفيد من منصة وزان:
-- الاسم: ${effectiveUserProfile?.name || 'صديقنا'}
+- الاسم: ${effectiveUserProfile?.name || 'عزيزي'}
 - حالة العمل: ${workStatus}
 ${ageGroup ? `- الفئة العمرية: ${ageGroup}` : ''}
 ${incomeSource ? `- مصدر الدخل: ${incomeSource}` : ''}
@@ -932,7 +945,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
 - لا تقل أبداً في ردك "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة" أو أي عبارة ختامية.
 - اجعل "station_completed": false حتماً.
 - إذا كان المستفيد قد طرح سؤالاً، أجب عليه باحتواء ووضوح أولاً.
-- اختم ردك حتماً بطرح سؤال تشخيصي جديد وموجه لاستكشاف زاوية أخرى في (${advisorRole}) لتعميق فهم حالة المستفيد.`;
+- اختم ردك حتماً بطرح سؤال تشخيصي جديد وموجه لاستكشاف زاوية أخرى في (${stationTitle}) لتعميق فهم حالة المستفيد.`;
 
         const retryConfig = {
           ...requestConfig,
@@ -1128,7 +1141,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 - لا تقل أبداً في ردك "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة".
 - اجعل "station_completed": false حتماً.
 - إذا سأل المستفيد أجب على سؤاله باحتواء أولاً.
-- اختم ردك بطرح سؤال تشخيصي جديد وموجه في (${advisorRole}) لتعميق فهم حالة المستفيد.`,
+- اختم ردك بطرح سؤال تشخيصي جديد وموجه في (${stationTitle}) لتعميق فهم حالة المستفيد.`,
             });
 
             const retryGroqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
@@ -1220,7 +1233,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
     const localFallback = generateLocalAgentResponse(
       agentKey,
       message || '',
-      effectiveUserProfile?.name || userName || 'صديقنا',
+      effectiveUserProfile?.name || userName || 'عزيزي',
       advisor,
       userScore || 5,
       isEvaluationSession,

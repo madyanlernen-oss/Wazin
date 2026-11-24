@@ -15,7 +15,7 @@ export const STATION_NEUTRAL_FALLBACKS: Record<string, string[]> = {
     'نظرتك الواقعية ممتازة. لو أردنا وضع خطوة مالية واحدة خفيفة للأسبوع القادم تحمي ميزانيتك دون تضييق، ما الإجراء الأقرب لواقعك؟',
   ],
   health: [
-    'أسمعك باهتمام يا صديقنا. كيف يبدو إيقاع نومك واستيقاظك في الأيام الأخيرة، وهل تستيقظ بطاقة كافية لبدء يومك؟',
+    'أسمعك باهتمام. كيف يبدو إيقاع نومك واستيقاظك في الأيام الأخيرة، وهل تستيقظ بطاقة كافية لبدء يومك؟',
     'الجسد يرسل إشاراته بوضوح عندما يرهق. خلال ساعات يومك المعتاد، متى تلاحظ هبوط طاقتك الجسدية أو حاجتك إلى حركة وتنفس؟',
     'أقدّر مشاركتك لتفاصيل صحتك. كيف تصف علاقتك بشرب الماء والنشاط الحركي البسيط وسط انشغالك اليومي؟',
     'العناية بالبدن لا تتطلب مجهوداً شاقاً. ما العادة الصحية الصغيرة (في النوم أو المشي أو الغذاء) التي ترى أنها ستنعش نشاطك هذا الأسبوع؟',
@@ -184,6 +184,19 @@ export function generateLocalAgentResponse(
                     agentKey === 'aggregator' ? 'وكيل التجميع والتكامل الشامل ومحلل النظم الحياتية' :
                       agentKey === 'advisor' ? 'المستشار التوجيهي ورئيس الداشبورد' : 'مستشار الحياة'
   );
+  const stationTitleMap: Record<string, string> = {
+    spiritual: 'الجانب الروحي والسكينة',
+    financial: 'الجانب المالي والاستقلال',
+    career: 'الجانب المهني والوظيفي',
+    personal: 'الجانب الشخصي والوعي بالذات',
+    learning: 'الجانب التعليمي والمعرفي',
+    family: 'الجانب الأسري والعائلي',
+    social: 'الجانب الاجتماعي والعلاقات',
+    health: 'الجانب الصحي والبدني',
+    aggregator: 'التكامل والتوازن الشامل',
+    advisor: 'التوجيه التنفيذي الشامل',
+  };
+  const stationTitle = advisor?.title || stationTitleMap[agentKey] || advRole;
 
   const formatAgentOutput = (data: {
     agent_name?: string;
@@ -206,7 +219,7 @@ export function generateLocalAgentResponse(
     }
     const finalAdvice = data.advice || (data.actionSteps && data.actionSteps.length > 0 ? data.actionSteps[0] : finalReply);
     const finalSummary = data.summary || (finalReply.length > 120 ? finalReply.slice(0, 120) + '...' : finalReply);
-    const finalReasoning = data.reasoning || `محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد (${userName}) في مجال (${advRole})، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي لتحقيق التوازن المستدام.`;
+    const finalReasoning = data.reasoning || `محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد (${userName}) في مجال (${stationTitle})، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي لتحقيق التوازن المستدام.`;
 
     // Strict normalization to 1.0 - 10.0 scale ensuring 100% parity with Life Wheel
     const normalizeScore = (val: number | undefined): number => {
@@ -468,17 +481,17 @@ export function generateLocalAgentResponse(
   // أولوية التفاعل الإنساني 3: السؤال الصريح عن حال المستشار ("كيف حالك" / "كيفك" / "شلونك")
   if (isAskingHowAdvisorIs) {
     const evalReturnText = isEvaluationSession
-      ? `أهلاً بك يا ${userName}! أنا بخير وبأحسن حال وسعيد بوجودك وسؤالك اللطيف. 🌿 لنركز معاً على جلستنا التقييمية في ${advRole}؛ ما تقييمك بخصوص المحطة (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? `: "${evaluationQuestionTitle}"` : ''}؟`
+      ? `أهلاً بك يا ${userName}! أنا بخير وبأحسن حال وسعيد بوجودك وسؤالك اللطيف. 🌿 لنركز معاً على جلستنا التقييمية في ${stationTitle}؛ ما تقييمك بخصوص المحطة (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? `: "${evaluationQuestionTitle}"` : ''}؟`
       : `أهلاً وسهلاً بك يا ${userName} الحبيب! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${advName} (${advRole})، أنا معك هنا بكامل حضوري وطاقتي لأصغي إليك وأفكر معك خطوة بخطوة في رحلتك نحو التوازن.\n\nكيف تشعر اليوم؟ وما الذي يشغل بالك لنبدأ به معاً؟`;
 
     return formatAgentOutput({
       reasoning: isEvaluationSession
         ? `تحليل حواري إنساني مع سياج التقييم (Guardrail): المستفيد (${userName}) يسأل عن حال المستشار ("${message}"). التجاوب الإنساني الذكي يقتضي مبادلته التحية والاطمئنان في سطر واحد دافئ، ثم إعادة توجيهه مباشرة دون استرسال إلى سؤال المحطة (${evaluationStep || 1} من 8) لإكمال التقييم الأسبوعي.`
         : `تحليل حواري إنساني: المستفيد (${userName}) يسأل باهتمام وود عن حال المستشار ("${message}"). التفكير الحكيم يقتضي التجاوب الطبيعي الصادق ومبادلته التحية والاطمئنان الدافئ كمرشد ورفيق درب.`,
-      summary: `تفاعل إنساني دافئ واطمئنان متبادل مع المستفيد (${userName}) في مجال (${advRole}).`,
+      summary: `تفاعل إنساني دافئ واطمئنان متبادل مع المستفيد (${userName}) في مجال (${stationTitle}).`,
       advice: isEvaluationSession
         ? `كامل حضوري معك في المحطة (${evaluationStep || 1} من 8)؛ شاركني تقييمك لنواصل بناء اتزانك.`
-        : `أنا بخير وصحة ممتازة وسعيد وممتن جداً بسؤالك الطيب يا ${userName}! كامل حضوري وتركيزي معك لنرتقي معاً في كل أبعاد ${advRole}.`,
+        : `أنا بخير وصحة ممتازة وسعيد وممتن جداً بسؤالك الطيب يا ${userName}! كامل حضوري وتركيزي معك لنرتقي معاً في كل أبعاد ${stationTitle}.`,
       reply: evalReturnText,
       actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['أخذ دقيقة تنفس عميق واستشعار الهدوء'],
       reflectionQuestion: isEvaluationSession
@@ -491,13 +504,13 @@ export function generateLocalAgentResponse(
   if (isSimpleGreeting) {
     const greetingReply = isEvaluationSession
       ? `أهلاً وسهلاً بك يا ${userName} العزيز! يسعدني حضورك وتواجدك معنا. 🌿 لنبدأ معاً المحطة (${evaluationStep || 1} من 8)${evaluationQuestionTitle ? `: "${evaluationQuestionTitle}"` : ''}. كيف ترى واقعك هنا؟`
-      : `أهلاً وسهلاً بك يا ${userName} العزيز! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${advName} (${advRole}). أنا هنا معك ومستعد للإصغاء والتفكير معك في كل ما يشغل بالك في جانب ${advRole}.\n\nكيف تسير أمورك اليوم؟ وما الذي تود أن نتناوله معاً؟`;
+      : `أهلاً وسهلاً بك يا ${userName} العزيز! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${advName} (${advRole}). أنا هنا معك ومستعد للإصغاء والتفكير معك في كل ما يشغل بالك في جانب ${stationTitle}.\n\nكيف تسير أمورك اليوم؟ وما الذي تود أن نتناوله معاً؟`;
 
     return formatAgentOutput({
       reasoning: isEvaluationSession
         ? `تحية عفوية من المستفيد (${userName}) أثناء جلسة التقييم: الرد بترحيب دافئ وموجز في سطر واحد، ثم تركيز الانتباه مباشرة على سؤال المحطة (${evaluationStep || 1} من 8) لحصد تقييمه.`
         : `تحية إنسانية عفوية من المستفيد (${userName}): الترحيب الدافئ كمرشد ورفيق درب وفتح باب الحوار بأريحية تامة دون أي قوالب جامدة.`,
-      summary: `الترحيب بالمستفيد (${userName}) واستكشاف ما يشغل باله في (${advRole}).`,
+      summary: `الترحيب بالمستفيد (${userName}) واستكشاف ما يشغل باله في (${stationTitle}).`,
       advice: `أهلاً بك دائماً يا ${userName}؛ كامل الحضور والإصغاء معك لنبدأ بأي جانب تود التركيز عليه.`,
       reply: greetingReply,
       actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['أخذ دقيقة استرخاء للتفكير في أولوياتك اليومية'],
@@ -536,7 +549,7 @@ export function generateLocalAgentResponse(
         reasoning: `تحليل استفسار المستفيد الصحي ("${message}"): التركيز على مثلث الصحة الحيوية (النوم، الحركة، التغذية المتوازنة).`,
         summary: `إجابة صحية مباشرة حول: "${message}".`,
         advice: `الجسد أمانة؛ وعادات النوم الثابتة وشرب الماء والحركة اليومية هي أساس الطاقة العالية.`,
-        reply: `أهلاً بك يا ${userName}. رداً على تساؤلك الصحي: الجسد هو المحرك الأساسي لكل أهدافك في الحياة. إذا أردت تعزيز طاقتك وحيويتك فوراً، فابدأ بضبط موعد نومك ليكون 7-8 ساعات في غرفة مظلمة، واشرب لترين من الماء يومياً، وامشِ 20 دقيقة على الأقل كل يوم. ستشعر بفارق فوري في صفاء ذهنك وطاقتك.`,
+        reply: `أهلاً بك يا ${userName}. رداً على تساؤلك الصحي في ${stationTitle}: الجسد هو المحرك الأساسي لكل أهدافك في الحياة. إذا أردت تعزيز طاقتك وحيويتك فوراً، فابدأ بضبط موعد نومك ليكون 7-8 ساعات في غرفة مظلمة، واشرب لترين من الماء يومياً، وامشِ 20 دقيقة على الأقل كل يوم. ستشعر بفارق فوري في صفاء ذهنك وطاقتك.`,
         actionSteps: ['النوم والاستيقاظ في موعد ثابت لمدة أسبوع', 'شرب كوبين من الماء فور الاستيقاظ'],
         reflectionQuestion: 'ما هي العادة الصحية التي تشعر أن جسدك يطلبها منك بإلحاح الآن؟'
       });
@@ -555,10 +568,10 @@ export function generateLocalAgentResponse(
 
     // إجابة استشارية عامة مباشرة
     return formatAgentOutput({
-      reasoning: `تحليل سؤال المستفيد في مجال (${advRole}): تقديم إجابة مباشرة شافية متناغمة مع مبادئ وزان لتوازن الحياة.`,
+      reasoning: `تحليل سؤال المستفيد في مجال (${stationTitle}): تقديم إجابة مباشرة شافية متناغمة مع مبادئ وزان لتوازن الحياة.`,
       summary: `إجابة استشارية مباشرة حول: "${message}".`,
       advice: `الاتزان هو رحلة يومية تبدأ بخطوة صغيرة مستمرة؛ ركز على الأثر التراكمي.`,
-      reply: `سؤال وجيه ومهم جداً يا ${userName}. للإجابة المباشرة على ما سألت عنه بخصوص (${advRole}):\n\nالحكمة في هذا الجانب هي عدم تحميل نفسك فوق طاقتها دفعة واحدة. ابدأ بتحديد خطوة واحدة واضحة وواقعية، واجعلها عادة يومية حتى تترسخ، ثم ابنِ عليها تدريجياً. بهذه الطريقة تحمي نفسك من التسويف والإحباط وتصل لأهدافك بثبات.`,
+      reply: `سؤال وجيه ومهم جداً يا ${userName}. للإجابة المباشرة على ما سألت عنه بخصوص (${stationTitle}):\n\nالحكمة في هذا الجانب هي عدم تحميل نفسك فوق طاقتها دفعة واحدة. ابدأ بتحديد خطوة واحدة واضحة وواقعية، واجعلها عادة يومية حتى تترسخ، ثم ابنِ عليها تدريجياً. بهذه الطريقة تحمي نفسك من التسويف والإحباط وتصل لأهدافك بثبات.`,
       actionSteps: ['تحديد الخطوة الأولى القادمة والبدء بها اليوم', 'تقييم الأثر بعد مرور 3 أيام'],
       reflectionQuestion: 'ما هي النتيجة التي تود رؤيتها في هذا الجانب بنهاية هذا الأسبوع؟'
     });
@@ -571,9 +584,9 @@ export function generateLocalAgentResponse(
       const goldenHabit = advisor?.defaultGoals?.[0] || 'الالتزام بعادة يومية صغيرة ومستمرة';
       return formatAgentOutput({
         reasoning: `تحليل ختامي شامل لمسار التقييم المكتمل (8 أسئلة): تلخيص إجابات المستفيد (${userName}) وربطها بالعادات اليومية (Micro-habits) وإدراج العادة الذهبية في المربع الثاني بمصفوفة أيزنهاور لحمايتها من التسويف وضمان الاستدامة وتوازن عجلة الحياة.`,
-        summary: `اعتماد تقييم الجانب ${advRole} بدرجة (${score > 0 ? (score <= 10 ? score : score / 10).toFixed(1) : '7.5'} من 10) بعد استكمال الأسئلة الـ 8.`,
+        summary: `اعتماد تقييم ${stationTitle} بدرجة (${score > 0 ? (score <= 10 ? score : score / 10).toFixed(1) : '7.5'} من 10) بعد استكمال الأسئلة الـ 8.`,
         advice: `التوصية الذهبية لهذا الأسبوع: ${goldenHabit}.`,
-        reply: `🎉 أحسنت يا ${userName}! استمعت بتقدير بالغ لكل ما شاركته طوال رحلة التقييم المكتملة عبر محطاتها الـ 8.\n\nرصدنا درجتك المعتمدة في ${advRole}: (${score > 0 ? (score <= 10 ? score : score / 10).toFixed(1) : '7.5'} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار والاستشارة مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`,
+        reply: `🎉 أحسنت يا ${userName}! استمعت بتقدير بالغ لكل ما شاركته طوال رحلة التقييم المكتملة عبر محطاتها الـ 8.\n\nرصدنا درجتك المعتمدة في ${stationTitle}: (${score > 0 ? (score <= 10 ? score : score / 10).toFixed(1) : '7.5'} من 10).\n\n📌 **توصيتي الذهبية لهذا الأسبوع:**\n${goldenHabit}.\n\nتم اعتماد التقييم بنجاح في عجلة حياتك، وباب الحوار والاستشارة مفتوح معك دائماً لأي استفسارات أو تفاصيل إضافية.`,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || [goldenHabit],
         reflectionQuestion: 'كيف يمكنك تهيئة بيئتك اليوم لتلتزم بهذه العادة طوال الأسبوع؟'
       });
@@ -581,20 +594,20 @@ export function generateLocalAgentResponse(
       // إحدى محطات الأسئلة الثمانية
       const ratingMatch = msg.match(/(?:تقييمي:?\s*)?([1-9]|10)(?:\s*(?:من|\/)\s*10)?$/i);
       const scoreNum = ratingMatch ? Math.min(10, Math.max(1, parseFloat(ratingMatch[1]))) : 5;
-      let evalReply = `أسمعك بكل اهتمام واحتواء يا ${userName}، ورصدت ما شاركته بوعي تام.\n\nكطبيب ومرشد لك في ${advRole}، كل خطوة نناقشها هنا تمنحنا رؤية أوضح لكيفية تحقيق أقصى درجات الاتزان.`;
+      let evalReply = `أسمعك بكل اهتمام واحتواء يا ${userName}، ورصدت ما شاركته بوعي تام.\n\nبصفتي مستشارك ومرشدك في ${stationTitle}، كل خطوة نناقشها هنا تمنحنا رؤية أوضح لكيفية تحقيق أقصى درجات الاتزان.`;
       if (ratingMatch) {
         if (scoreNum <= 4) {
-          evalReply = `أحييك على شجاعتك وصراحتك في مشاركة هذا التقييم (${scoreNum} من 10) يا ${userName}. مرورك بفترة ضغط أو فتور في ${advRole} هو أمر طبيعي يمر به الجميع، والهدف من وجودنا معاً هو تفكيك هذا الثقل خطوة بخطوة لاستعادة توازنك.`;
+          evalReply = `أحييك على شجاعتك وصراحتك في مشاركة هذا التقييم (${scoreNum} من 10) يا ${userName}. مرورك بفترة ضغط أو فتور في ${stationTitle} هو أمر طبيعي يمر به الجميع، والهدف من وجودنا معاً هو تفكيك هذا الثقل خطوة بخطوة لاستعادة توازنك.`;
         } else if (scoreNum <= 7) {
-          evalReply = `تقييمك المتزن (${scoreNum} من 10) يعكس وعياً طيباً بقاعدتك الحالية في ${advRole}. لديك أساس جيد يمكنك البناء عليه لتعميق الأثر والوصول إلى مستويات أعلى من الرضا والاستقرار.`;
+          evalReply = `تقييمك المتزن (${scoreNum} من 10) يعكس وعياً طيباً بقاعدتك الحالية في ${stationTitle}. لديك أساس جيد يمكنك البناء عليه لتعميق الأثر والوصول إلى مستويات أعلى من الرضا والاستقرار.`;
         } else {
-          evalReply = `ما شاء الله، نتيجة ملهمة ومبهجة (${scoreNum} من 10) تعكس صفاءً حقيقياً وعملاً متواصلاً في ${advRole}. هذا الاستقرار هو مكسب كبير لحياتك يستحق الحفاظ عليه ودعمه.`;
+          evalReply = `ما شاء الله، نتيجة ملهمة ومبهجة (${scoreNum} من 10) تعكس صفاءً حقيقياً وعملاً متواصلاً في ${stationTitle}. هذا الاستقرار هو مكسب كبير لحياتك يستحق الحفاظ عليه ودعمه.`;
         }
       }
 
       return formatAgentOutput({
-        reasoning: `تحليل مرحلي لمدخلات المستفيد (${userName}) في المحطة (${evaluationStep || 1} من 8): تفكيك المعطيات وفحص أثرها على جانب (${advRole}) وصياغة استجابة داعمة تدفعه للأمام.`,
-        summary: `رصد إجابة المستفيد على المحطة ${evaluationStep || 1} في جانب ${advRole} ومواصلة التقييم النوعي.`,
+        reasoning: `تحليل مرحلي لمدخلات المستفيد (${userName}) في المحطة (${evaluationStep || 1} من 8): تفكيك المعطيات وفحص أثرها على (${stationTitle}) وصياغة استجابة داعمة تدفعه للأمام.`,
+        summary: `رصد إجابة المستفيد على المحطة ${evaluationStep || 1} في ${stationTitle} ومواصلة التقييم النوعي.`,
         advice: `خطوتك القادمة تصنع فرقاً حقيقياً إذا واصلت التركيز على العادات الصغيرة.`,
         reply: evalReply,
         actionSteps: advisor?.defaultGoals?.slice(0, 1) || ['التركيز على العادة الأساسية لهذا الجانب'],
@@ -1030,6 +1043,24 @@ export function generateLocalAgentResponse(
 
   // 3. Domain: Health (د. ريان الصحي)
   if (agentKey === 'health') {
+    const isHealthAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(msg);
+    if (isHealthAdoption) {
+      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8;
+      return formatAgentOutput({
+        reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
+        summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة النوم والنشاط البدني.`,
+        advice: 'الحركة المنتظمة والنوم المتزن وشرب الماء هي ركائز الطاقة المستدامة.',
+        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🌿\n\nالاهتمام بجودة نومك ونشاطك البدني يضاعف طاقتك وصفاء ذهنك طوال اليوم. خطتك الصحية معتمدة، وأنت جاهز للانتقال إلى المحطة التالية.`,
+        actionSteps: [
+          'المشي السريع لمدة 20 دقيقة يومياً وتثبيت موعد النوم',
+          'شرب كوب ماء بانتظام وتقليل الشاشات قبل النوم'
+        ],
+        score: finalScore,
+        station_completed: true,
+        reflectionQuestion: ''
+      });
+    }
+
     if (isGreeting) {
       return formatAgentOutput({
         reasoning: `تحليل بدني وحيوي: المستفيد يبدأ الحوار الصحي. الطاقة الجسدية هي الأساس لكل جوانب عجلة الحياة الأخرى، والخطوة الأولى هي فحص مثلث الصحة: جودة النوم، النشاط الحركي، والتغذية السليمة.`,
@@ -1058,20 +1089,22 @@ export function generateLocalAgentResponse(
       });
     }
 
-    const sessionId = userProfile?.email || userName || 'default';
-    const healthFallback = pickNonRepeatingFallbackReply('health', stationTurnCount, sessionId);
-    return formatAgentOutput({
-      reasoning: `استكشاف صحي متدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${healthFallback.index + 1}) دون تكرار حرفي.`,
-      summary: `متابعة استكشاف العادات الصحية والطاقة البدنية اليومية بتدرج محايد.`,
-      advice: `الحركة المنتظمة والنوم المتزن وشرب الماء هي ركائز الطاقة المستدامة.`,
-      reply: healthFallback.reply,
-      actionSteps: [
-        'الوقوف والحركة لمدة 3 دقائق كل ساعة أثناء العمل أو الدراسة',
-        'شرب كوب ماء بانتظام وتثبيت موعد النوم'
-      ],
-      station_completed: false,
-      reflectionQuestion: ''
-    });
+    if (!isEvaluationSession) {
+      const sessionId = userProfile?.email || userName || 'default';
+      const healthFallback = pickNonRepeatingFallbackReply('health', stationTurnCount, sessionId);
+      return formatAgentOutput({
+        reasoning: `استكشاف صحي متدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${healthFallback.index + 1}) دون تكرار حرفي.`,
+        summary: `متابعة استكشاف العادات الصحية والطاقة البدنية اليومية بتدرج محايد.`,
+        advice: `الحركة المنتظمة والنوم المتزن وشرب الماء هي ركائز الطاقة المستدامة.`,
+        reply: healthFallback.reply,
+        actionSteps: [
+          'الوقوف والحركة لمدة 3 دقائق كل ساعة أثناء العمل أو الدراسة',
+          'شرب كوب ماء بانتظام وتثبيت موعد النوم'
+        ],
+        station_completed: false,
+        reflectionQuestion: ''
+      });
+    }
   }
 
   // 3.1. Domain: Career (م. طارق المهني) - متكيف تماماً مع سياق الطالب والموظف
@@ -1102,12 +1135,12 @@ export function generateLocalAgentResponse(
     if (isCareerAdoption) {
       const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 6.8 : 6.5);
       return formatAgentOutput({
-        reasoning: `اعتماد تقييم المحطة المهنية (${finalScore.toFixed(1)}/10) بناءً على رغبة المستفيد (${userName}).`,
-        summary: `اعتماد تشخيص المسار المهني وتثبيت خطة الإنتاجية وحماية ساعات التركيز.`,
+        reasoning: `اعتماد تقييم محطة ${stationTitle} (${finalScore.toFixed(1)}/10) بناءً على رغبة المستفيد (${userName}).`,
+        summary: `اعتماد تشخيص ${stationTitle} وتثبيت خطة الإنتاجية وحماية ساعات التركيز.`,
         advice: isStudent
           ? 'حماية ساعة العمل العميق يومياً لمشاريعك الجامعية وبناء ملف أعمالك.'
           : 'حجز وقت أسبوعي للتخطيط المهني الاستراتيجي في المربع الثاني.',
-        reply: `تم اعتماد تقييمك المهني بنجاح يا ${userName}! 🎯\n\nأظهرت وعياً ممتازاً برغبتك في رفع إنتاجيتك واستثمار وقتك بذكاء دون تسويف. خطتك واضحة وواقعية، وأنت جاهز الآن للانتقال إلى المحطة التالية.`,
+        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🎯\n\nأظهرت وعياً ممتازاً برغبتك في رفع إنتاجيتك واستثمار وقتك بذكاء دون تسويف. خطتك واضحة وواقعية، وأنت جاهز الآن للانتقال إلى المحطة التالية.`,
         actionSteps: isStudent
           ? ['جلسة عمل عميق لمدة 45 دقيقة يومياً', 'توثيق المشاريع الأكاديمية المتميزة في ملف أعمالك']
           : ['جدولة ساعات التركيز الأسبوعية في مصفوفتك', 'مراجعة أولويات النمو الوظيفي كل خميس'],
@@ -1166,10 +1199,10 @@ export function generateLocalAgentResponse(
     if (isPersonalAdoption) {
       const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8;
       return formatAgentOutput({
-        reasoning: `اعتماد تشخيص محطة الاتزان النفسي وبناء العادات (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
-        summary: `اعتماد تقييم الجانب النفسي وتثبيت عادة الرأفة بالذات والانتصار الصغير.`,
+        reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
+        summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة الرأفة بالذات والانتصار الصغير.`,
         advice: 'الرفق بالذات والتركيز على العادات الصغيرة يبني ثقة داخلية راسخة.',
-        reply: `تم اعتماد تقييمك النفسي والشخصي بنجاح يا ${userName}! 🌸\n\nوعيك بمشاعرك وصراحتك مع ذاتك هو أولى خطوات القوة والاتزان. خطتك ترتكز على إيقاف المقارنات وتحقيق انتصار يومي هادئ، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
+        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🌸\n\nوعيك بمشاعرك وصراحتك مع ذاتك هو أولى خطوات القوة والاتزان. خطتك ترتكز على إيقاف المقارنات وتحقيق انتصار يومي هادئ، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
         actionSteps: ['تدوين انتصار يومي صغير قبل النوم', 'التوقف عن جلد الذات واستبداله بالحوار الداخلي المشجع'],
         score: finalScore,
         station_completed: true,
@@ -1213,10 +1246,10 @@ export function generateLocalAgentResponse(
     if (isLearningAdoption) {
       const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 7.0;
       return formatAgentOutput({
-        reasoning: `اعتماد تشخيص محطة التعلم المستمر (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
-        summary: `اعتماد تقييم الجانب المعرفي وتثبيت عادة القراءة والتعلم التراكمي.`,
+        reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
+        summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة القراءة والتعلم التراكمي.`,
         advice: 'القراءة التراكمية المركزة لمدة 15 دقيقة يومياً تعادل قراءة أكثر من 15 كتاباً سنوياً.',
-        reply: `تم اعتماد تقييمك المعرفي بنجاح يا ${userName}! 📚\n\nشغفك بالتعلم ورغبتك في بناء عقليتك يمثل رافعة حقيقية لكل جوانب حياتك. خطتك في القراءة النوعية والتطبيق المعرفي معتمدة، وأنت مستعد للمحطة التالية.`,
+        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 📚\n\nشغفك بالتعلم ورغبتك في بناء عقليتك يمثل رافعة حقيقية لكل جوانب حياتك. خطتك في القراءة النوعية والتطبيق المعرفي معتمدة، وأنت مستعد للمحطة التالية.`,
         actionSteps: ['قراءة 10 إلى 15 صفحة يومياً من كتاب نوعي', 'تدوين فكرة واحدة قابلة للتطبيق من كل ما تتعلمه'],
         score: finalScore,
         station_completed: true,
@@ -1260,10 +1293,10 @@ export function generateLocalAgentResponse(
     if (isFamilyAdoption) {
       const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 7.2;
       return formatAgentOutput({
-        reasoning: `اعتماد تشخيص محطة الترابط الأسري (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
-        summary: `اعتماد تقييم الجانب الأسري وتثبيت عادة الحضور الواعي والدفء العائلي.`,
+        reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
+        summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة الحضور الواعي والدفء العائلي.`,
         advice: 'العائلة هي الملاذ الآمن: استثمر في جودة اللحظات المشتركة بعيداً عن صخب الشاشات.',
-        reply: `تم اعتماد تقييمك الأسري بنجاح يا ${userName}! 🏡\n\nحرصك على بر والديك ودفء بيتك يمنحك سنداً وطمأنينة لا تقدر بثمن. خطتك في حماية الجلسات الأسرية دون شاشات معتمدة، وأنت جاهز للمحطة التالية.`,
+        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🏡\n\nحرصك على بر والديك ودفء بيتك يمنحك سنداً وطمأنينة لا تقدر بثمن. خطتك في حماية الجلسات الأسرية دون شاشات معتمدة، وأنت جاهز للمحطة التالية.`,
         actionSteps: ['جلسة حوار عائلي هادئة أسبوعياً خالية من الهواتف', 'المبادرة اليوم بكلمة طيبة ودعاء للوالدين والأهل'],
         score: finalScore,
         station_completed: true,
@@ -1307,10 +1340,10 @@ export function generateLocalAgentResponse(
     if (isSocialAdoption) {
       const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8;
       return formatAgentOutput({
-        reasoning: `اعتماد تشخيص محطة العلاقات والذكاء الاجتماعي (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
-        summary: `اعتماد تقييم الجانب الاجتماعي وتثبيت حدود العلاقات الصحية والصحبة الملهمة.`,
+        reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
+        summary: `اعتماد تقييم ${stationTitle} وتثبيت حدود العلاقات الصحية والصحبة الملهمة.`,
         advice: 'العلاقات كالأشجار: احرص على رعاية العميق منها، وضع حدوداً صحية تحميك من الاستنزاف.',
-        reply: `تم اعتماد تقييمك الاجتماعي بنجاح يا ${userName}! 🤝\n\nنضجك في اختيار دائرة علاقاتك ووضع حدود صحية تحمي طاقتك هو مكسب كبير. خطتك معتمدة، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
+        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🤝\n\nنضجك في اختيار دائرة علاقاتك ووضع حدود صحية تحمي طاقتك هو مكسب كبير. خطتك معتمدة، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
         actionSteps: ['المبادرة بالتواصل الإيجابي مع صديق واحد مخلص يشاركك طموحك', 'وضع حدود صحية تمنع استنزاف العلاقات السطحية'],
         score: finalScore,
         station_completed: true,
@@ -1436,7 +1469,7 @@ export function generateLocalAgentResponse(
     const t = message.toLowerCase();
     if (agentKey === 'spiritual') {
       if (/(خلوة|الخلوة|وقت|مكان|مساحة|ساعة|كم دقيقة|كم وقت|طول الوقت|كم يجب|مكان هادئ|صمت)/i.test(t)) {
-        directAnswer = 'سؤالك دقيق وجوهري يا صديقنا: الخلوة الروحية لا تشترط ساعات طويلة ولا مكاناً فسيحاً خاصاً! تكفيك 5 إلى 10 دقائق فقط في بداية يومك أو قبل نومك، في زاوية هادئة من غرفتك أو حتى في سيارتك قبل النزول. المقصود ليس الانعزال الجغرافي أو المكاني، بل هدوء الذهن وانقطاع الهاتف والمشتتات لتتنفس وتستشعر قرب الخالق وسكينة صدرك وسلامك الداخلي.';
+        directAnswer = `سؤالك دقيق وجوهري يا ${userName}: الخلوة الروحية لا تشترط ساعات طويلة ولا مكاناً فسيحاً خاصاً! تكفيك 5 إلى 10 دقائق فقط في بداية يومك أو قبل نومك، في زاوية هادئة من غرفتك أو حتى في سيارتك قبل النزول. المقصود ليس الانعزال الجغرافي أو المكاني، بل هدوء الذهن وانقطاع الهاتف والمشتتات لتتنفس وتستشعر قرب الخالق وسكينة صدرك وسلامك الداخلي.`;
       } else if (/(صلاة|الصلاة|اصلي|أصلي|ركوع|سجود|خشوع|أخشع|اخشع|فرض|سنن|ما اصلي|لا اصلي|تأمل|تامل|ميديتيشن)/i.test(t)) {
         directAnswer = 'أقدر صراحتك وشجاعتك العميقة؛ البداية لا تتطلب المثالية دفعة واحدة، بل خطوة ميسرة تثبت عليها دون أن تثقل على نفسك. ابدأ بدقائق هادئة يومياً تستحضر فيها معنى التسليم وراحة القلب والفضفضة والاتصال الروحي بما تؤمن به، فالتدرج برفق هو سر الثبات والسكينة.';
       } else if (/(ورد|الورد|أذكار|اذكار|قرآن|قران|تسبيح|استغفار|قراءة روحية|كتب روحية)/i.test(t)) {
@@ -1459,7 +1492,7 @@ export function generateLocalAgentResponse(
     }
 
     if (!directAnswer && isUserAsking) {
-      directAnswer = 'سؤالك ذكي ويلامس صلب اتزانك يا صديقنا: الحل لا يكمن في القفزات المفاجئة، بل في التدرج الواعي وعادة يومية صغيرة ومحمية تناسب ظروفك الحالية وتصنع أثراً تراكمياً ملموساً.';
+      directAnswer = `سؤالك ذكي ويلامس صلب اتزانك يا ${userName}: الحل لا يكمن في القفزات المفاجئة، بل في التدرج الواعي وعادة يومية صغيرة ومحمية تناسب ظروفك الحالية وتصنع أثراً تراكمياً ملموساً.`;
     }
 
     // قاعدة الجولات الأربع والتقييم المرحلي:
@@ -1473,17 +1506,17 @@ export function generateLocalAgentResponse(
         score: parsedScore,
         station_completed: true,
         strengths: [
-          `وعي صريح وشفافية في تشخيص واقع ${advRole}`,
+          `وعي صريح وشفافية في تشخيص واقع ${stationTitle}`,
           `الرغبة الصادقة في بناء نمط متزن واستعادة السيطرة`
         ],
         challenges: [
-          `الحاجة لتثبيت عادة يومية مستدامة تحمي ${advRole} من التراجع`,
+          `الحاجة لتثبيت عادة يومية مستدامة تحمي ${stationTitle} من التراجع`,
           `تنظيم الأولويات في المربع الثاني لتجنب ضغوط الطوارئ`
         ],
         reasoning: `المستفيد (${userName}) اختار صراحة اعتماد التقييم وإنهاء المحطة ("${message}").`,
-        summary: `تم اعتماد تقييم محطة ${advRole} بنجاح.`,
+        summary: `تم اعتماد تقييم محطة ${stationTitle} بنجاح.`,
         advice: `التوازن يبدأ بخطوة واضحة ومستمرة.`,
-        reply: `تم اعتماد تقييمك في محطة ${advRole} بنجاح بدرجة (${parsedScore}/10) يا ${userName}! 🎯\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
+        reply: `تم اعتماد تقييمك في محطة ${stationTitle} بنجاح بدرجة (${parsedScore}/10) يا ${userName}! 🎯\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
         reflectionQuestion: ''
       });
@@ -1491,11 +1524,11 @@ export function generateLocalAgentResponse(
 
     if (stationTurnCount >= 3 && !isUserWantingToContinue) {
       const dynamicStrengths = [
-        `وعي صريح وشفافية في تشخيص واقع ${advRole}`,
+        `وعي صريح وشفافية في تشخيص واقع ${stationTitle}`,
         `الرغبة الصادقة في بناء نمط متزن واستعادة السيطرة`
       ];
       const dynamicChallenges = [
-        `الحاجة لتثبيت عادة يومية مستدامة تحمي ${advRole} من التراجع`,
+        `الحاجة لتثبيت عادة يومية مستدامة تحمي ${stationTitle} من التراجع`,
         `تنظيم الأولويات في المربع الثاني لتجنب ضغوط الطوارئ`
       ];
 
@@ -1505,8 +1538,8 @@ export function generateLocalAgentResponse(
         station_completed: false,
         strengths: dynamicStrengths,
         challenges: dynamicChallenges,
-        reasoning: `قاعدة الجولات الأربع والتقييم المرحلي (المحطة ${evaluationStep || 1} من 8: ${advRole} - الجولة ${stationTurnCount + 1}): عرض الدرجة المبدئية (${parsedScore}/10) وتخيير المستشير بين الاعتماد أو مواصلة الحوار.`,
-        summary: `عرض التقييم المرحلي المبدئي (${parsedScore}/10) لمحطة ${advRole} والتخيير بين الاعتماد أو التعمق.`,
+        reasoning: `قاعدة الجولات الأربع والتقييم المرحلي (المحطة ${evaluationStep || 1} من 8: ${stationTitle} - الجولة ${stationTurnCount + 1}): عرض الدرجة المبدئية (${parsedScore}/10) وتخيير المستشير بين الاعتماد أو مواصلة الحوار.`,
+        summary: `عرض التقييم المرحلي المبدئي (${parsedScore}/10) لمحطة ${stationTitle} والتخيير بين الاعتماد أو التعمق.`,
         advice: `التوازن يبدأ بخطوة واضحة ومستمرة.`,
         reply: `بعد ما شاركتني به عبر حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${parsedScore}/10). هذا تقييم مبدئي مبني على المعلومات التي ذكرتها، وقد يتغير إذا واصلنا الاستكشاف.\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة؟`,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
@@ -1522,7 +1555,7 @@ export function generateLocalAgentResponse(
           station_completed: false,
           strengths: [],
           challenges: [],
-          reasoning: `سؤال توضيحي عند الغموض (المحطة ${evaluationStep || 1} من 8: ${advRole}): إجابة المستشير غير واضحة، طرح السؤال المعياري الموحد دون افتراضات.`,
+          reasoning: `سؤال توضيحي عند الغموض (المحطة ${evaluationStep || 1} من 8: ${stationTitle}): إجابة المستشير غير واضحة، طرح السؤال المعياري الموحد دون افتراضات.`,
           summary: `طلب توضيح استفسار المستشير بصيغة معيارية.`,
           advice: `الوضوح في تشخيص الواقع يسهل الوصول للحل المناسب.`,
           reply: `أريد التأكد من أنني فهمت قصدك بشكل صحيح، هل يمكنك توضيح هذه النقطة؟`,
@@ -1536,7 +1569,7 @@ export function generateLocalAgentResponse(
 
       let dynamicReply = rotatedFallback.reply;
       if (directAnswer) {
-        dynamicReply = `💡 **إجابة عن استفسارك:**\n${directAnswer}\n\n🌿 **ولنواصل استكشاف واقعك في ${advRole}:**\n${rotatedFallback.reply}`;
+        dynamicReply = `💡 **إجابة عن استفسارك:**\n${directAnswer}\n\n🌿 **ولنواصل استكشاف واقعك في ${stationTitle}:**\n${rotatedFallback.reply}`;
       }
 
       return formatAgentOutput({
@@ -1545,8 +1578,8 @@ export function generateLocalAgentResponse(
         station_completed: false,
         strengths: [],
         challenges: [],
-        reasoning: `تحليل استشاري تكيفي (المحطة ${evaluationStep || 1} من 8: ${advRole} - المحاورة ${stationTurnCount + 1}، رد #${rotatedFallback.index + 1}): مواصلة الحوار الاستكشافي المباشر دون تكرار.`,
-        summary: `متابعة استيضاحية تكيفية لتشخيص جانب (${advRole}).`,
+        reasoning: `تحليل استشاري تكيفي (المحطة ${evaluationStep || 1} من 8: ${stationTitle} - المحاورة ${stationTurnCount + 1}، رد #${rotatedFallback.index + 1}): مواصلة الحوار الاستكشافي المباشر دون تكرار.`,
+        summary: `متابعة استيضاحية تكيفية لتشخيص (${stationTitle}).`,
         advice: `التشخيص الاستشاري الدقيق لواقعك اليومي هو الخطوة الأولى لتحديد احتياجك الفعلي.`,
         reply: dynamicReply,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
@@ -1557,11 +1590,11 @@ export function generateLocalAgentResponse(
     // إذا اختار المستفيد اعتماد التقييم
     const goldenHabit = advisor?.defaultGoals?.[0] || 'المحافظة على وتيرتك الطيبة خلال الأسبوع القادم';
     const dynamicStrengths = [
-      `وعي صريح وشفافية في تشخيص واقع ${advRole}`,
+      `وعي صريح وشفافية في تشخيص واقع ${stationTitle}`,
       `الرغبة الصادقة في بناء نمط متزن واستعادة السيطرة`
     ];
     const dynamicChallenges = [
-      `الحاجة لتثبيت عادة يومية مستدامة تحمي ${advRole} من التراجع`,
+      `الحاجة لتثبيت عادة يومية مستدامة تحمي ${stationTitle} من التراجع`,
       `تنظيم الأولويات في المربع الثاني لتجنب ضغوط الطوارئ`
     ];
 
@@ -1571,10 +1604,10 @@ export function generateLocalAgentResponse(
       station_completed: true,
       strengths: dynamicStrengths,
       challenges: dynamicChallenges,
-      reasoning: `اعتماد تشخيص استشاري متزن لمحطة (${evaluationStep || 1} من 8: ${advRole}): تم اعتماد التقييم بناءً على اختيار المستشير (${parsedScore}/10).`,
-      summary: `اعتماد تشخيص محطة (${advRole}) بدرجة ${parsedScore}/10 وتحديد التوصية الذهبية.`,
-      advice: `المحافظة على قاعدة اتزانك في ${advRole}: ${goldenHabit}`,
-      reply: `تم اعتماد تقييم محطة (${evaluationStep || 1} من 8: ${advRole}) بدرجة (${parsedScore} من 10) بنجاح بناءً على المعلومات التي شاركتها بكل صدق. 🎯\n\n💡 **التوصية العملية:**\n${goldenHabit}.`,
+      reasoning: `اعتماد تشخيص استشاري متزن لمحطة (${evaluationStep || 1} من 8: ${stationTitle}): تم اعتماد التقييم بناءً على اختيار المستشير (${parsedScore}/10).`,
+      summary: `اعتماد تشخيص محطة (${stationTitle}) بدرجة ${parsedScore}/10 وتحديد التوصية الذهبية.`,
+      advice: `المحافظة على قاعدة اتزانك في ${stationTitle}: ${goldenHabit}`,
+      reply: `تم اعتماد تقييم محطة (${evaluationStep || 1} من 8: ${stationTitle}) بدرجة (${parsedScore} من 10) بنجاح بناءً على المعلومات التي شاركتها بكل صدق. 🎯\n\n💡 **التوصية العملية:**\n${goldenHabit}.`,
       actionSteps: advisor?.defaultGoals?.slice(0, 2) || [goldenHabit],
       reflectionQuestion: 'كيف تجعل خطوتك القادمة أكثر سكينة وإنجازاً في هذا الجانب؟'
     });
@@ -1597,8 +1630,8 @@ export function generateLocalAgentResponse(
 
   return formatAgentOutput({
     agent_name: advInfo.name,
-    reasoning: `تحليل استشاري متدرج (رد #${domainFallback.index + 1}): استكشاف واقع المستفيد (${userName}) في مجال (${advInfo.role}) دون تكرار حرفي.`,
-    summary: `متابعة استكشافية متوازنة في جانب ${advInfo.role}.`,
+    reasoning: `تحليل استشاري متدرج (رد #${domainFallback.index + 1}): استكشاف واقع المستفيد (${userName}) في مجال (${stationTitle}) دون تكرار حرفي.`,
+    summary: `متابعة استكشافية متوازنة في ${stationTitle}.`,
     advice: `تحديد إجراء واحد واضح يمكنك تنفيذه خلال 24 ساعة وإدراجه في المربع الثاني بمصفوفة أيزنهاور.`,
     reply: domainFallback.reply,
     actionSteps: [

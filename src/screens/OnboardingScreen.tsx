@@ -275,14 +275,14 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         title: 'كيف تصف حالك وشعورك العام في هذا الجانب ومستوى رضاك عنه في هذه الأيام؟',
         description: 'صف واقعك برفق وشاركنا ما إذا كان هناك عائق تشعر أنه يؤثر على استقرارك...',
         placeholder: 'صف حالك ورضاك في هذا الجانب بصراحة...',
-        followUpProbe: 'أقدّر شفافيتك يا صديقنا. لنصل لتشخيص دقيق: ما هو التحدي الأكبر وكيف تقيّم مستواك من 1 إلى 10؟',
+        followUpProbe: `أقدّر شفافيتك يا ${userProfile?.name?.trim() || 'عزيزي'}. لنصل لتشخيص دقيق: ما هو التحدي الأكبر وكيف تقيّم مستواك من 1 إلى 10؟`,
         suggestedResponses: ['مستقر وممتاز (8/10)', 'متوسط وسط بعض الضغوط (6/10)', 'يحتاج إعادة تنظيم وعناية (4/10)'],
       },
       initialDiagnostic: {
         title: 'كيف تصف حالك وشعورك العام في هذا الجانب ومستوى رضاك عنه؟',
         description: 'ما هو التحدي الأبرز وما تقييمك لمستواك من 1 إلى 10؟',
         placeholder: 'صف حالك ورضاك في هذا الجانب بصراحة...',
-        followUpProbe: 'أقدّر شفافيتك يا صديقنا. لنصل لتشخيص تأسيسي دقيق: ما هو التحدي الأكبر وكيف تقيّم مستواك من 1 إلى 10؟',
+        followUpProbe: `أقدّر شفافيتك يا ${userProfile?.name?.trim() || 'عزيزي'}. لنصل لتشخيص تأسيسي دقيق: ما هو التحدي الأكبر وكيف تقيّم مستواك من 1 إلى 10؟`,
         suggestedResponses: ['مستقر وممتاز', 'متوسط وسط بعض الضغوط', 'يحتاج إعادة تنظيم وعناية'],
       },
       weeklyCheckin: {
@@ -311,10 +311,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     stationNum: number
   ): EvaluationChatMessage => {
     const consult = stConfig.consultation || stConfig.initialDiagnostic;
+    const userDisplayName = userProfile?.name?.trim() || 'عزيزي';
 
-    // Custom warm, calm opening for Spiritual Station (السكينة والمعنى)
+    // Custom warm, calm opening for Spiritual Station
     if (advisor.id === 'spiritual') {
-      const spiritualText = `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في محطة السكينة والمعنى 🌿
+      const spiritualText = `أهلاً بك يا ${userDisplayName} في محطة ${advisor.title} 🌿
 
 أنا **${advisor.name}**، ${advisor.role}.
 يسعدني أن نلتقي في هذه المساحة الهادئة لنستكشف معاً حضورك القلبي وسلامك الداخلي.
@@ -375,7 +376,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
         guidanceNote = `سنضع خطة واضحة لإدارة الراتب وتأسيس صمام الأمان والتحرر من الالتزامات الضاغطة.`;
       }
 
-      const financialText = `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في محطة الاستقلال والتخطيط المالي 💰
+      const financialText = `أهلاً بك يا ${userDisplayName} في محطة ${advisor.title} 💰
 
 أنا **${advisor.name}**، ${advisor.role}.
 ${contextIntro}
@@ -420,7 +421,7 @@ ${specificQuestion}
         specificQuestion = `ما مدى وضوح مسارك المهني ونموك الوظيفي، وهل تشعر بالإنجاز والتقدير في بيئة عملك الحالية؟`;
       }
 
-      const careerText = `أهلاً بك يا ${userProfile?.name || 'صديقنا'} في محطة التطور والمسار المهني 🎯
+      const careerText = `أهلاً بك يا ${userDisplayName} في محطة ${advisor.title} 🎯
 
 أنا **${advisor.name}**، ${advisor.role}.
 يسعدني أن نتدارس معاً أهدافك وإمكاناتك المهنية لبناء أثر مستدام.
@@ -438,7 +439,7 @@ ${specificQuestion}
       };
     }
 
-    const text = `أهلاً بك يا صديقنا في محطة التقييم والاستشارة الحوارية 🌿\n\nأنا **${advisor.name}**، ${advisor.role}.\nسنقف معاً في هذا الجانب لنستكشف واقعك برفق ووعي لنبني عليه توازنك المستدام.\n\n📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**\n${consult.title}\n\n💡 ${consult.description}`;
+    const text = `أهلاً بك يا ${userDisplayName} في محطة ${advisor.title} 🌿\n\nأنا **${advisor.name}**، ${advisor.role}.\nسنقف معاً في هذا الجانب لنستكشف واقعك برفق ووعي لنبني عليه توازنك المستدام.\n\n📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**\n${consult.title}\n\n💡 ${consult.description}`;
 
     return {
       id: `welcome_${advisor.id}_${Date.now()}`,
@@ -660,7 +661,7 @@ ${specificQuestion}
 
       try {
         const cleanUserProfile = {
-          name: userProfile?.name || 'صديقنا',
+          name: userProfile?.name?.trim() || 'عزيزي',
           ...(userProfile?.email?.trim() ? { email: userProfile.email.trim() } : {}),
           ...(userProfile?.ageGroup?.trim() ? { ageGroup: userProfile.ageGroup.trim() } : {}),
           employmentStatus: userProfile?.employmentStatus?.trim() || userProfile?.workStatus?.trim() || 'غير محدد',
@@ -677,7 +678,7 @@ ${specificQuestion}
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             advisor: currentAdvisor,
-            userName: userProfile?.name || 'صديقنا',
+            userName: userProfile?.name?.trim() || 'عزيزي',
             userProfile: cleanUserProfile,
             message: text,
             history,
