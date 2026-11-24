@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import confetti from 'canvas-confetti';
 import {
   Sparkles,
   TrendingUp,
@@ -67,6 +68,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [showAddGoalFor, setShowAddGoalFor] = useState<LifeAreaId | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [addedHaniGoals, setAddedHaniGoals] = useState<Record<string, boolean>>({});
+  const [completedHaniGoals, setCompletedHaniGoals] = useState<Record<string, boolean>>({});
   const toastTimeoutRef = useRef<any>(null);
 
   const completedCount = completedAdvisors.length;
@@ -106,6 +108,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const strongestAdvisor = sortedCompletedAreas[sortedCompletedAreas.length - 1] || ADVISORS_LIST.find((a) => a.id === 'spiritual') || ADVISORS_LIST[0];
 
   // Dr. Hani's immediate 24-hour executive recommendation
+  const isStudent =
+    userProfile?.workStatus?.includes('طالب') ||
+    userProfile?.employmentStatus?.includes('طالب');
+
   const getDrHaniImmediateAction = () => {
     if (isBrandNewUser) {
       return {
@@ -127,6 +133,15 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           actionLabel: 'إضافة للمربع الثاني (مهم وغير عاجل)',
         };
       case 'financial':
+        if (isStudent) {
+          return {
+            title: `تأسيس حصالة أمان جامعي (${bottleneckAdvisor.title})`,
+            text: 'يوصي د. هاني باقتطاع رمزي (30 - 50 ريالاً) فوراً كصمام أمان جامعي لحماية مكافأتك ومصروفك حتى نهاية الشهر دون التورط في أي ديون أو التزامات مرهقة.',
+            areaId: 'financial' as LifeAreaId,
+            areaTitle: bottleneckAdvisor.title,
+            actionLabel: 'إضافة للمربع الثاني (مهم وغير عاجل)',
+          };
+        }
         return {
           title: `وقف النزيف الاستهلاكي (${bottleneckAdvisor.title})`,
           text: 'يوصي د. هاني بتجميد أي شراء استهلاكي غير ضروري وتخصيص 15 دقيقة الليلة لتدوين الالتزامات المالية وترتيبها كأولوية في المربع الثاني.',
@@ -199,6 +214,22 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
     onAddGoal(drHaniAction.areaId, drHaniAction.title);
     setAddedHaniGoals((prev) => ({ ...prev, [drHaniAction.title]: true }));
     setToastMessage(`تمت إضافة توجيه د. هاني إلى المربع الثاني (مهم وغير عاجل) بمصفوفتك بنجاح 🎯`);
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 4000);
+  };
+
+  const handleCompleteHaniActionToday = () => {
+    setCompletedHaniGoals((prev) => ({ ...prev, [drHaniAction.title]: true }));
+    try {
+      confetti({
+        particleCount: 60,
+        spread: 70,
+        origin: { y: 0.6 },
+      });
+    } catch {
+      // ignore
+    }
+    setToastMessage(`مبارك! أنجزت خطوتك اليومية الفورية بنجاح 🌟 استمر على هذه الوتيرة الهادئة والمستدامة.`);
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 4000);
   };
@@ -376,27 +407,45 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                 <ArrowLeft className="w-4 h-4" />
               </button>
             ) : (
-              <button
-                type="button"
-                onClick={handleAddHaniGoal}
-                className={`px-5 py-3 rounded-2xl font-black text-xs sm:text-sm shadow-md transition-all flex items-center gap-2 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] ${
-                  addedHaniGoals[drHaniAction.title]
-                    ? 'bg-emerald-800 text-white'
-                    : 'bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white'
-                }`}
-              >
-                {addedHaniGoals[drHaniAction.title] ? (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>أُضيفت لمصفوفتي بنجاح</span>
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4" />
-                    <span>{drHaniAction.actionLabel}</span>
-                  </>
-                )}
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleCompleteHaniActionToday}
+                  disabled={completedHaniGoals[drHaniAction.title]}
+                  className={`px-4 py-2.5 rounded-2xl font-black text-xs sm:text-sm shadow-xs transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    completedHaniGoals[drHaniAction.title]
+                      ? 'bg-emerald-600 text-white cursor-default'
+                      : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700/60'
+                  }`}
+                  title="تسجيل إنجاز هذه الخطوة اليومية الفورية الآن"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{completedHaniGoals[drHaniAction.title] ? 'تم إنجازها اليوم بنجاح 🌟' : 'تم إنجازها اليوم ✅'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleAddHaniGoal}
+                  className={`px-4 py-2.5 rounded-2xl font-black text-xs sm:text-sm shadow-md transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] ${
+                    addedHaniGoals[drHaniAction.title]
+                      ? 'bg-teal-800 text-white'
+                      : 'bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white'
+                  }`}
+                  title="إدراج الخطوة مباشرة ضمن المربع الثاني بمصفوفة أيزنهاور"
+                >
+                  {addedHaniGoals[drHaniAction.title] ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>أُضيفت لمصفوفتي بنجاح</span>
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4" />
+                      <span>{drHaniAction.actionLabel}</span>
+                    </>
+                  )}
+                </button>
+              </div>
             )}
           </div>
         </div>

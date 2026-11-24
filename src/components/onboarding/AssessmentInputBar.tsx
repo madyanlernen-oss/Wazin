@@ -60,12 +60,9 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" />
             <span className="text-xs font-black text-emerald-950 dark:text-emerald-300 flex items-center gap-1.5">
-              <span>تم رصد تقييم المحطة</span>
-              <span dir="ltr" className="font-mono font-bold">
-                ({stationNumber} / 8)
-              </span>
-              <span dir="ltr" className="font-mono font-bold">
-                ({currentActiveInsights.score > 0 ? currentActiveInsights.score : 7} / 10)
+              <span>تم رصد تقييم المحطة {stationNumber} من 8 بنجاح</span>
+              <span className="font-mono font-bold text-emerald-800 dark:text-emerald-200">
+                ({Number(currentActiveInsights.score > 0 ? currentActiveInsights.score : 7).toFixed(1)} من 10)
               </span>
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200">
@@ -194,8 +191,72 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
             ))}
           </div>
 
-          {/* Suggested Clinical Responses */}
+          {/* Suggested Clinical & Rapid Context Responses */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {/* Domain-specific rapid input shortcuts */}
+            {currentAdvisor.id === 'financial' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isAdvisorReplying}
+                  onClick={() => onSendAnswer('أنا طالب وأعتمد على المكافأة وبدون ديون لكن أواجه عجزاً نهاية الشهر')}
+                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
+                >
+                  🎓 طالب جامعي بدون ديون
+                </button>
+                <button
+                  type="button"
+                  disabled={isAdvisorReplying}
+                  onClick={() => onSendAnswer('سأجرب اقتطاع 30 ريالاً كصمام أمان شهري')}
+                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
+                >
+                  💡 ادخار 30 ريال كصمام أمان
+                </button>
+              </>
+            )}
+
+            {currentAdvisor.id === 'spiritual' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isAdvisorReplying}
+                  onClick={() => onSendAnswer('أشعر بالتشتت بسبب الهاتف ومواقع التواصل ولا أجد خلوة هادئة')}
+                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
+                >
+                  🌿 تشتت بالهاتف وضيق بالوقت
+                </button>
+                <button
+                  type="button"
+                  disabled={isAdvisorReplying}
+                  onClick={() => onSendAnswer('ممكن نصف ساعة يومياً مشي هادئ وتأمل بعيداً عن الهاتف')}
+                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
+                >
+                  ⏱️ نصف ساعة يومياً مشي وتأمل
+                </button>
+              </>
+            )}
+
+            {currentAdvisor.id === 'health' && (
+              <>
+                <button
+                  type="button"
+                  disabled={isAdvisorReplying}
+                  onClick={() => onSendAnswer('أعاني من قلة النوم وإجهاد الشاشات وأنام ساعات متقطعة')}
+                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
+                >
+                  😴 تذبذب النوم وإجهاد الشاشات
+                </button>
+                <button
+                  type="button"
+                  disabled={isAdvisorReplying}
+                  onClick={() => onSendAnswer('سألتزم بـ 20 دقيقة مشي يومي وشرب لترين ماء')}
+                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
+                >
+                  🏃 20 دقيقة مشي وشرب الماء
+                </button>
+              </>
+            )}
+
             {(currentStationConfig.consultation?.suggestedResponses || currentStationConfig.initialDiagnostic?.suggestedResponses || []).map((chip, idx) => (
               <button
                 key={idx}

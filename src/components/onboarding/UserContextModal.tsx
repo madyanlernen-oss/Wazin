@@ -135,22 +135,54 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-4.5 max-h-[70vh] overflow-y-auto px-1 scrollbar-none">
           {/* 1. Work Status */}
           <div>
-            <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
-              حالة العمل <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white">
+                حالة العمل <span className="text-rose-500">*</span>
+              </label>
+              <span className="text-[11px] text-slate-400 font-bold">انقر للتحديد السريع</span>
+            </div>
+
+            {/* Quick Chips */}
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mb-2">
+              {[
+                { label: 'طالب جامعي 🎓', val: 'طالب جامعي' },
+                { label: 'موظف 💼', val: 'موظف' },
+                { label: 'صاحب عمل/مستقل 🚀', val: 'صاحب عمل/مستقل' },
+                { label: 'باحث عن عمل 🔍', val: 'باحث عن عمل' },
+                { label: 'متقاعد 🌿', val: 'متقاعد' },
+                { label: 'غير ذلك ✨', val: 'غير ذلك' },
+              ].map((item) => (
+                <button
+                  key={item.val}
+                  type="button"
+                  onClick={() => {
+                    setWorkStatusInput(item.val);
+                    setContextError('');
+                  }}
+                  className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border text-center flex items-center justify-center gap-1 ${
+                    workStatusInput === item.val
+                      ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-sm'
+                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]/60'
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+
             <select
               value={workStatusInput}
               onChange={(e) => {
                 setWorkStatusInput(e.target.value);
                 setContextError('');
               }}
-              className="w-full bg-[#F8FAFA] dark:bg-[#102033] border-2 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
+              className="w-full bg-[#F8FAFA] dark:bg-[#102033] border border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-xl px-3 py-2 min-h-[40px] text-xs font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] transition-all cursor-pointer"
               dir="rtl"
             >
-              <option value="">اختر حالة العمل...</option>
+              <option value="">أو اختر من القائمة التفصيلية...</option>
               <option value="طالب جامعي">طالب جامعي</option>
               <option value="موظف">موظف</option>
               <option value="صاحب عمل/مستقل">صاحب عمل/مستقل</option>
@@ -162,47 +194,69 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
 
           {/* Conditional 1: Student Income Source */}
           {isStudentInput && (
-            <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-1.5 animate-fadeIn">
+            <div className="p-3.5 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/70 space-y-2 animate-fadeIn">
               <label className="block text-xs sm:text-sm font-black text-[#0F6E6E] dark:text-cyan-300">
                 مصدر دخلك الأساسي كطالب <span className="text-rose-500">*</span>
               </label>
-              <select
-                value={incomeSourceInput}
-                onChange={(e) => {
-                  setIncomeSourceInput(e.target.value);
-                  setContextError('');
-                }}
-                className="w-full bg-white dark:bg-[#102033] border-2 border-teal-300 dark:border-cyan-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
-                dir="rtl"
-              >
-                <option value="">اختر مصدر الدخل...</option>
-                <option value="مصروف من الأسرة">مصروف من الأسرة</option>
-                <option value="مكافأة جامعية/منحة">مكافأة جامعية/منحة</option>
-                <option value="عمل جزئي">عمل جزئي</option>
-                <option value="غير ذلك">غير ذلك</option>
-              </select>
+
+              {/* Student Quick Chips */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {[
+                  { label: 'مكافأة جامعية/منحة 🏛️', val: 'مكافأة جامعية/منحة' },
+                  { label: 'مصروف من الأسرة 👨‍👩‍👦', val: 'مصروف من الأسرة' },
+                  { label: 'عمل جزئي ⏳', val: 'عمل جزئي' },
+                  { label: 'غير ذلك 💳', val: 'غير ذلك' },
+                ].map((sItem) => (
+                  <button
+                    key={sItem.val}
+                    type="button"
+                    onClick={() => {
+                      setIncomeSourceInput(sItem.val);
+                      setContextError('');
+                    }}
+                    className={`p-2 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
+                      incomeSourceInput === sItem.val
+                        ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-xs'
+                        : 'bg-white dark:bg-[#102033] text-teal-900 dark:text-cyan-200 border-teal-300 dark:border-cyan-800 hover:border-[#0F6E6E]'
+                    }`}
+                  >
+                    {sItem.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
           {/* Conditional 2: Employee / Business Income Stability */}
           {isEmployeeOrBusinessInput && (
-            <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 space-y-1.5 animate-fadeIn">
+            <div className="p-3.5 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/70 space-y-2 animate-fadeIn">
               <label className="block text-xs sm:text-sm font-black text-[#0F6E6E] dark:text-cyan-300">
                 هل دخلك ثابت؟ <span className="text-rose-500">*</span>
               </label>
-              <select
-                value={incomeStabilityInput}
-                onChange={(e) => {
-                  setIncomeStabilityInput(e.target.value);
-                  setContextError('');
-                }}
-                className="w-full bg-white dark:bg-[#102033] border-2 border-teal-300 dark:border-cyan-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
-                dir="rtl"
-              >
-                <option value="">اختر طبيعة الدخل...</option>
-                <option value="نعم (دخل ثابت)">نعم (دخل ثابت)</option>
-                <option value="لا (دخل متغير)">لا (دخل متغير)</option>
-              </select>
+
+              {/* Stability Quick Chips */}
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { label: 'نعم (دخل ثابت شهري) 🔒', val: 'نعم (دخل ثابت)' },
+                  { label: 'لا (دخل متغير/عمولات) 📊', val: 'لا (دخل متغير)' },
+                ].map((stItem) => (
+                  <button
+                    key={stItem.val}
+                    type="button"
+                    onClick={() => {
+                      setIncomeStabilityInput(stItem.val);
+                      setContextError('');
+                    }}
+                    className={`p-2 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
+                      incomeStabilityInput === stItem.val
+                        ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-xs'
+                        : 'bg-white dark:bg-[#102033] text-teal-900 dark:text-cyan-200 border-teal-300 dark:border-cyan-800 hover:border-[#0F6E6E]'
+                    }`}
+                  >
+                    {stItem.label}
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -211,22 +265,31 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
             <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
               الفئة العمرية <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={ageGroupInput}
-              onChange={(e) => {
-                setAgeGroupInput(e.target.value);
-                setContextError('');
-              }}
-              className="w-full bg-[#F8FAFA] dark:bg-[#102033] border-2 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
-              dir="rtl"
-            >
-              <option value="">اختر الفئة العمرية...</option>
-              <option value="أقل من 20 سنة">أقل من 20 سنة</option>
-              <option value="20 - 29 سنة">20 - 29 سنة</option>
-              <option value="30 - 39 سنة">30 - 39 سنة</option>
-              <option value="40 - 49 سنة">40 - 49 سنة</option>
-              <option value="50 سنة فأكثر">50 سنة فأكثر</option>
-            </select>
+            <div className="flex flex-wrap gap-2">
+              {[
+                'أقل من 20 سنة',
+                '20 - 29 سنة',
+                '30 - 39 سنة',
+                '40 - 49 سنة',
+                '50 سنة فأكثر',
+              ].map((ag) => (
+                <button
+                  key={ag}
+                  type="button"
+                  onClick={() => {
+                    setAgeGroupInput(ag);
+                    setContextError('');
+                  }}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                    ageGroupInput === ag
+                      ? 'bg-[#0F6E6E] text-white border-[#0F6E6E]'
+                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]'
+                  }`}
+                >
+                  {ag}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* 3. Has Dependents */}
@@ -234,19 +297,28 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
             <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
               هل لديك معالون؟ (أسرة أو أطفال) <span className="text-rose-500">*</span>
             </label>
-            <select
-              value={hasDependentsInput}
-              onChange={(e) => {
-                setHasDependentsInput(e.target.value);
-                setContextError('');
-              }}
-              className="w-full bg-[#F8FAFA] dark:bg-[#102033] border-2 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E] dark:hover:border-cyan-400 rounded-2xl px-4 py-3 min-h-[48px] h-[48px] text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-2 focus:ring-[#0F6E6E]/20 transition-all cursor-pointer"
-              dir="rtl"
-            >
-              <option value="">اختر الإجابة...</option>
-              <option value="نعم">نعم</option>
-              <option value="لا">لا</option>
-            </select>
+            <div className="grid grid-cols-2 gap-2">
+              {[
+                { label: 'لا (بدون معالين) 👤', val: 'لا' },
+                { label: 'نعم (أسرة أو أطفال) 👨‍👩‍👧‍👦', val: 'نعم' },
+              ].map((dep) => (
+                <button
+                  key={dep.val}
+                  type="button"
+                  onClick={() => {
+                    setHasDependentsInput(dep.val);
+                    setContextError('');
+                  }}
+                  className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
+                    hasDependentsInput === dep.val
+                      ? 'bg-[#0F6E6E] text-white border-[#0F6E6E]'
+                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]'
+                  }`}
+                >
+                  {dep.label}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
 

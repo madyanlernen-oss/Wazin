@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import confetti from 'canvas-confetti';
 import {
   CalendarDays,
   CheckCircle2,
@@ -146,6 +147,15 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
 
     const nextCompleted = !currentTask.isCompleted;
     if (nextCompleted) {
+      try {
+        confetti({
+          particleCount: 50,
+          spread: 60,
+          origin: { y: 0.7 },
+        });
+      } catch {
+        // ignore
+      }
       setShowCelebrationToast(true);
       setTimeout(() => setShowCelebrationToast(false), 3200);
     }
