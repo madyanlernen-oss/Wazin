@@ -118,46 +118,25 @@ async function testLiveModelAndFallback() {
   try {
     if (GEMINI_API_KEY) {
       const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
-      const candidateModels = Array.from(
-        new Set([GEMINI_MODEL, 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite'].filter(Boolean))
-      );
-      let pingSuccess = false;
-      let lastPingErr: any = null;
-      let usedModel = GEMINI_MODEL;
-
-      for (const m of candidateModels) {
-        try {
-          const liveRes = await ai.models.generateContent({
-            model: m,
-            contents: [{ role: 'user', parts: [{ text: 'سلام' }] }],
-          });
-          const duration = Date.now() - startLive;
-          if (liveRes.text) {
-            pingSuccess = true;
-            usedModel = m;
-            results.push({
-              suite,
-              domain: 'Gemini Live',
-              name: `Ping Model ${m}`,
-              passed: true,
-              durationMs: duration,
-              details: `Live response in ${duration}ms without errors`,
-            });
-            break;
-          }
-        } catch (mErr: any) {
-          lastPingErr = mErr;
-          const msg = mErr?.message || String(mErr);
-          if (msg.includes('503') || msg.includes('404')) {
-            continue;
-          }
-          break;
-        }
-      }
-
-      if (!pingSuccess) {
+      try {
+        const liveRes = await ai.models.generateContent({
+          model: GEMINI_MODEL,
+          contents: [{ role: 'user', parts: [{ text: 'سلام' }] }],
+        });
         const duration = Date.now() - startLive;
-        const msg = lastPingErr?.message || String(lastPingErr);
+        assert(Boolean(liveRes.text), 'Live model should return non-empty text');
+        results.push({
+          suite,
+          domain: 'Gemini Live',
+          name: `Ping Model ${GEMINI_MODEL}`,
+          passed: true,
+          durationMs: duration,
+          details: `Live response in ${duration}ms without 404/503`,
+        });
+      } catch (liveErr: any) {
+        const duration = Date.now() - startLive;
+        const msg = liveErr?.message || String(liveErr);
+        // In restricted network or sandbox environments without outgoing web access:
         if (msg.includes('ENOTFOUND') || msg.includes('fetch failed') || msg.includes('ECONNREFUSED')) {
           results.push({
             suite,
@@ -167,17 +146,9 @@ async function testLiveModelAndFallback() {
             durationMs: duration,
             details: `Sandboxed/offline environment detected: graceful fallback active (${msg.slice(0, 40)}...)`,
           });
-        } else if (msg.includes('503') || msg.includes('429')) {
-          results.push({
-            suite,
-            domain: 'Gemini Live',
-            name: `Ping Model ${usedModel} (Spike/Quota Boundary)`,
-            passed: true,
-            durationMs: duration,
-            details: `Google API temporary spike/quota handled with local fallback (${msg.slice(0, 40)}...)`,
-          });
         } else {
-          throw lastPingErr;
+          // If it is an unexpected API 404/503
+          throw liveErr;
         }
       }
     } else {
@@ -965,7 +936,7 @@ async function testLiveGeminiScenarios() {
       );
       assert(
         spiritualCall.data.station_completed === true ||
-          /(اعتماد|المحطة التالية|تقييم|خطوتك|أرضية|ممتاز|تود|ننتقل|رائع)/i.test(reply),
+        /(اعتماد|المحطة التالية|تقييم|خطوتك|أرضية|ممتاز|تود|ننتقل|رائع)/i.test(reply),
         'Live spiritual advisor must offer wrap-up/adoption choice without looping'
       );
 
@@ -1012,19 +983,19 @@ async function testLifeWheelLatencyAndIntegrity() {
   const calcStart = Date.now();
   try {
     const scores: Record<LifeAreaId, number> = {
-      '01-financial': 4,
-      '02-health': 5,
-      '03-spiritual': 3,
-      '04-career': 6,
-      '05-personal': 5,
-      '06-learning': 6,
-      '07-family': 7,
-      '08-social': 5,
+      financial: 4,
+      health: 5,
+      spiritual: 3,
+      career: 6,
+      personal: 5,
+      learning: 6,
+      family: 7,
+      social: 5,
     };
     const values = Object.values(scores);
     const average = Math.round((values.reduce((a, b) => a + b, 0) / values.length) * 10) / 10;
     let minScore = Infinity;
-    let bottleneck: LifeAreaId = '01-financial';
+    let bottleneck: LifeAreaId = 'financial';
     for (const [area, s] of Object.entries(scores) as [LifeAreaId, number][]) {
       if (s < minScore) {
         minScore = s;
@@ -1034,7 +1005,7 @@ async function testLifeWheelLatencyAndIntegrity() {
     const duration = Date.now() - calcStart;
 
     assert(average === 5.1, `Average expected 5.1, got ${average}`);
-    assert(bottleneck === '03-spiritual', `Bottleneck expected 03-spiritual, got ${bottleneck}`);
+    assert(bottleneck === 'spiritual', `Bottleneck expected spiritual, got ${bottleneck}`);
     assert(duration < 5000, `Calculation exceeded 5000ms SLA: ${duration}ms`);
 
     results.push({
@@ -1060,23 +1031,23 @@ async function testLifeWheelLatencyAndIntegrity() {
   const directorStart = Date.now();
   try {
     const testScores: Record<string, number> = {
-      '01-financial': 4,
-      '02-health': 5,
-      '03-spiritual': 3,
-      '04-career': 6,
-      '05-personal': 5,
-      '06-learning': 6,
-      '07-family': 7,
-      '08-social': 5,
+      financial: 4,
+      health: 5,
+      spiritual: 3,
+      career: 6,
+      personal: 5,
+      learning: 6,
+      family: 7,
+      social: 5,
     };
     const report = generateFallbackDirectorReport(
       studentProfile,
       testScores,
       {
-        '03-spiritual': 'التشتت الرقمي وضغط المهام',
-        '01-financial': 'المصروف يكفي لكن لا يوجد ادخار',
+        spiritual: 'التشتت الرقمي وضغط المهام',
+        financial: 'المصروف يكفي لكن لا يوجد ادخار',
       },
-      '03-spiritual'
+      'spiritual'
     );
     const duration = Date.now() - directorStart;
 
@@ -1107,8 +1078,8 @@ async function testLifeWheelLatencyAndIntegrity() {
   // Test 3: Advisor Assessment to Life Wheel Roundtrip
   const roundtripStart = Date.now();
   try {
-    const finAdvisor = ADVISORS_LIST.find((a) => a.id === '01-financial') || {
-      id: '01-financial',
+    const finAdvisor = ADVISORS_LIST.find((a) => a.id === 'financial') || {
+      id: 'financial',
       name: 'أ. كمال المالي',
       role: 'مستشار التخطيط المالي وتنمية الأصول',
     };
@@ -1292,11 +1263,11 @@ async function testEisenhowerMatrixOperations() {
   const toggleStart = Date.now();
   try {
     const sampleGoal = { ...INITIAL_EISENHOWER_GOALS[0] };
-    const initialStatus = sampleGoal.isCompleted;
-    sampleGoal.isCompleted = !initialStatus;
-    assert(sampleGoal.isCompleted !== initialStatus, 'Goal toggling must invert isCompleted flag');
-    sampleGoal.isCompleted = initialStatus;
-    assert(sampleGoal.isCompleted === initialStatus, 'Goal re-toggling must restore original status');
+    const initialStatus = sampleGoal.completed;
+    sampleGoal.completed = !initialStatus;
+    assert(sampleGoal.completed !== initialStatus, 'Goal toggling must invert completed flag');
+    sampleGoal.completed = initialStatus;
+    assert(sampleGoal.completed === initialStatus, 'Goal re-toggling must restore original status');
 
     results.push({
       suite,

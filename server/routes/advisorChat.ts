@@ -1050,11 +1050,11 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
           }),
         });
 
-        const groqTimeoutPromise = new Promise<Response>((_, reject) =>
+        const groqTimeoutPromise = new Promise<globalThis.Response>((_, reject) =>
           setTimeout(() => reject(new Error('مهلة استجابة مزود Groq (2.5 ثوانٍ) تجاوزت الحد المسموح')), 2500)
         );
 
-        const groqRes = await Promise.race([groqCall, groqTimeoutPromise]);
+        const groqRes: globalThis.Response = await Promise.race([groqCall, groqTimeoutPromise]);
 
         if (!groqRes.ok) {
           const errText = await groqRes.text();
