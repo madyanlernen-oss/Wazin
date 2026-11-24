@@ -14,6 +14,9 @@ interface AssessmentChatStreamProps {
   onDismissPrivacy: () => void;
   onUndoLastAnswer: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  offeredScore?: number | null;
+  onAdoptScoreAndComplete?: (score: number) => void;
+  onContinueDialogue?: () => void;
 }
 
 export const AssessmentChatStream: React.FC<AssessmentChatStreamProps> = ({
@@ -25,8 +28,12 @@ export const AssessmentChatStream: React.FC<AssessmentChatStreamProps> = ({
   onDismissPrivacy,
   onUndoLastAnswer,
   messagesEndRef,
+  offeredScore,
+  onAdoptScoreAndComplete,
+  onContinueDialogue,
 }) => {
   const lastUserMsgId = [...messages].reverse().find((m) => m.sender === 'user')?.id;
+  const lastAdvisorMsgId = [...messages].reverse().find((m) => m.sender === 'advisor')?.id;
 
   return (
     <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#F7F6F2]/60 dark:bg-[#071318]/90 transition-colors">
@@ -84,6 +91,47 @@ export const AssessmentChatStream: React.FC<AssessmentChatStreamProps> = ({
                 >
                   {msg.timestamp}
                 </span>
+
+                {/* Direct Adopt Score Action Box under the Advisor Message when an assessment score is offered */}
+                {isAdvisor && msg.id === lastAdvisorMsgId && !isCompleted && offeredScore !== undefined && offeredScore !== null && offeredScore > 0 && (
+                  <div className="mt-3 pt-3 border-t border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between gap-2.5 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-600 dark:bg-emerald-400" />
+                      </span>
+                      <span className="text-xs font-black text-emerald-950 dark:text-emerald-200 flex items-center gap-1">
+                        <span>التقييم المقترح:</span>
+                        <span dir="ltr" className="font-mono text-xs px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-900/80 text-emerald-950 dark:text-emerald-100 font-black">
+                          {offeredScore.toFixed(1)} / 10
+                        </span>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      {onContinueDialogue && (
+                        <button
+                          type="button"
+                          disabled={isAdvisorReplying}
+                          onClick={onContinueDialogue}
+                          className="px-3 py-1.5 rounded-xl bg-[#F7F6F2] dark:bg-[#162734] hover:bg-[#EDEBE3] dark:hover:bg-[#1E343F] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all border border-[#E2E8F0] dark:border-[#1E343F] cursor-pointer shadow-xs disabled:opacity-40"
+                        >
+                          💬 استمرار الحوار
+                        </button>
+                      )}
+                      {onAdoptScoreAndComplete && (
+                        <button
+                          type="button"
+                          disabled={isAdvisorReplying}
+                          onClick={() => onAdoptScoreAndComplete(offeredScore)}
+                          className="px-3.5 py-1.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#22D3EE] dark:hover:bg-cyan-300 text-white dark:text-[#071318] text-xs font-black transition-all shadow-md cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          <span>اعتماد التقييم ({offeredScore.toFixed(1)})</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {/* Undo & Edit actions for last user message */}
                 {!isAdvisor && msg.id === lastUserMsgId && !isCompleted && !isAdvisorReplying && (

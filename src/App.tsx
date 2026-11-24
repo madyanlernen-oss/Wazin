@@ -216,9 +216,19 @@ export default function App() {
   // Handler: Update user profile context fields
   const handleUpdateUserProfile = (updated: Partial<UserProfile>) => {
     setAppState((prev) => {
-      if (!prev.userProfile) return prev;
+      const baseProfile: UserProfile = prev.userProfile || {
+        name: 'سعود المنصور',
+        email: 'saud@wazan.local',
+        registeredAt: new Date().toISOString(),
+        currentFocus: 'التوازن الشخصي والمهني',
+        employmentStatus: 'موظف',
+        workStatus: 'موظف',
+        ageGroup: '30 - 39 سنة',
+        hasDependents: 'نعم',
+        incomeStability: 'نعم (دخل ثابت)',
+      };
       const nextProfile: UserProfile = {
-        ...prev.userProfile,
+        ...baseProfile,
         ...updated,
       };
       saveStoredUser(nextProfile);

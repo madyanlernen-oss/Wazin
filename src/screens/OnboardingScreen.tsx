@@ -570,12 +570,17 @@ ${specificQuestion}
     const isExplicitContinue = /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار)/i.test(text.trim()) && !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل)/i.test(text.trim());
     // إذا كان المستخدم يطلب صراحة اعتماد التقييم الحالي وكان هناك تقييم معروض في آخر رسالة للمستشار
     const isExplicitAdoption = !isExplicitContinue && /(اعتمد\s+التقييم|اعتماد\s+التقييم|اعتمدها|نعم\s+اعتمد|اعتماد)/i.test(text.trim());
+    if (isExplicitAdoption && !isContextCompleted) {
+      setShowContextModal(true);
+      return;
+    }
     let pendingOfferedScore: number | null = null;
     if (isExplicitAdoption) {
       const lastAdvisorMsg = [...currentList].reverse().find((m) => m.sender === 'advisor');
       if (lastAdvisorMsg) {
-        const offeredMatch = lastAdvisorMsg.text.match(/(?:بدرجة|درجة|تقييمك|وضعك\s+الحالي\s+بدرجة)\s*[:(]?\s*([1-9]|10(?:\.\d+)?|\d+\.\d+)\s*(?:\/|\s*من\s*)\s*10/i)
-          || lastAdvisorMsg.text.match(/([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10/i);
+        const offeredMatch =
+          lastAdvisorMsg.text.match(/(?:أقيّم|أقيم|تقييم|بدرجة|درجة|وضعك\s+الحالي\s+بدرجة|تقييمك|تقييمي)\s*[:(]?\s*([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10/i) ||
+          lastAdvisorMsg.text.match(/(?:^|[(\s])([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10(?:[)\s.,!?]|$)/i);
         if (offeredMatch) {
           const val = parseFloat(offeredMatch[1]);
           if (!isNaN(val) && val >= 1 && val <= 10) {
@@ -982,6 +987,10 @@ ${specificQuestion}
 
   // معالج الاعتماد المباشر للدرجة وإتمام المحطة: تمرير سجل المحادثة الكامل إلى Gemini API لتوليد الملخص والتوصية الذهبية مع التزام State Commit أولاً
   const handleAdoptScoreAndComplete = async (scoreToAdopt: number) => {
+    if (!isContextCompleted) {
+      setShowContextModal(true);
+      return;
+    }
     const finalScore = Number(scoreToAdopt.toFixed(1));
     if (isNaN(finalScore) || finalScore < 1 || finalScore > 10) {
       return;
@@ -1148,6 +1157,9 @@ ${specificQuestion}
           }
           onUndoLastAnswer={handleUndoLastAnswer}
           messagesEndRef={messagesEndRef}
+          offeredScore={isAdvisorReadyForScoring ? effectiveOfferedScore : null}
+          onAdoptScoreAndComplete={handleAdoptScoreAndComplete}
+          onContinueDialogue={handleContinueDialogue}
         />
 
         {/* Input Bar & Dynamic Quick Choices */}

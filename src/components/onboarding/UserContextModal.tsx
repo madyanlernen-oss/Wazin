@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, X, AlertCircle } from 'lucide-react';
+import { User, X, AlertCircle, Sparkles } from 'lucide-react';
 import { UserProfile } from '../../types/lifeBalance';
 
 interface UserContextModalProps {
@@ -45,27 +45,90 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
     workStatusInput === 'صاحب عمل' ||
     workStatusInput === 'مستقل' ||
     workStatusInput.includes('صاحب عمل') ||
-    workStatusInput.includes('مستقل');
+    workStatusInput.includes('مستقل') ||
+    workStatusInput.includes('قطاع خاص') ||
+    workStatusInput.includes('حكومي');
+
+  // التحقق الشامل من استيفاء الحقول الإجبارية
+  const isFormValid = Boolean(
+    workStatusInput.trim() &&
+    ageGroupInput.trim() &&
+    hasDependentsInput.trim() &&
+    (!isStudentInput || incomeSourceInput.trim()) &&
+    (!isEmployeeOrBusinessInput || incomeStabilityInput.trim())
+  );
+
+  // زر التعبئة السريعة لشخصية سعود المنصور (بيانات تجريبية مكتملة)
+  const handleFillDemoSaud = () => {
+    setWorkStatusInput('موظف');
+    setAgeGroupInput('30 - 39 سنة');
+    setHasDependentsInput('نعم');
+    setIncomeStabilityInput('نعم (دخل ثابت)');
+    setIncomeSourceInput('');
+    setContextError('');
+  };
+
+  const isWorkStatusSelected = (val: string) => {
+    if (workStatusInput === val) return true;
+    if (val === 'موظف' && workStatusInput.includes('موظف')) return true;
+    if (val === 'طالب جامعي' && workStatusInput.includes('طالب')) return true;
+    if (val === 'صاحب عمل/مستقل' && (workStatusInput.includes('صاحب عمل') || workStatusInput.includes('مستقل'))) return true;
+    if (val === 'متقاعد' && workStatusInput.includes('متقاعد')) return true;
+    if (val === 'باحث عن عمل' && (workStatusInput.includes('باحث') || workStatusInput.includes('عاطل'))) return true;
+    return false;
+  };
+
+  const isAgeGroupSelected = (ag: string) => {
+    if (ageGroupInput === ag) return true;
+    if (ag.includes('30') && (ageGroupInput.includes('30') || ageGroupInput === '30-39')) return true;
+    if (ag.includes('20') && !ag.includes('أقل') && (ageGroupInput.includes('20') || ageGroupInput === '20-29')) return true;
+    if (ag.includes('40') && (ageGroupInput.includes('40') || ageGroupInput === '40-49')) return true;
+    if (ag.includes('50') && ageGroupInput.includes('50')) return true;
+    if (ag.includes('أقل') && ageGroupInput.includes('أقل')) return true;
+    return false;
+  };
+
+  const isDependentsSelected = (depVal: string) => {
+    if (hasDependentsInput === depVal) return true;
+    if (depVal === 'نعم' && (hasDependentsInput.startsWith('نعم') || hasDependentsInput.includes('أسرة') || hasDependentsInput.includes('أطفال'))) return true;
+    if (depVal === 'لا' && (hasDependentsInput === 'لا' || hasDependentsInput.includes('بدون') || hasDependentsInput.includes('أعزب'))) return true;
+    return false;
+  };
+
+  const isIncomeSourceSelected = (sVal: string) => {
+    if (incomeSourceInput === sVal) return true;
+    if (sVal.includes('مكافأة') && incomeSourceInput.includes('مكافأة')) return true;
+    if (sVal.includes('مصروف') && incomeSourceInput.includes('مصروف')) return true;
+    if (sVal.includes('جزئي') && incomeSourceInput.includes('جزئي')) return true;
+    return false;
+  };
+
+  const isIncomeStabilitySelected = (stVal: string) => {
+    if (incomeStabilityInput === stVal) return true;
+    if (stVal.includes('ثابت') && incomeStabilityInput.includes('ثابت')) return true;
+    if (stVal.includes('متغير') && incomeStabilityInput.includes('متغير')) return true;
+    return false;
+  };
 
   const handleSave = () => {
     if (!workStatusInput.trim()) {
-      setContextError('يرجى اختيار حالة العمل لإكمال التسجيل وتخصيص استشاراتك.');
+      setContextError('حقل "حالة العمل" إجباري؛ يرجى تحديده لمتابعة التقييم وتخصيص استشاراتك.');
       return;
     }
     if (!ageGroupInput.trim()) {
-      setContextError('يرجى اختيار الفئة العمرية.');
+      setContextError('حقل "الفئة العمرية" إجباري؛ يرجى اختيار فئتك العمرية لمتابعة التقييم.');
       return;
     }
     if (!hasDependentsInput.trim()) {
-      setContextError('يرجى تحديد ما إذا كان لديك معالون.');
+      setContextError('حقل "المعالون" إجباري؛ يرجى تحديد ما إذا كان لديك معالون لمتابعة التقييم.');
       return;
     }
     if (isStudentInput && !incomeSourceInput.trim()) {
-      setContextError('يرجى اختيار مصدر دخلك الأساسي كطالب لإكمال تخصيص خطتك.');
+      setContextError('حقل "مصدر الدخل كطالب" إجباري؛ يرجى تحديد مصدر دخلك الأساسي لإكمال خطتك.');
       return;
     }
     if (isEmployeeOrBusinessInput && !incomeStabilityInput.trim()) {
-      setContextError('يرجى تحديد ما إذا كان دخلك ثابتاً أم متغيراً.');
+      setContextError('حقل "استقرار الدخل" إجباري؛ يرجى تحديد ما إذا كان دخلك ثابتاً أم متغيراً.');
       return;
     }
 
@@ -85,7 +148,13 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
       role="dialog"
       aria-modal="true"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs"
-      onClick={onClose}
+      onClick={() => {
+        if (isContextCompleted) {
+          onClose();
+        } else {
+          setContextError('يرجى استكمال الحقول الإلزامية المطلوبة أولاً أو الضغط على "إلغاء والعودة".');
+        }
+      }}
     >
       <div
         className="bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-800 rounded-3xl p-6 sm:p-7 max-w-lg w-full shadow-2xl space-y-5 text-right animate-fadeIn"
@@ -103,11 +172,11 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
                 </h3>
                 {!isContextCompleted ? (
                   <span className="px-2 py-0.5 text-[11px] font-black rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
-                    إلزامي
+                    شرط إلزامي للتقييم
                   </span>
                 ) : (
                   <span className="px-2 py-0.5 text-[11px] font-black rounded-md bg-teal-500/10 text-[#0F6E6E] dark:text-cyan-400 border border-teal-500/20">
-                    تأكيد السياق للتقييم
+                    السياق معتمد
                   </span>
                 )}
               </div>
@@ -121,26 +190,47 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
             type="button"
             onClick={onClose}
             className="w-9 h-9 rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors flex items-center justify-center cursor-pointer flex-shrink-0"
-            aria-label={!isContextCompleted ? 'إغلاق والعودة للصفحة السابقة' : 'إغلاق النافذة'}
-            title={!isContextCompleted ? 'إغلاق والعودة للصفحة السابقة' : 'إغلاق النافذة'}
+            aria-label={!isContextCompleted ? 'إلغاء والعودة' : 'إغلاق النافذة'}
+            title={!isContextCompleted ? 'إلغاء والعودة' : 'إغلاق النافذة'}
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
+        {/* زر التعبئة السريعة لشخصية سعود المنصور للمحكّمين */}
+        <div className="flex items-center justify-between p-3 rounded-2xl bg-gradient-to-r from-teal-50 via-emerald-50 to-teal-50 dark:from-teal-950/40 dark:via-emerald-950/30 dark:to-teal-950/40 border border-teal-200/90 dark:border-teal-800/80 transition-all shadow-xs">
+          <div className="text-right">
+            <span className="block text-xs font-black text-[#0F6E6E] dark:text-cyan-300">
+              تجربة سريعة للتحكيم والعرض؟
+            </span>
+            <span className="text-[11px] text-slate-500 dark:text-slate-400">
+              تعبئة سياق شخصية "سعود المنصور" بنقرة واحدة
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={handleFillDemoSaud}
+            className="px-3.5 py-1.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white text-xs font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 flex-shrink-0"
+            title="تعبئة بيانات سعود المنصور التجريبية بنقرة واحدة"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>سعود المنصور (تجريبي)</span>
+          </button>
+        </div>
+
         {contextError && (
-          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2">
+          <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-600 dark:text-rose-400 font-bold flex items-center gap-2 animate-fadeIn">
             <AlertCircle className="w-4 h-4 flex-shrink-0" />
             <span>{contextError}</span>
           </div>
         )}
 
-        <div className="space-y-4.5 max-h-[70vh] overflow-y-auto px-1 scrollbar-none">
+        <div className="space-y-4.5 max-h-[62vh] overflow-y-auto px-1 scrollbar-none">
           {/* 1. Work Status */}
           <div>
             <div className="flex items-center justify-between mb-2">
               <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white">
-                حالة العمل <span className="text-rose-500">*</span>
+                حالة العمل <span className="text-rose-500 font-bold">*</span>
               </label>
               <span className="text-[11px] text-slate-400 font-bold">انقر للتحديد السريع</span>
             </div>
@@ -154,23 +244,26 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
                 { label: 'باحث عن عمل 🔍', val: 'باحث عن عمل' },
                 { label: 'متقاعد 🌿', val: 'متقاعد' },
                 { label: 'غير ذلك ✨', val: 'غير ذلك' },
-              ].map((item) => (
-                <button
-                  key={item.val}
-                  type="button"
-                  onClick={() => {
-                    setWorkStatusInput(item.val);
-                    setContextError('');
-                  }}
-                  className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border text-center flex items-center justify-center gap-1 ${
-                    workStatusInput === item.val
-                      ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-sm'
-                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]/60'
-                  }`}
-                >
-                  {item.label}
-                </button>
-              ))}
+              ].map((item) => {
+                const selected = isWorkStatusSelected(item.val);
+                return (
+                  <button
+                    key={item.val}
+                    type="button"
+                    onClick={() => {
+                      setWorkStatusInput(item.val);
+                      setContextError('');
+                    }}
+                    className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border text-center flex items-center justify-center gap-1 ${
+                      selected
+                        ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-sm'
+                        : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]/60'
+                    }`}
+                  >
+                    {item.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
@@ -178,7 +271,7 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
           {isStudentInput && (
             <div className="p-3.5 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/70 space-y-2 animate-fadeIn">
               <label className="block text-xs sm:text-sm font-black text-[#0F6E6E] dark:text-cyan-300">
-                مصدر دخلك الأساسي كطالب <span className="text-rose-500">*</span>
+                مصدر دخلك الأساسي كطالب <span className="text-rose-500 font-bold">*</span>
               </label>
 
               {/* Student Quick Chips */}
@@ -188,23 +281,26 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
                   { label: 'مصروف من الأسرة 👨‍👩‍👦', val: 'مصروف من الأسرة' },
                   { label: 'عمل جزئي ⏳', val: 'عمل جزئي' },
                   { label: 'غير ذلك 💳', val: 'غير ذلك' },
-                ].map((sItem) => (
-                  <button
-                    key={sItem.val}
-                    type="button"
-                    onClick={() => {
-                      setIncomeSourceInput(sItem.val);
-                      setContextError('');
-                    }}
-                    className={`p-2 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
-                      incomeSourceInput === sItem.val
-                        ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-xs'
-                        : 'bg-white dark:bg-[#102033] text-teal-900 dark:text-cyan-200 border-teal-300 dark:border-cyan-800 hover:border-[#0F6E6E]'
-                    }`}
-                  >
-                    {sItem.label}
-                  </button>
-                ))}
+                ].map((sItem) => {
+                  const selected = isIncomeSourceSelected(sItem.val);
+                  return (
+                    <button
+                      key={sItem.val}
+                      type="button"
+                      onClick={() => {
+                        setIncomeSourceInput(sItem.val);
+                        setContextError('');
+                      }}
+                      className={`p-2 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
+                        selected
+                          ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-xs'
+                          : 'bg-white dark:bg-[#102033] text-teal-900 dark:text-cyan-200 border-teal-300 dark:border-cyan-800 hover:border-[#0F6E6E]'
+                      }`}
+                    >
+                      {sItem.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -213,7 +309,7 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
           {isEmployeeOrBusinessInput && (
             <div className="p-3.5 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/70 space-y-2 animate-fadeIn">
               <label className="block text-xs sm:text-sm font-black text-[#0F6E6E] dark:text-cyan-300">
-                هل دخلك ثابت؟ <span className="text-rose-500">*</span>
+                هل دخلك ثابت؟ <span className="text-rose-500 font-bold">*</span>
               </label>
 
               {/* Stability Quick Chips */}
@@ -221,23 +317,26 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
                 {[
                   { label: 'نعم (دخل ثابت شهري) 🔒', val: 'نعم (دخل ثابت)' },
                   { label: 'لا (دخل متغير/عمولات) 📊', val: 'لا (دخل متغير)' },
-                ].map((stItem) => (
-                  <button
-                    key={stItem.val}
-                    type="button"
-                    onClick={() => {
-                      setIncomeStabilityInput(stItem.val);
-                      setContextError('');
-                    }}
-                    className={`p-2 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
-                      incomeStabilityInput === stItem.val
-                        ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-xs'
-                        : 'bg-white dark:bg-[#102033] text-teal-900 dark:text-cyan-200 border-teal-300 dark:border-cyan-800 hover:border-[#0F6E6E]'
-                    }`}
-                  >
-                    {stItem.label}
-                  </button>
-                ))}
+                ].map((stItem) => {
+                  const selected = isIncomeStabilitySelected(stItem.val);
+                  return (
+                    <button
+                      key={stItem.val}
+                      type="button"
+                      onClick={() => {
+                        setIncomeStabilityInput(stItem.val);
+                        setContextError('');
+                      }}
+                      className={`p-2 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
+                        selected
+                          ? 'bg-[#0F6E6E] text-white border-[#0F6E6E] shadow-xs'
+                          : 'bg-white dark:bg-[#102033] text-teal-900 dark:text-cyan-200 border-teal-300 dark:border-cyan-800 hover:border-[#0F6E6E]'
+                      }`}
+                    >
+                      {stItem.label}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -245,7 +344,7 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
           {/* 2. Age Group */}
           <div>
             <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
-              الفئة العمرية <span className="text-rose-500">*</span>
+              الفئة العمرية <span className="text-rose-500 font-bold">*</span>
             </label>
             <div className="flex flex-wrap gap-2">
               {[
@@ -254,57 +353,63 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
                 '30 - 39 سنة',
                 '40 - 49 سنة',
                 '50 سنة فأكثر',
-              ].map((ag) => (
-                <button
-                  key={ag}
-                  type="button"
-                  onClick={() => {
-                    setAgeGroupInput(ag);
-                    setContextError('');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
-                    ageGroupInput === ag
-                      ? 'bg-[#0F6E6E] text-white border-[#0F6E6E]'
-                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]'
-                  }`}
-                >
-                  {ag}
-                </button>
-              ))}
+              ].map((ag) => {
+                const selected = isAgeGroupSelected(ag);
+                return (
+                  <button
+                    key={ag}
+                    type="button"
+                    onClick={() => {
+                      setAgeGroupInput(ag);
+                      setContextError('');
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer border ${
+                      selected
+                        ? 'bg-[#0F6E6E] text-white border-[#0F6E6E]'
+                        : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]'
+                    }`}
+                  >
+                    {ag}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
           {/* 3. Has Dependents */}
           <div>
             <label className="block text-xs sm:text-sm font-black text-[#0F172A] dark:text-white mb-2">
-              هل لديك معالون؟ (أسرة أو أطفال) <span className="text-rose-500">*</span>
+              هل لديك معالون؟ (أسرة أو أطفال) <span className="text-rose-500 font-bold">*</span>
             </label>
             <div className="grid grid-cols-2 gap-2">
               {[
                 { label: 'لا (بدون معالين) 👤', val: 'لا' },
                 { label: 'نعم (أسرة أو أطفال) 👨‍👩‍👧‍👦', val: 'نعم' },
-              ].map((dep) => (
-                <button
-                  key={dep.val}
-                  type="button"
-                  onClick={() => {
-                    setHasDependentsInput(dep.val);
-                    setContextError('');
-                  }}
-                  className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
-                    hasDependentsInput === dep.val
-                      ? 'bg-[#0F6E6E] text-white border-[#0F6E6E]'
-                      : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]'
-                  }`}
-                >
-                  {dep.label}
-                </button>
-              ))}
+              ].map((dep) => {
+                const selected = isDependentsSelected(dep.val);
+                return (
+                  <button
+                    key={dep.val}
+                    type="button"
+                    onClick={() => {
+                      setHasDependentsInput(dep.val);
+                      setContextError('');
+                    }}
+                    className={`p-2.5 rounded-xl text-xs font-black transition-all cursor-pointer border text-center ${
+                      selected
+                        ? 'bg-[#0F6E6E] text-white border-[#0F6E6E]'
+                        : 'bg-slate-50 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-[#0F6E6E]'
+                    }`}
+                  >
+                    {dep.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+        <div className="flex items-center justify-between gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
           <button
             type="button"
             onClick={onClose}
@@ -315,9 +420,13 @@ export const UserContextModal: React.FC<UserContextModalProps> = ({
           <button
             type="button"
             onClick={handleSave}
-            className="px-6 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-black bg-[#0F6E6E] hover:bg-[#0b5454] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white transition-colors cursor-pointer shadow-md shadow-teal-900/10 flex-1 sm:flex-initial text-center"
+            className={`px-6 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm font-black transition-all cursor-pointer shadow-md flex-1 sm:flex-initial text-center flex items-center justify-center gap-2 ${
+              isFormValid
+                ? 'bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-cyan-600 dark:hover:bg-cyan-500 text-white shadow-teal-900/10'
+                : 'bg-slate-300 dark:bg-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed hover:bg-slate-300'
+            }`}
           >
-            {isContextCompleted ? 'حفظ التعديلات واعتماد السياق' : 'حفظ ومتابعة التقييم'}
+            <span>{isContextCompleted ? 'حفظ التعديلات واعتماد السياق' : 'حفظ ومتابعة التقييم'}</span>
           </button>
         </div>
       </div>
