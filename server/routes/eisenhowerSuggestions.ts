@@ -4,10 +4,26 @@ import { GEMINI_API_KEY, GEMINI_MODEL } from '../config/env';
 
 export const eisenhowerSuggestionsRouter = Router();
 
+// In-memory short-lived cache (TTL 60s) for instant response on re-navigation
+const eisenhowerCache = new Map<string, { data: any; timestamp: number }>();
+
 // Endpoint: Agent 11 - Eisenhower Goal Suggestions (Synthesized from Agent 9 & Agent 10)
 eisenhowerSuggestionsRouter.post('/eisenhower-suggestions', async (req: Request, res: Response) => {
   try {
     const { directorReport, scores, userProfile, currentGoals } = req.body;
+
+    const cacheKey = JSON.stringify({
+      name: userProfile?.name,
+      status: userProfile?.employmentStatus || userProfile?.workStatus,
+      scores,
+    });
+    const cached = eisenhowerCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 60000) {
+      console.log('[Eisenhower Suggestions] استجابة فورية من الذاكرة المؤقتة (Cache Hit < 1ms)');
+      return res.json(cached.data);
+    }
+
+    const isStudent = (userProfile?.employmentStatus || userProfile?.workStatus || '').includes('طالب');
 
     // Local fallback generator function
     const getLocalSuggestions = () => {
@@ -42,23 +58,38 @@ eisenhowerSuggestionsRouter.post('/eisenhower-suggestions', async (req: Request,
         });
       }
 
-      items.push({
-        id: `sug_drhani_${Date.now()}_4`,
-        title: 'تثبيت موعد النوم في الحادية عشرة مساءً وقطع الشاشات قبلها بـ 45 دقيقة',
-        quadrant: 'q2_important_not_urgent',
-        quadrant_label: 'المربع 2 (جدول له - جوهر المنظومة)',
-        domain: 'الجانب الصحي',
-        rationale: 'توجيه قيادي من د. هاني الموجه (وكيل 10) لحماية طاقة الجسد ومنع استنزاف المربع الأول.',
-        sourceAgent: 'agent_10_advisor',
-        sourceAgentName: 'د. هاني الموجه (وكيل 10)',
-        sourceTypeLabel: 'أولوية قيادية للمربع الثاني',
-      });
+      if (isStudent) {
+        items.push({
+          id: `sug_drhani_${Date.now()}_4`,
+          title: 'اقتطاع 30-50 ريالاً في حصالة أمان فور استلام المكافأة الجامعية',
+          quadrant: 'q2_important_not_urgent',
+          quadrant_label: 'المربع 2 (جدول له - جوهر المنظومة)',
+          domain: 'الجانب المالي',
+          rationale: 'توجيه قيادي من د. هاني الموجه (وكيل 10) لتأسيس أول صمام أمان جامعي دون ديون.',
+          sourceAgent: 'agent_10_advisor',
+          sourceAgentName: 'د. هاني الموجه (وكيل 10)',
+          sourceTypeLabel: 'أولوية قيادية للمربع الثاني',
+        });
+      } else {
+        items.push({
+          id: `sug_drhani_${Date.now()}_4`,
+          title: 'تثبيت موعد النوم في الحادية عشرة مساءً وقطع الشاشات قبلها بـ 45 دقيقة',
+          quadrant: 'q2_important_not_urgent',
+          quadrant_label: 'المربع 2 (جدول له - جوهر المنظومة)',
+          domain: 'الجانب الصحي',
+          rationale: 'توجيه قيادي من د. هاني الموجه (وكيل 10) لحماية طاقة الجسد ومنع استنزاف المربع الأول.',
+          sourceAgent: 'agent_10_advisor',
+          sourceAgentName: 'د. هاني الموجه (وكيل 10)',
+          sourceTypeLabel: 'أولوية قيادية للمربع الثاني',
+        });
+      }
 
       return {
         agent_name: 'وكيل اقتراح الخطط (مصفوفة أيزنهاور)',
         has_sufficient_context: Boolean(directorReport || scores),
         suggestions: items.slice(0, 5),
         reply: 'إليك أهم الأولويات والخطط الذكية المستخلصة بعناية من تحليلات م. معتز التكاملي ود. هاني الموجه. يمكنك طرحها مباشرة في مصفوفتك أو تخصيصها يدوياً.',
+        source: 'fallback',
       };
     };
 
@@ -111,8 +142,11 @@ ${eisenhowerUserContext}
 اقترح من 3 إلى 5 مهام وخطط محددة وفق المخطط.
 `;
 
-    const response = await ai.models.generateContent({
-      model: (GEMINI_MODEL && !GEMINI_MODEL.includes('2.5') ? GEMINI_MODEL : 'gemini-flash-lite-latest'),
+    const candidateModel = GEMINI_MODEL && !GEMINI_MODEL.includes('2.5') ? GEMINI_MODEL : 'gemini-3.5-flash-lite';
+    const startGemini = Date.now();
+
+    const apiCall = ai.models.generateContent({
+      model: candidateModel,
       contents: prompt,
       config: {
         systemInstruction,
@@ -146,15 +180,25 @@ ${eisenhowerUserContext}
       },
     });
 
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('مهلة استجابة Gemini (3.5 ثوانٍ) تجاوزت الحد المسموح في اقتراحات أيزنهاور')), 3500)
+    );
+
+    const response = await Promise.race([apiCall, timeoutPromise]);
+    const durationMs = Date.now() - startGemini;
+    console.log(`[Eisenhower Suggestions] استجاب Gemini بنجاح في ${durationMs}ms`);
+
     const parsed = JSON.parse(response.text || '{}');
     if (!parsed.suggestions || parsed.suggestions.length === 0) {
       return res.json(getLocalSuggestions());
     }
+    parsed.source = 'gemini';
+    eisenhowerCache.set(cacheKey, { data: parsed, timestamp: Date.now() });
     return res.json(parsed);
   } catch (err: any) {
-    console.warn('Agent 11 suggestions API fallback to local:', err?.message || err);
-    const { directorReport, scores } = req.body;
-    // local fallback
+    console.warn('[Eisenhower Suggestions] تعذر استدعاء Gemini في الوقت المحدد، تفعيل المقترحات المحلية:', err?.message || err);
+    const { directorReport, scores, userProfile } = req.body;
+    const isStudent = (userProfile?.employmentStatus || userProfile?.workStatus || '').includes('طالب');
     const items: any[] = [];
     if (directorReport?.criticalBottleneck) {
       items.push({
@@ -169,11 +213,25 @@ ${eisenhowerUserContext}
         sourceTypeLabel: 'علاج عنق الزجاجة الحياتي',
       });
     }
+    if (isStudent) {
+      items.push({
+        id: `sug_drhani_${Date.now()}_4`,
+        title: 'اقتطاع 30-50 ريالاً في حصالة أمان فور استلام المكافأة الجامعية',
+        quadrant: 'q2_important_not_urgent',
+        quadrant_label: 'المربع 2 (جدول له - جوهر المنظومة)',
+        domain: 'الجانب المالي',
+        rationale: 'توجيه قيادي من د. هاني الموجه (وكيل 10) لتأسيس أول صمام أمان جامعي دون ديون.',
+        sourceAgent: 'agent_10_advisor',
+        sourceAgentName: 'د. هاني الموجه (وكيل 10)',
+        sourceTypeLabel: 'أولوية قيادية للمربع الثاني',
+      });
+    }
     return res.json({
       agent_name: 'وكيل اقتراح الخطط (مصفوفة أيزنهاور)',
       has_sufficient_context: Boolean(directorReport || scores),
       suggestions: items,
       reply: 'إليك أهم الأولويات والخطط الذكية المستخلصة بعناية من تحليلات م. معتز التكاملي ود. هاني الموجه.',
+      source: 'fallback',
     });
   }
 });

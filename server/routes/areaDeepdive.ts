@@ -4,10 +4,60 @@ import { GEMINI_API_KEY, GEMINI_MODEL } from '../config/env';
 
 export const areaDeepdiveRouter = Router();
 
+// In-memory short-lived cache (TTL 60s) for instant response on re-navigation
+const areaDeepdiveCache = new Map<string, { data: any; timestamp: number }>();
+
+function generateFallbackDeepdive(advisorTitle: string, score: number, userProfile: any) {
+  const status = (userProfile?.employmentStatus || userProfile?.workStatus || '').trim();
+  const isStudent = status === 'طالب جامعي' || status.includes('طالب');
+  const safeScore = score > 0 ? (score > 10 ? Number((score / 10).toFixed(1)) : Number(score.toFixed(1))) : 5.0;
+
+  const studentWins = advisorTitle?.includes('مال')
+    ? [
+        'اقتطاع رمزي (30 إلى 50 ريالاً) كحصالة أمان فور استلام المكافأة/المصروف',
+        'تحديد سقف أسبوعي للمستلزمات والمقاهي لحماية المكافأة',
+      ]
+    : advisorTitle?.includes('روحي') || advisorTitle?.includes('سكينة')
+    ? [
+        'تخصيص 15 دقيقة هدوء صباحي بدون هاتف أو تشتت',
+        'ركعتين بسكينة مع إطالة السجود والتنفس العميق',
+      ]
+    : [
+        'تحديد إجراء واحد ملموس لا يتجاوز 10 دقائق لتطبيقه اليوم',
+        'إدراج هذا الإجراء في المربع الثاني بمصفوفة أيزنهاور لحمايته من التسويف',
+      ];
+
+  return {
+    assessmentSummary: `بناءً على تقييمك الحالي في ${advisorTitle || 'هذا الجانب'} بدرجة (${safeScore}/10)${isStudent ? ' في واقعك الأكاديمي والجامعي' : ''}، يتبين وجود رغبة واضحة للتطوير والانتقال لمستوى أكثر استقراراً ونضجاً.`,
+    keyStrengths: [
+      'الوعي الذاتي العالي بالحاجة للتحسين المستمر دون جلد للذات',
+      'وضوح الرؤية الأولية للأهداف في هذا الجانب وخلو السجل من التعقيد',
+    ],
+    mainChallenges: [
+      'تحدي المداومة والاستمرارية وسط تسارع الالتزامات والمشتتات',
+      'الحاجة إلى بناء عادات صغيرة ثابتة بدلاً من الحماس المؤقت',
+    ],
+    quickWins: studentWins,
+    strategicMilestone: `تحقيق نقلة نوعية واستقرار ملموس في ${advisorTitle || 'هذا الجانب'} خلال الـ 90 يوماً القادمة.`,
+    source: 'fallback',
+  };
+}
+
 // Endpoint: Area Deep-Dive & AI Action Synthesis
 areaDeepdiveRouter.post('/area-deepdive', async (req: Request, res: Response) => {
   try {
     const { advisorTitle, score, answers, goals, userProfile } = req.body;
+
+    const cacheKey = JSON.stringify({
+      advisorTitle,
+      score,
+      status: userProfile?.employmentStatus || userProfile?.workStatus,
+    });
+    const cached = areaDeepdiveCache.get(cacheKey);
+    if (cached && Date.now() - cached.timestamp < 60000) {
+      console.log('[Area Deepdive] استجابة فورية من الذاكرة المؤقتة (Cache Hit < 1ms)');
+      return res.json(cached.data);
+    }
 
     const deepdiveWorkStatus = (userProfile?.employmentStatus || userProfile?.workStatus || '').trim();
     const deepdiveAgeGroup = (userProfile?.ageGroup || '').trim();
@@ -27,22 +77,7 @@ ${deepdiveIncomeStability ? `- طبيعة واستقرار الدخل: ${deepdiv
 `;
 
     if (!GEMINI_API_KEY) {
-      const localDeepdive = {
-        assessmentSummary: `بناءً على تقييمك الحالي في ${advisorTitle || 'هذا الجانب'} بدرجة (${score || 5}/10)، يتبين وجود رغبة واضحة للتطوير والانتقال لمستوى أكثر استقراراً ونضجاً.`,
-        keyStrengths: [
-          'الوعي الذاتي العالي بالحاجة للتحسين المستمر',
-          'وضوح الرؤية الأولية للأهداف في هذا الجانب',
-        ],
-        mainChallenges: [
-          'تحدي المداومة والاستمرارية وسط تسارع الالتزامات اليومية',
-          'الحاجة إلى بناء عادات صغيرة ثابتة بدلاً من الحماس المؤقت',
-        ],
-        quickWins: [
-          'تحديد إجراء واحد ملموس لا يتجاوز 10 دقائق لتطبيقه اليوم',
-          'إدراج هذا الإجراء في المربع الثاني بمصفوفة أيزنهاور لحمايته من التسويف',
-        ],
-        strategicMilestone: `تحقيق نقلة نوعية واستقرار ملموس في ${advisorTitle || 'هذا الجانب'} خلال الـ 90 يوماً القادمة.`,
-      };
+      const localDeepdive = generateFallbackDeepdive(advisorTitle, score, userProfile);
       return res.json(localDeepdive);
     }
 
@@ -63,8 +98,11 @@ ${deepdiveUserContext}
 الأهداف المحددة: ${JSON.stringify(goals || [])}
 `;
 
-    const response = await ai.models.generateContent({
-      model: (GEMINI_MODEL && !GEMINI_MODEL.includes('2.5') ? GEMINI_MODEL : 'gemini-flash-lite-latest'),
+    const candidateModel = GEMINI_MODEL && !GEMINI_MODEL.includes('2.5') ? GEMINI_MODEL : 'gemini-3.5-flash-lite';
+    const startGemini = Date.now();
+
+    const apiCall = ai.models.generateContent({
+      model: candidateModel,
       contents: prompt,
       config: {
         systemInstruction,
@@ -92,6 +130,14 @@ ${deepdiveUserContext}
       },
     });
 
+    const timeoutPromise = new Promise<never>((_, reject) =>
+      setTimeout(() => reject(new Error('مهلة استجابة Gemini (3.5 ثوانٍ) تجاوزت الحد المسموح في التحليل العميق')), 3500)
+    );
+
+    const response = await Promise.race([apiCall, timeoutPromise]);
+    const durationMs = Date.now() - startGemini;
+    console.log(`[Area Deepdive] استجاب Gemini بنجاح في ${durationMs}ms`);
+
     const parsed = JSON.parse(response.text || '{}');
     if (!parsed.reply && (parsed.summary || parsed.advice)) {
       parsed.reply = [parsed.summary, parsed.advice].filter(Boolean).join('\n\n');
@@ -101,26 +147,14 @@ ${deepdiveUserContext}
       else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
       else parsed.actionSteps = [];
     }
+    parsed.source = 'gemini';
+
+    areaDeepdiveCache.set(cacheKey, { data: parsed, timestamp: Date.now() });
     return res.json(parsed);
   } catch (error: any) {
-    console.warn('Area Deep-dive Gemini API unavailable, using local synthesis:', error?.message || error);
-    const { advisorTitle, score } = req.body;
-    const localDeepdive = {
-      assessmentSummary: `بناءً على تقييمك الحالي في ${advisorTitle || 'هذا الجانب'} بدرجة (${score || 5}/10)، يتبين وجود رغبة واضحة للتطوير والانتقال لمستوى أكثر استقراراً ونضجاً.`,
-      keyStrengths: [
-        'الوعي الذاتي العالي بالحاجة للتحسين المستمر',
-        'وضوح الرؤية الأولية للأهداف في هذا الجانب',
-      ],
-      mainChallenges: [
-        'تحدي المداومة والاستمرارية وسط تسارع الالتزامات اليومية',
-        'الحاجة إلى بناء عادات صغيرة ثابتة بدلاً من الحماس المؤقت',
-      ],
-      quickWins: [
-        'تحديد إجراء واحد ملموس لا يتجاوز 10 دقائق لتطبيقه اليوم',
-        'إدراج هذا الإجراء في المربع الثاني بمصفوفة أيزنهاور لحمايته من التسويف',
-      ],
-      strategicMilestone: `تحقيق نقلة نوعية واستقرار ملموس في ${advisorTitle || 'هذا الجانب'} خلال الـ 90 يوماً القادمة.`,
-    };
+    console.warn('[Area Deepdive] تعذر التحليل عبر Gemini، تفعيل التحليل الاستشاري البديل:', error?.message || error);
+    const { advisorTitle, score, userProfile } = req.body;
+    const localDeepdive = generateFallbackDeepdive(advisorTitle, score, userProfile);
     return res.json(localDeepdive);
   }
 });

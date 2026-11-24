@@ -85,8 +85,12 @@ export function processAndReconcileScore(
     // التحقق من النوايا المستقبلية التي لا ينبغي رفع الدرجة بسببها ("سأفعل"، "لن أجلد نفسي")
     const isFutureIntentionOnly = /(سوف|سأبدأ|سأقوم|سأحاول|ناوي|أخطط أن|لن أكرر|لن أجلد نفسي|أتمنى أن|إن شاء الله سـ|ناوي أغير)/i.test(message) && !hasClearPracticeEvidence;
 
-    // اجعل الدرجة النهائية قريبة من تقييم المستخدم الذاتي (فرق أقصاه ±1.0) إلا إذا ذكر أدلة واضحة على ممارسة فعلية أو مشكلة خطيرة
-    if (!hasClearPracticeEvidence && !hasSevereIssueEvidence) {
+    // في حال اعتماد التقييم الصريح: اعتمد الدرجة المتفق عليها 100% دون أي انحراف (Zero Drift)
+    const isAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي|كافي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(message);
+    if (isAdoption) {
+      finalScore = userSelfScore;
+    } else if (!hasClearPracticeEvidence && !hasSevereIssueEvidence) {
+      // اجعل الدرجة النهائية قريبة من تقييم المستخدم الذاتي (فرق أقصاه ±1.0) إلا إذا ذكر أدلة واضحة على ممارسة فعلية أو مشكلة خطيرة
       const minAllowed = Math.max(1.0, userSelfScore - 1.0);
       const maxAllowed = Math.min(10.0, userSelfScore + 1.0);
       if (finalScore < minAllowed) {

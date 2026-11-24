@@ -13,6 +13,26 @@ import {
 
 export const advisorChatRouter = Router();
 
+// In-memory short-lived cache (TTL 30s) for rapid sub-second repeated queries
+const advisorChatCache = new Map<string, { data: any; timestamp: number }>();
+
+function extractCleanJson(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    const braceStart = text.indexOf('{');
+    const braceEnd = text.lastIndexOf('}');
+    if (braceStart !== -1 && braceEnd !== -1 && braceEnd > braceStart) {
+      return JSON.parse(text.slice(braceStart, braceEnd + 1));
+    }
+    throw new Error('تعذر استخراج كائن JSON صالح من استجابة النموذج');
+  }
+}
+
 // Endpoint: Advisor Chat
 advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   // 1) إلغاء استدعاءات الذكاء الاصطناعي فور إغلاق العميل للاتصال لتوفير الحصة
@@ -195,6 +215,21 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const agentKey = req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'));
   const defaultMeta = AGENT_INFO_MAP[agentKey] || { name: 'مستشار وزان', role: 'مستشار الحياة' };
 
+  // Fast In-Memory Cache (TTL 30s) for rapid sub-second repeated queries
+  const chatCacheKey = JSON.stringify({
+    agentKey,
+    msg: message.trim(),
+    workStatus,
+    turn: stationTurnCount,
+    lastMsg: historyMsgTexts[historyMsgTexts.length - 1] || '',
+  });
+
+  const cachedResult = advisorChatCache.get(chatCacheKey);
+  if (cachedResult && Date.now() - cachedResult.timestamp < 30000) {
+    console.log(`[Advisor Chat] استجابة فورية من الذاكرة المؤقتة (Cache Hit < 1ms) لـ ${agentKey}`);
+    return res.json(cachedResult.data);
+  }
+
   // قراءة تعليمات الوكيل من ملف الـ Markdown الخاص به بدقة وتجريدها من القوالب القديمة
   const agentRoleDescription = loadAgentPrompt(agentKey);
 
@@ -210,6 +245,23 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const isAdoptionIntent = !isContinueIntent && /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(message);
   // فحص ما إذا كان المستخدم يوافق على الخطوة الميكروية المقترحة
   const isAcceptingMicroStep = !isContinueIntent && /(حسنا|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|موافق|اتفقنا|بجرب|بحاول|وفر|أوفر|ادخر|أدخر|حصالة|50|100)/i.test(message);
+
+  // استخراج الدرجة المقترحة سابقاً إذا كان قصد المستفيد الاعتماد ولم يكتب رقماً
+  if (isAdoptionIntent && (userSelfScore === undefined || userSelfScore <= 0)) {
+    const lastModelMsg = Array.isArray(history)
+      ? [...history].reverse().find((h: any) => h.role === 'model' || h.role === 'advisor' || h.sender === 'advisor' || h.sender === 'model')
+      : null;
+    const lastModelText = typeof lastModelMsg === 'string'
+      ? lastModelMsg
+      : (lastModelMsg?.content || lastModelMsg?.text || '');
+    const proposedMatch = lastModelText.match(/(?:بدرجة|تقييمك|وضعك الحالي بدرجة|تقييم|درجة)\s*\(?([1-9](?:\.\d+)?|10)\s*(?:\/|\s*من\s*)10\)?/i);
+    if (proposedMatch) {
+      const extractedProposed = parseFloat(proposedMatch[1]);
+      if (!isNaN(extractedProposed) && extractedProposed >= 1 && extractedProposed <= 10) {
+        userSelfScore = extractedProposed;
+      }
+    }
+  }
 
   const isUserAsking = (/[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|تنصحني)(\s|$)/i.test(message)) && !isMoveForwardOrCommitment;
   // إزالة القفل الصارم للتبادلات إذا قدم المستفيد خطوة أو التزاماً أو طلب المتابعة أو طلب الاعتماد
@@ -710,8 +762,8 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
 
           const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutHandle = setTimeout(() => {
-              reject(new Error(`تجاوزت مهلة الاستجابة (10 ثوانٍ) للنموذج: ${model}`));
-            }, 10000);
+              reject(new Error(`تجاوزت مهلة الاستجابة السريعة (3.5 ثوانٍ) للنموذج: ${model}`));
+            }, 3500);
 
             const onClientAbort = () => {
               clearTimeout(timeoutHandle);
@@ -757,7 +809,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
           // 2) إعادة المحاولة عند 503 مرة واحدة فقط وبانتظار 500ms
           if (is503 && attempt === 0) {
             attempt++;
-            await new Promise((r) => setTimeout(r, 500));
+            await new Promise((r) => setTimeout(r, 400));
             continue;
           }
 
@@ -767,7 +819,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       throw new Error(`فشل النموذج ${model} بعد استنفاد المحاولات`);
     };
 
-    // 3) النماذج بالتوازي بدل التتابع: عند فشل النموذج الأول أو تأخره أكثر من 6 ثوانٍ، أطلق النموذج البديل بالتوازي واستخدم أول رد ناجح وألغِ الباقي
+    // 3) النماذج بالتوازي بدل التتابع: عند فشل النموذج الأول أو تأخره أكثر من ثانيتين، أطلق النموذج البديل بالتوازي واستخدم أول رد ناجح وألغِ الباقي
     const abortState = { aborted: false };
     const winningResult = await new Promise<{ response: any; model: string; durationMs: number }>(
       (resolve, reject) => {
@@ -791,7 +843,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
           if (idx >= candidateModels.length || hasResolved || clientAbortController.signal.aborted) return;
           const currentModel = candidateModels[idx];
           let nextLaunched = false;
-          let sixSecondTimer: any;
+          let speculativeTimer: any;
 
           const triggerNext = () => {
             if (!nextLaunched && idx + 1 < candidateModels.length && !hasResolved && !clientAbortController.signal.aborted) {
@@ -800,11 +852,11 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             }
           };
 
-          sixSecondTimer = setTimeout(triggerNext, 6000);
+          speculativeTimer = setTimeout(triggerNext, 2000);
 
           callSingleModel(currentModel, abortState)
             .then((result) => {
-              clearTimeout(sixSecondTimer);
+              clearTimeout(speculativeTimer);
               if (!hasResolved) {
                 hasResolved = true;
                 abortState.aborted = true;
@@ -812,7 +864,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
               }
             })
             .catch(() => {
-              clearTimeout(sixSecondTimer);
+              clearTimeout(speculativeTimer);
               triggerNext();
               completedCount++;
               if (completedCount === candidateModels.length && !hasResolved) {
@@ -826,8 +878,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     );
 
     const response = winningResult.response;
-
-    const parsed = JSON.parse(response.text || '{}');
+    const parsed = extractCleanJson(response.text || '{}');
     parsed.agent_name = parsed.agent_name || advisorName;
     parsed.reasoning = parsed.reasoning || '';
     parsed.summary = parsed.summary || '';
@@ -920,6 +971,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     }
     // 3) إضافة حقل source: "gemini"
     parsed.source = 'gemini';
+    advisorChatCache.set(chatCacheKey, { data: parsed, timestamp: Date.now() });
     return res.json(parsed);
   } catch (error: any) {
     if (clientAbortController.signal.aborted) {
@@ -983,7 +1035,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         groqMessages.push({ role: 'user', content: String(message || '').trim() });
 
-        const groqRes = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        const groqCall = fetch('https://api.groq.com/openai/v1/chat/completions', {
           method: 'POST',
           signal: clientAbortController.signal,
           headers: {
@@ -998,6 +1050,12 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
           }),
         });
 
+        const groqTimeoutPromise = new Promise<Response>((_, reject) =>
+          setTimeout(() => reject(new Error('مهلة استجابة مزود Groq (2.5 ثوانٍ) تجاوزت الحد المسموح')), 2500)
+        );
+
+        const groqRes = await Promise.race([groqCall, groqTimeoutPromise]);
+
         if (!groqRes.ok) {
           const errText = await groqRes.text();
           throw new Error(`Groq API error ${groqRes.status}: ${errText}`);
@@ -1005,7 +1063,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         const groqData = await groqRes.json();
         const contentStr = groqData.choices?.[0]?.message?.content || '{}';
-        const parsed = JSON.parse(contentStr);
+        const parsed = extractCleanJson(contentStr);
 
         const durationMs = Date.now() - groqStart;
         // 5) اطبع في Logs اسم المزوّد وزمن الاستجابة بالمللي ثانية
@@ -1116,6 +1174,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
 
         // 3) أضف source: "groq"
         parsed.source = 'groq';
+        advisorChatCache.set(chatCacheKey, { data: parsed, timestamp: Date.now() });
         return res.json(parsed);
       } catch (groqErr: any) {
         const durationMs = Date.now() - groqStart;
@@ -1145,6 +1204,7 @@ IMPORTANT: You must respond in valid JSON format with the following fields:
     );
     // 3) إضافة حقل source: "local-fallback"
     (localFallback as any).source = 'local-fallback';
+    advisorChatCache.set(chatCacheKey, { data: localFallback, timestamp: Date.now() });
     return res.json(localFallback);
   }
 });
