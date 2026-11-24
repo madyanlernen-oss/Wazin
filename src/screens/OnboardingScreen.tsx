@@ -752,10 +752,8 @@ ${specificQuestion}
       }
 
       const isMinimumRoundsReached = currentTurns >= 3; // الجولة الرابعة (3 ردود سابقة + الرد الرابع الحالي)
-      if (isExplicitContinue || !isMinimumRoundsReached) {
-        // منع أي تقييم تلقائي أو إنهاء للمحطة قبل بلوغ الحد الأدنى من الجولات (4 جولات)
-        isStationCompleted = false;
-      } else if (isExplicitAdoption) {
+      if (isExplicitAdoption) {
+        // إذا اختار المستفيد صراحة اعتماد التقييم، يتم اعتماد التقييم وإتمام المحطة فوراً
         isStationCompleted = true;
         if (pendingOfferedScore !== null) {
           earnedScore = pendingOfferedScore;
@@ -763,7 +761,7 @@ ${specificQuestion}
           earnedScore = currentAdvisor.id === 'financial' ? 5.5 : 6.0;
         }
       } else {
-        // لا تُغلق المحطة تلقائياً أبداً! يجب ألا تُغلق المحطة إلا إذا طلب المستفيد صراحة اعتماد التقييم
+        // لا تُغلق المحطة تلقائياً أبداً قبل أن يطلب المستفيد صراحة اعتماد التقييم
         isStationCompleted = false;
         if (pendingOfferedScore !== null) {
           earnedScore = pendingOfferedScore;
@@ -785,7 +783,7 @@ ${specificQuestion}
         const normalizedFinalScore = Number((earnedScore || 0).toFixed(1));
         const isScoreValid = !isNaN(normalizedFinalScore) && normalizedFinalScore >= 1 && normalizedFinalScore <= 10;
 
-        if (isMinimumRoundsReached && isScoreValid) {
+        if ((isMinimumRoundsReached || isExplicitAdoption) && isScoreValid) {
           onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_score`, normalizedFinalScore);
           const finishResult = onFinishAdvisor(currentAdvisor.id, normalizedFinalScore);
           stateCommitSucceeded = finishResult !== false;
@@ -957,8 +955,9 @@ ${specificQuestion}
   let lastOfferedScore: number | null = null;
   const lastAdvisorMessage = [...activeConversation].reverse().find((m) => m.sender === 'advisor');
   if (lastAdvisorMessage && !isCompleted) {
-    const scoreInMsgMatch = lastAdvisorMessage.text.match(/(?:بدرجة|درجة|تقييمك|وضعك\s+الحالي\s+بدرجة)\s*[:(]?\s*([1-9]|10(?:\.\d+)?|\d+\.\d+)\s*(?:\/|\s*من\s*)\s*10/i)
-      || lastAdvisorMessage.text.match(/([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10/i);
+    const scoreInMsgMatch =
+      lastAdvisorMessage.text.match(/(?:أقيّم|أقيم|تقييم|بدرجة|درجة|وضعك\s+الحالي\s+بدرجة|تقييمك|تقييمي)\s*[:(]?\s*([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10/i) ||
+      lastAdvisorMessage.text.match(/(?:^|[(\s])([1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10(?:[)\s.,!?]|$)/i);
     if (scoreInMsgMatch) {
       const val = parseFloat(scoreInMsgMatch[1]);
       if (!isNaN(val) && val >= 1 && val <= 10) {
@@ -968,10 +967,10 @@ ${specificQuestion}
   }
 
   const currentStationTurns = stationTurnCount[currentAdvisor.id] || 0;
-  // شريط التقييم المقترح مع زرّي (اعتماد التقييم / الاستمرار في الحوار) يظهر ابتداءً من الجولة الرابعة (4 ردود من المستفيد)
-  const isAdvisorReadyForScoring = !isCompleted && currentStationTurns >= 4;
+  // شريط التقييم المقترح مع زرّي (اعتماد التقييم / الاستمرار في الحوار) يظهر بمجرد أن يطرح المستشار تقييماً أولياً أو ابتداءً من الجولة الرابعة
+  const isAdvisorReadyForScoring = !isCompleted && (lastOfferedScore !== null || currentStationTurns >= 4);
   const effectiveOfferedScore = lastOfferedScore ?? (currentAdvisorScore > 0 ? currentAdvisorScore : (currentAdvisor.id === 'financial' ? 5.5 : 6.0));
-  const isChoiceTemporarilyDismissed = dismissedChoiceTurns[currentAdvisor.id] === currentStationTurns;
+  const isChoiceTemporarilyDismissed = dismissedChoiceTurns[currentAdvisor.id] === currentStationTurns && lastOfferedScore === null;
 
   const handleContinueDialogue = () => {
     setDismissedChoiceTurns((prev) => ({

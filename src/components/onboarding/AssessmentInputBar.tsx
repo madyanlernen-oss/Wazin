@@ -187,6 +187,25 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
 
         {/* Suggested Clinical & Rapid Context Responses - Wrapped cleanly so no chip is ever clipped on the left */}
         <div className="flex items-center gap-1.5 flex-wrap">
+            {/* Quick Adopt Chip when an offered score is available */}
+            {!isCompleted && offeredScore !== undefined && offeredScore !== null && offeredScore > 0 && (
+              <button
+                type="button"
+                disabled={isAdvisorReplying}
+                onClick={() => {
+                  if (onAdoptScoreAndComplete) {
+                    onAdoptScoreAndComplete(offeredScore);
+                  } else {
+                    onSendAnswer(`اعتمد التقييم بدرجة ${offeredScore}`);
+                  }
+                }}
+                className="flex-shrink-0 px-3.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>اعتماد تقييم المستشار ({offeredScore.toFixed(1)} من 10)</span>
+              </button>
+            )}
+
             {/* Domain-specific rapid input shortcuts */}
             {currentAdvisor.id === 'financial' && (
               <>
