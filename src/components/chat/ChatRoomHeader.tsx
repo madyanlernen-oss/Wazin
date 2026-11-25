@@ -80,7 +80,7 @@ export const ChatRoomHeader: React.FC<ChatRoomHeaderProps> = ({
               />
               <div className="absolute left-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#0E1D24] rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] shadow-xl p-2 z-50 animate-in fade-in zoom-in-95 duration-150">
                 <div className="px-3 py-2 border-b border-[#E2E8F0] dark:border-[#1E343F] mb-1">
-                  <span className="text-[11px] font-black text-[#0F172A] dark:text-[#F1F5F9] block">مستوى تفكير الذكاء الاصطناعي (Gemini)</span>
+                  <span className="text-[11px] font-black text-[#0F172A] dark:text-[#F1F5F9] block">مستوى تفكير المستشار الذكي</span>
                   <span className="text-[10px] text-[#475569] dark:text-[#94A3B8]">اختر نمط الإجابة والتحليل المناسب لاحتياجك</span>
                 </div>
 
@@ -132,9 +132,9 @@ export const ChatRoomHeader: React.FC<ChatRoomHeaderProps> = ({
         </div>
 
         {/* Current Score Tag with proper LTR format */}
-        <div dir="ltr" className="bg-white dark:bg-[#0E1D24] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] text-left shadow-xs transition-colors">
+        <div className="bg-white dark:bg-[#0E1D24] px-2.5 sm:px-3 py-1.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] text-left shadow-xs transition-colors">
           <span className="text-[9px] sm:text-[10px] text-[#64748B] dark:text-[#94A3B8] block text-right font-sans">درجتك</span>
-          <span className="text-xs sm:text-sm font-black font-mono block" style={{ color: currentAdvisor.themeColor }}>
+          <span dir="ltr" style={{ color: currentAdvisor.themeColor, unicodeBidi: 'isolate' }} className="text-xs sm:text-sm font-black font-mono block">
             {currentScore.toFixed(1)} / 10
           </span>
         </div>

@@ -10,8 +10,10 @@ import {
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { LIFE_DOMAINS } from '../data/lifeDomains';
+import { isolateNumbersInText } from './FormattedChatMessage';
 import { ONE_YEAR_MONTHLY_HISTORY, RECENT_WEEKS_ANALYSIS } from '../data/demoAnalytics';
 import { LifeAreaId, MonthData, WeekData } from '../types/lifeBalance';
+import { localizeDomainText } from '../utils/arabicDomainLabels';
 
 export interface YearlyAndWeeklyAnalyticsProps {
   monthlyHistory?: MonthData[];
@@ -283,16 +285,20 @@ export const YearlyAndWeeklyAnalytics: React.FC<YearlyAndWeeklyAnalyticsProps> =
               <span className="text-xs text-[#475569] dark:text-slate-400 block mb-1">
                 النتيجة الابتدائية ({initialMonth?.formattedMonthYear || '—'})
               </span>
-              <span className="text-2xl font-black text-[#475569] dark:text-slate-400 tabular-nums block" dir="ltr">
-                <span dir="ltr" className="[unicode-bidi:isolate]">{initialScore.toFixed(1)}</span> / 10
+              <span className="text-2xl font-black text-[#475569] dark:text-slate-400 tabular-nums block">
+                <span dir="ltr" className="inline-block [unicode-bidi:isolate]">
+                  {initialScore.toFixed(1)} / 10
+                </span>
               </span>
             </div>
             <div className="bg-slate-50 dark:bg-[#0B161C] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
               <span className="text-xs text-[#475569] dark:text-slate-400 block mb-1">
                 النتيجة الحالية ({currentMonth?.formattedMonthYear || '—'})
               </span>
-              <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums block" dir="ltr">
-                <span dir="ltr" className="[unicode-bidi:isolate]">{currentScore.toFixed(1)}</span> / 10
+              <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 tabular-nums block">
+                <span dir="ltr" className="inline-block [unicode-bidi:isolate]">
+                  {currentScore.toFixed(1)} / 10
+                </span>
               </span>
             </div>
             <div className="bg-slate-50 dark:bg-[#0B161C] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800">
@@ -396,7 +402,7 @@ export const YearlyAndWeeklyAnalytics: React.FC<YearlyAndWeeklyAnalyticsProps> =
                     الأعلى: {activeMonth.topArea}
                   </span>
                   <span className="text-amber-800 dark:text-[#FBBF24] bg-amber-50 dark:bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-200 dark:border-amber-800/50">
-                    عنق الزجاجة: {activeMonth.bottleneckArea}
+                    عنق الزجاجة: {localizeDomainText(activeMonth.bottleneckArea)}
                   </span>
                 </div>
               </div>
@@ -426,12 +432,13 @@ export const YearlyAndWeeklyAnalytics: React.FC<YearlyAndWeeklyAnalyticsProps> =
                         style={
                           {
                             color: strongColor,
+                            unicodeBidi: 'isolate',
                             '--dark-domain-theme': advisor.themeColor,
                           } as React.CSSProperties
                         }
                       >
-                        <span className="dark:text-[var(--dark-domain-theme)]">
-                          <span dir="ltr" className="[unicode-bidi:isolate]">{sc.toFixed(1)}</span> / 10
+                        <span dir="ltr" className="dark:text-[var(--dark-domain-theme)] inline-block [unicode-bidi:isolate]">
+                          {sc.toFixed(1)} / 10
                         </span>
                       </span>
                     </div>
@@ -469,10 +476,10 @@ export const YearlyAndWeeklyAnalytics: React.FC<YearlyAndWeeklyAnalyticsProps> =
                     <div>
                       <h4 className="text-sm font-black text-[#0F172A] dark:text-white">
                         الأسبوع <span dir="ltr" className="[unicode-bidi:isolate]">{wk.weekNumber}</span>{' '}
-                        ({formattedRange}) {isCurrentWeek ? '(الأسبوع الحالي)' : ''}
+                        ({isolateNumbersInText(formattedRange)}) {isCurrentWeek ? '(الأسبوع الحالي)' : ''}
                       </h4>
                       <blockquote className="text-xs text-[#475569] dark:text-slate-300 italic mt-1 leading-relaxed">
-                        «{wk.reflection}»
+                        «{isolateNumbersInText(wk.reflection)}»
                       </blockquote>
                     </div>
                   </div>
@@ -480,14 +487,14 @@ export const YearlyAndWeeklyAnalytics: React.FC<YearlyAndWeeklyAnalyticsProps> =
                   <div className="flex items-center gap-3">
                     <div className="text-start">
                       <span className="text-xs text-[#475569] dark:text-slate-400 block">معدل التوازن</span>
-                      <span className="text-base font-black text-[#0B6E72] dark:text-cyan-400 tabular-nums" dir="ltr">
-                        <span dir="ltr" className="[unicode-bidi:isolate]">{wk.balanceScore.toFixed(1)}</span> / 10
+                      <span className="text-base font-black text-[#0B6E72] dark:text-cyan-400 tabular-nums inline-block [unicode-bidi:isolate]" dir="ltr">
+                        {wk.balanceScore.toFixed(1)} / 10
                       </span>
                     </div>
                     <div className="text-start ps-3 border-s border-slate-200/80 dark:border-slate-800">
                       <span className="text-xs text-[#475569] dark:text-slate-400 block">انضباط العادات</span>
-                      <span className="text-base font-black text-emerald-700 dark:text-emerald-400 tabular-nums">
-                        <span dir="ltr" className="[unicode-bidi:isolate]">{wk.weeklyHabitCompletion}%</span>
+                      <span className="text-base font-black text-emerald-700 dark:text-emerald-400 tabular-nums inline-block [unicode-bidi:isolate]" dir="ltr">
+                        {wk.weeklyHabitCompletion}%
                       </span>
                     </div>
                   </div>

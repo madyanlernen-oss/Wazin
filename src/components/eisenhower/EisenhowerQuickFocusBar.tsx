@@ -100,7 +100,7 @@ export const EisenhowerQuickFocusBar: React.FC<EisenhowerQuickFocusBarProps> = (
               className="text-xs font-bold bg-slate-50 dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-700/80 rounded-2xl px-3 py-3 text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 cursor-pointer min-h-[44px]"
             >
               <option value="q1_urgent_important">🔴 المربع 1: نفّذ الآن (مهم وعاجل)</option>
-              <option value="q2_important_not_urgent">🟢 المربع 2: جدولـه (مهم وغير عاجل • التوازن)</option>
+              <option value="q2_important_not_urgent">🟢 المربع 2: جدوله (مهم وغير عاجل • التوازن)</option>
               <option value="q3_urgent_not_important">🟡 المربع 3: فوّضه (غير مهم وعاجل)</option>
               <option value="q4_not_urgent_not_important">⚪ المربع 4: احذفه (غير مهم وغير عاجل)</option>
             </select>

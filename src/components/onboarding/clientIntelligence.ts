@@ -1,6 +1,22 @@
 import { AdvisorConfig, LifeAreaId, UserProfile } from '../../types/lifeBalance';
 import { isolateNumbersInText } from '../FormattedChatMessage';
 import { parseUserContext, getDomainContextConfig } from '../../utils/contextPersonalization';
+import { generateDynamicQuickSuggestions } from '../../utils/dynamicSuggestions';
+import {
+  synthesizeGoldenRecommendation,
+  generateConcreteDomainSuggestions,
+} from '../../utils/realisticGoalsGenerator';
+import {
+  isGenuineUserQuestion,
+  pickNextUnaskedQuestion,
+  stripRepeatedOpeningGreeting,
+  hasDebtStatusAnswered,
+  extractExpenseCategoryFromAnswer,
+  isQuestionAlreadyAsked,
+  isRequestingAdvisorSuggestions,
+  extractAnchorSelfRatingFromHistory,
+  hasAcuteIsolationOrRejection,
+} from '../../utils/dialogueDeduplication';
 
 export interface EvaluationChatMessage {
   id: string;
@@ -11,6 +27,7 @@ export interface EvaluationChatMessage {
   summary?: string;
   advice?: string;
   isCrisis?: boolean;
+  suggestedReplies?: string[];
   source?: 'gemini' | 'groq' | 'local-fallback';
 }
 
@@ -74,31 +91,33 @@ export function calculateSemanticScore(
     return Number(explicitScore.toFixed(1));
   }
 
+  const anchorRating = extractAnchorSelfRatingFromHistory(historyTexts);
   const allText = [text, ...historyTexts].join(' ').toLowerCase();
+  const hasAcuteIsolation = hasAcuteIsolationOrRejection([text, ...historyTexts]);
 
   // 1. Severe breakdown & collapse (1.5 - 3.0)
   const severeNegativePatterns = [
     /(مدمر|محطم|كارثي|كارثة|صفر|ضياع تام|ضائع كليا|لا املك شيء|مفلس تماما|غارق ديون|غرقان ديون|لا اصلي ابدا|تارك الصلاة|ما اصلي نهائيا|انعدام|طاقتي صفر|نومي مدمر|ما انام ابدا|فاشل جدا|اكره حياتي|مكتئب جدا|منهار|مخنوق تماما|مفيش امل|منعدم|مديونية خانقة|صفر ريال)/i,
   ];
 
-  // 2. Strong negative & high struggle (3.1 - 4.4)
+  // 2. Strong negative & high struggle (2.6 - 3.8 for isolation/mistreatment, 2.7 - 3.8 overall)
   const strongNegativePatterns = [
-    /(سيء جدا|سلبي جدا|غير راض ابدا|ضياع|يضيع بسرعة|الوقت يضيع|ما في فايدة|ما اقدر|عاجز|مستنزف|قلق دائم|خوف مستمر|توتر شديد|سهر مستمر|ارق شديد|خمول مستمر|كسل شديد|تراكم|تسويف دائم|ديون كثيرة|راتب لا يكفي|ما اقدر اوفر|عزلة تامة|وحيد تماما|فجوة كبيرة|مشاكل مستمرة|نزاع دائم|تعبت من الوضع|مخنوق|تعبان كثير|فاقد السيطرة|بدون هدف|ما اصلي|اقصر بالصلاة|سلبي تماما|سلبي جدا)/i,
+    /(سيء جدا|سلبي جدا|غير راض ابدا|ضياع|يضيع بسرعة|الوقت يضيع|ما في فايدة|ما اقدر|عاجز|مستنزف|قلق دائم|خوف مستمر|توتر شديد|سهر مستمر|ارق شديد|خمول مستمر|كسل شديد|تراكم|تسويف دائم|ديون كثيرة|راتب لا يكفي|ما اقدر اوفر|عزلة تامة|وحيد تماما|فجوة كبيرة|مشاكل مستمرة|نزاع دائم|تعبت من الوضع|مخنوق|تعبان كثير|فاقد السيطرة|بدون هدف|ما اصلي|اقصر بالصلاة|سلبي تماما|سلبي جدا|لا أجلس مع|لا اجلس مع|لا أريد الجلوس|لا اريد الجلوس|سوء معاملة|سوء المعاملة|لا أشعر بأي فائدة|لا فائدة من وجودهم)/i,
   ];
 
-  // 3. Moderate negative & inconsistency (4.5 - 5.6)
+  // 3. Moderate negative & inconsistency (4.5 - 5.6 alone, balanced to 6.5-7.5 when high anchor/positive baseline exists)
   const moderateNegativePatterns = [
-    /(تشتت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|صعوبة|ضغط|مرهق|تعبان|متعب|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت)/i,
+    /(تشتت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|صعوبة|ضغط|مرهق|تعبان|متعب|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت|خجل)/i,
   ];
 
   // 4. Moderate positive & improving (6.1 - 7.3)
   const moderatePositivePatterns = [
-    /(مقبول|جيد نوعا ما|احاول|أحاول|اتحسن|أتحسن|خطوة طيبة|وعي|راض نسبيا|ماشي الحال|استقرار متوسط|احيانا ملتزم|بديت اتعلم|علاقة طيبة|احسن من قبل|تطور بسيط|في تحسن)/i,
+    /(مقبول|جيد نوعا ما|احاول|أحاول|اتحسن|أتحسن|خطوة طيبة|وعي|راض نسبيا|ماشي الحال|استقرار متوسط|احيانا ملتزم|بديت اتعلم|علاقة طيبة|احسن من قبل|تطور بسيط|في تحسن|جيدة|مرتاح|قريب|نتفاهم)/i,
   ];
 
   // 5. Strong positive & balanced (7.6 - 8.8)
   const strongPositivePatterns = [
-    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|نوم عميق|نشاط وحيوية|رياضة مستمرة|راحة بال)/i,
+    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|نوم عميق|نشاط وحيوية|رياضة مستمرة|راحة بال|كثير من الوقت|الكثير من الوقت|وقت كبير|أمنحهم|أعطيهم وقت|دائماً معهم|نجلس معاً كثيراً|تواصل دافئ)/i,
   ];
 
   // 6. Outstanding (8.9 - 9.7)
@@ -110,19 +129,35 @@ export function calculateSemanticScore(
   const charHash = allText.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const variance = (charHash % 9) * 0.1; // 0.0 - 0.8
 
+  const hasSevere = severeNegativePatterns.some((p) => p.test(allText));
+  const hasStrongNeg = strongNegativePatterns.some((p) => p.test(allText));
+  const hasModerateNeg = moderateNegativePatterns.some((p) => p.test(allText));
+  const hasStrongPos = strongPositivePatterns.some((p) => p.test(allText));
+  const hasOutstandingPos = outstandingPositivePatterns.some((p) => p.test(allText));
+  const hasModeratePos = moderatePositivePatterns.some((p) => p.test(allText));
+
   let calculated = 5.2;
 
-  if (severeNegativePatterns.some((p) => p.test(allText))) {
+  if (hasAcuteIsolation) {
+    // Acute isolation/mistreatment -> realistic low score (2.6 - 3.6), never pulled up toward ~4.8 by solo coping
+    calculated = 2.6 + (charHash % 10) * 0.1;
+  } else if (anchorRating !== null && anchorRating >= 6.8 && !hasSevere && !hasStrongNeg) {
+    calculated = hasModerateNeg
+      ? Math.max(6.5, Math.min(7.5, anchorRating - 0.8))
+      : Math.max(6.8, Math.min(8.8, anchorRating));
+  } else if (hasSevere) {
     calculated = 1.8 + variance * 0.8;
-  } else if (strongNegativePatterns.some((p) => p.test(allText))) {
-    calculated = 2.8 + variance * 0.9;
-  } else if (moderateNegativePatterns.some((p) => p.test(allText))) {
+  } else if (hasStrongNeg) {
+    calculated = 2.7 + variance * 0.9;
+  } else if ((hasStrongPos || hasOutstandingPos) && hasModerateNeg) {
+    calculated = 6.7 + (variance % 7) * 0.1;
+  } else if (hasModerateNeg) {
     calculated = 4.3 + variance * 0.9;
-  } else if (outstandingPositivePatterns.some((p) => p.test(allText))) {
+  } else if (hasOutstandingPos) {
     calculated = 9.0 + (variance % 6) * 0.12;
-  } else if (strongPositivePatterns.some((p) => p.test(allText))) {
+  } else if (hasStrongPos) {
     calculated = 7.7 + variance * 0.9;
-  } else if (moderatePositivePatterns.some((p) => p.test(allText))) {
+  } else if (hasModeratePos) {
     calculated = 6.2 + variance * 0.9;
   }
 
@@ -168,29 +203,37 @@ export function answerUserInquiry(
 
   // 2. الجانب المالي (أ. كمال المالي) - تكييف النصائح بدقة حسب سياق المستفيد
   if (advisorId === 'financial') {
-    if (/(طوارئ|طواريء|صندوق|ادخار|أدخر|ادخر|توفير|أوفر)/i.test(t)) {
+    const confirmsNoDebt = /(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون)/i.test(t);
+    const mentionsDebt = /(دين|ديون|قرض|قروض|أقساط|اقساط|بطاقة|فيزا|التزامات)/i.test(t) && !confirmsNoDebt;
+    if (/(دين|ديون|قرض|سداد|أقساط|اقساط|بطاقة|فيزا)/i.test(t) && !confirmsNoDebt) {
+      if (isStudent) {
+        return 'في المرحلة الجامعية، القاعدة الذهبية هي تجنب أي شراء بالأقساط الاستهلاكية أو الاقتراض لمجاراة الأقران؛ وإذا كانت هناك التزامات صغيرة فابدأ بسدادها أولاً بأول من المكافأة لتستعيد حريتك المالية.';
+      }
+      return 'القاعدة الذهبية عند وجود ديون أو أقساط هي البدء بحصرها جميعاً وترتيب السداد (الأصغر حجماً لتحقيق إنجاز سريع أو الأعلى كلفة) مع تأمين صمام أمان نقدي مصغر قبل التفكير في أتمتة الادخار أو الاستثمار.';
+    }
+    if (/(طوارئ|طواريء|صندوق|ادخار|أدخر|ادخر|توفير|أوفر|استثمار|أصول)/i.test(t)) {
       if (isStudent) {
         return 'بصفتك طالباً جامعياً، صمام الأمان يبدأ بقرار ميسر: اقتطاع مبلغ رمزي صغير (50 إلى 100 ريال شهرياً) من مكافأتك أو مصروفك في حساب أو حصالة منفصلة؛ هذا المبلغ البسيط يمنحك راحة نفسية ويحميك من أي ضائقة طارئة دون أن يثقل على دراستك.';
       }
       if (isBusiness) {
-        return 'كرائد أعمال أو صاحب عمل حر، صمام الأمان يحتاج أن يكون مزدوجاً: احتياطي طوارئ تجاري للشركة لـ 3-6 أشهر نفقات تشغيلية، واحتياطي طوارئ شخصي للمعيشة لا يقل عن 6 أشهر في حساب شخصي منفصل تماماً لحمايتك في فترات الركود.';
+        return 'كرائد أعمال أو صاحب عمل حر، وبعد حصر التزاماتك الثابتة، صمام الأمان يحتاج أن يكون مزدوجاً: احتياطي طوارئ تجاري للشركة لـ 3-6 أشهر نفقات تشغيلية، واحتياطي طوارئ شخصي للمعيشة في حساب منفصل تماماً.';
       }
-      return 'بناء صندوق الطوارئ يبدأ بقرار ميسر: اقتطاع مبلغ صغير في حساب بنكي منفصل تماماً (يبدأ براتب شهر واحد كهدف أولي أو حتى مبلغ رمزي شهرياً)، ليكون صمام أمان يحميك من الديون المفاجئة.';
-    }
-    if (/(دين|ديون|قرض|سداد|أقساط|اقساط|بطاقة|فيزا)/i.test(t)) {
-      if (isStudent) {
-        return 'في المرحلة الجامعية، القاعدة الذهبية هي تجنب أي شراء بالأقساط الاستهلاكية أو الاقتراض لمجاراة الأقران؛ وإذا كانت هناك التزامات صغيرة فابدأ بسدادها أولاً بأول من المكافأة لتستعيد حريتك المالية.';
+      if (confirmsNoDebt && !mentionsDebt) {
+        return 'مع خلو سجلك من الديون، بناء صندوق الطوارئ يبدأ بقرار ميسر: اقتطاع مبلغ ثابت في حساب بنكي منفصل تماماً لـ 3 إلى 6 أشهر من نفقاتك قبل التوسع في الاستثمار وتنمية الأصول.';
       }
-      return 'القاعدة الذهبية في التحرر من الديون هي البدء بأصغر دين حجماً لسداده سريعاً (طريقة كرة الثلج) لتشعر بنشوة الإنجاز والتحرر، مع التجميد الفوري لكافة بطاقات الائتمان.';
+      return 'قبل تخطيط أتمتة الادخار أو الاستثمار، الخطوة الأولى هي التأكد من حجم أي أقساط أو التزامات شهرية تقتطع من راتبك؛ وبقدر الفائض الحقيقي المتبقي تبدأ ببناء صمام أمان مصغر أو ممتد يحميك من اللجوء للاقتراض.';
     }
     if (/(ميزانية|راتب|مصاريف|يتسرب|وين يروح|أين يذهب|مكافأة|مكافاه|مصروف)/i.test(t)) {
       if (isStudent) {
-        return 'لإدارة المكافأة أو المصروف كطالب: قسّم دخلك بمرونة: 60% للمستلزمات الدراسية والأساسية، 25% للمصروف الشخصي والمقاهي، و15% ادخار في حساب فرعي لا تلمسه إلا للطوارئ الحقيقية.';
+        return 'لإدارة المكافأة أو المصروف كطالب: قسّم دخلك بمرونة: 60% للمستلزمات الدراسية والأساسية، 25% للمصروف الشخصي، و15% ادخار في حساب فرعي لا تلمسه إلا للطوارئ الحقيقية.';
       }
       if (isBusiness) {
-        return 'القاعدة الأهم للمستقل وأصحاب الأعمال هي "الفصل الصارم": خصص لنفسك راتباً شهرياً ثابتاً من أرباح عملك تعيش به، واترك بقية السيولة في حساب العمل لإدارة تقلبات التدفق النقدي.';
+        return 'القاعدة الأهم للمستقل وأصحاب الأعمال هي "الفصل الصارم": احصر التزاماتك، وخصص لنفسك راتباً شهرياً ثابتاً تعيش به، واترك بقية السيولة في حساب العمل لإدارة تقلبات التدفق النقدي.';
       }
-      return 'قاعدة 50/30/20 هي البوصلة الأبسط: 50% للأساسيات الضرورية، 30% للاحتياجات المرنة، و20% للادخار وصندوق الطوارئ مع تسجيل المصاريف أسبوعياً لتحديد مزاريب التسرب.';
+      if (confirmsNoDebt && !mentionsDebt) {
+        return 'مع خلوك من الديون، قاعدة 50/30/20 بوصلة عملية: 50% للأساسيات الضرورية، 30% للاحتياجات المرنة، و20% للادخار وصندوق الطوارئ مع متابعة المصاريف أسبوعياً.';
+      }
+      return 'قبل اعتماد أي نسبة ثابتة للادخار، ابدأ بحصر الالتزامات الحتمية والأقساط الشهرية أولاً، ثم خصص بقية الراتب للأساسيات المعيشية وصمام أمان يحميك من أي عجز أو استدانة طارئة.';
     }
   }
 
@@ -254,8 +297,8 @@ export function answerUserInquiry(
     }
   }
 
-  // General questions detection
-  const isGenericQuestion = /[؟?]/.test(text) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)/i.test(text);
+  // General questions detection (strict: excludes tentative dialect answers like "ممكن الاكل في المطاعم")
+  const isGenericQuestion = isGenuineUserQuestion(text);
   if (isGenericQuestion) {
     return `سؤالك ذكي ويلامس صلب اتزانك يا ${clientName}: الحل لا يكمن في القفزات المفاجئة، بل في التدرج الواعي وعادة يومية صغيرة ومحمية تناسب ظروفك الحالية وتصنع أثراً تراكمياً ملموساً.`;
   }
@@ -267,10 +310,62 @@ export function getClientAdvisorResponse(
   advisor: AdvisorConfig,
   text: string,
   stationNumber: number,
+  userScore?: number,
+  stationTurnCount: number = 0,
+  historyTexts: string[] = [],
+  userProfile?: UserProfile | null,
+  previousSuggestions: string[] = [],
+  isEditedOrResent: boolean = false
+): {
+  isQuestionOrInquiry?: boolean;
+  station_completed: boolean;
+  score: number;
+  strengths: string[];
+  challenges: string[];
+  reasoning: string;
+  summary: string;
+  advice: string;
+  reply: string;
+  suggestedReplies: string[];
+} {
+  const core = computeClientAdvisorCore(
+    advisor,
+    text,
+    stationNumber,
+    userScore,
+    stationTurnCount,
+    historyTexts,
+    userProfile,
+    isEditedOrResent
+  );
+  const nextRoundNumber = Math.max(1, (stationTurnCount || 0) + 2);
+  const suggestedReplies = core.station_completed
+    ? []
+    : generateDynamicQuickSuggestions({
+        domainId: advisor.id,
+        roundNumber: nextRoundNumber,
+        lastUserMessage: text,
+        advisorReply: core.reply,
+        userProfile,
+        previousChips: previousSuggestions,
+        userHistory: historyTexts,
+      });
+
+  return {
+    ...core,
+    suggestedReplies,
+  };
+}
+
+function computeClientAdvisorCore(
+  advisor: AdvisorConfig,
+  text: string,
+  stationNumber: number,
   _userScore?: number,
   stationTurnCount: number = 0,
   historyTexts: string[] = [],
-  userProfile?: UserProfile | null
+  userProfile?: UserProfile | null,
+  isEditedOrResent: boolean = false
 ): {
   isQuestionOrInquiry?: boolean;
   station_completed: boolean;
@@ -292,7 +387,11 @@ export function getClientAdvisorResponse(
   // تنظيف الرسالة من التحيات التمهيدية
   const salutationRegex = /^(?:أهلاً|اهلا|هلا|مرحبا|مرحباً|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|حيّاك|أهلين)\s*(?:دكتور|يا دكتور|دكتورة|يا دكتورة|استاذ|أستاذ|يا استاذ|يا أستاذ|باشمهندس|يا باشمهندس|بروفيسور|يا بروفيسور|صديقي|يا غالي|كمال|سفيان|ريان|طارق|ليلى|زياد|مريم|سامي|معتز|هاني)?\s*/i;
   const coreMsg = msg.replace(salutationRegex, '').trim();
-  const isBareGreetingOnly = !coreMsg && /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(msg);
+  const hasPriorContext = isEditedOrResent || historyTexts.length > 0;
+  const isBareGreetingOnly =
+    !isEditedOrResent &&
+    !coreMsg &&
+    /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(msg);
 
   // 0. بروتوكول استثناء طوارئ إنساني حاسم ومطلق (Safety & Empathy Override)
   const isCrisisOrDeath = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(msg);
@@ -329,9 +428,14 @@ export function getClientAdvisorResponse(
   const userAgreesToComplete = !userWantsMoreDepth && stationTurnCount >= 3 && /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي\s*بهذا|نكتفي|خلاص\s*اعتمد|المحطة التالية|ننتقل\s*للمحطة|جاهز\s*للمحطة)/i.test(msg);
 
   // إذا قدم المستفيد التزاماً محدداً وصريحاً في الجولة الرابعة فأكثر: عرض التقييم المرحلي دون إغلاق أو مدح معلب
+  const hasAcuteIsolationCtx = hasAcuteIsolationOrRejection([...historyTexts, text]);
   if (isConcreteCommitment && stationTurnCount >= 3 && !userWantsMoreDepth) {
     const isFin = advisor.id === 'financial';
-    const scoreVal = isFin ? (isStudent ? 5.8 : 5.5) : Math.max(semanticScore, 6.5);
+    const scoreVal = isFin
+      ? (isStudent ? 5.8 : 5.5)
+      : hasAcuteIsolationCtx
+        ? semanticScore
+        : Math.max(semanticScore, 6.5);
     const studentIncomeTerm = incomeSrc?.includes('مكافأة')
       ? 'مكافأتك'
       : (incomeSrc?.includes('مصروف') ? 'مصروفك' : 'دخلك الجامعي');
@@ -356,70 +460,157 @@ export function getClientAdvisorResponse(
               ? 'حماية وقت الخطوة العملية المحددة وسط ضغوط المهام'
               : 'البدء بالخطوة العملية التي حددتها بهدوء واستمرارية',
       ],
-      reasoning: `تم تحديد التزام وخطوة قابلة للتطبيق ("${text}") في ${advTitle}. عرض التقييم المقترح بدون إغلاق تلقائي حتى يختار المستفيد الاعتماد صراحة.`,
+      reasoning: `تم تحديد التزام وخطوة قابلة للتطبيق ضمن ${advTitle}. عرض التقييم المقترح بدون إغلاق تلقائي حتى يختار المستفيد الاعتماد صراحة.`,
       summary: `رصد خطوة عملية مقترحة وعرض التقييم المرحلي في ${advTitle}.`,
-      advice: text.trim(),
+      advice: synthesizeGoldenRecommendation({
+        areaId: advisor.id,
+        userTexts: [...historyTexts, text],
+        userProfile,
+        score: scoreVal,
+      }),
       reply: commitmentReply,
     };
   }
 
-  // قواميس المتابعة الاستكشافية المتكيفة لجميع المحطات الثمان بناءً على السياق الفعلي
+  // 3. تلبية طلب الاقتراحات المباشر (مثل: "لا أدري أعطيني اقتراحاتك")
+  if (isRequestingAdvisorSuggestions(text) && !userAgreesToComplete) {
+    const concreteSuggestions = generateConcreteDomainSuggestions(
+      advisor.id,
+      [...historyTexts, text],
+      userProfile,
+      semanticScore
+    );
+    const formattedList = concreteSuggestions
+      .map((item, idx) => `${idx + 1}. ${item}`)
+      .join('\n');
+
+    const suggestionReply =
+      stationTurnCount >= 3
+        ? `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${advTitle}:\n\n${formattedList}\n\nبناءً على حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${semanticScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل تجربة أو تعديل أحد هذه الاقتراحات؟`
+        : `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${advTitle}:\n\n${formattedList}\n\nأيّ من هذه الخطوات الثلاث تشعر أنها الأقرب والأسهل لتجربتها هذا الأسبوع؟`;
+
+    return {
+      isQuestionOrInquiry: false,
+      station_completed: false,
+      score: semanticScore,
+      strengths: [`الوضوح في تحديد واقعك في ${advTitle} وطلب حلول عملية`],
+      challenges: [concreteSuggestions[0] || `تطبيق خطوة عملية واضحة في ${advTitle}`],
+      reasoning: `تلبية طلب الاقتراحات المباشر للمستفيد ("${text}") عبر 3 خطوات متسقة مع الحوار${stationTurnCount >= 3 ? ' وعرض التقييم المرحلي' : ''}.`,
+      summary: `تقديم 3 اقتراحات عملية مخصصة في ${advTitle}.`,
+      advice: synthesizeGoldenRecommendation({
+        areaId: advisor.id,
+        userTexts: [...historyTexts, text],
+        userProfile,
+        score: semanticScore,
+      }),
+      reply: stripRepeatedOpeningGreeting(suggestionReply, hasPriorContext),
+    };
+  }
+
+  // قواميس المتابعة الاستكشافية المتكيفة لجميع المحطات الثمان بناءً على السياق الفعلي مع منع تكرار أي سؤال سبق طرحه
   const domainQuestions = getDomainContextConfig(advisor.id, parsedCtx).exploratoryQuestions;
   const sessionKey = `${userProfile?.email || userProfile?.name || 'default'}:${parsedCtx.workStatus}:${parsedCtx.dependentsLabel}:${advisor.id}`;
   const lastClientIdx = lastClientFallbackIndexBySession.get(sessionKey);
-  let nextIdx = stationTurnCount % domainQuestions.length;
-  if (lastClientIdx !== undefined && nextIdx === lastClientIdx) {
-    nextIdx = (lastClientIdx + 1) % domainQuestions.length;
+  let preferredIdx = stationTurnCount % domainQuestions.length;
+  if (lastClientIdx !== undefined && preferredIdx === lastClientIdx) {
+    preferredIdx = (lastClientIdx + 1) % domainQuestions.length;
   }
-  // تحقق إضافي من آخر ردود المحادثة لمنع أي تطابق حرفي مع آخر سؤال مطروح
-  const lastHistoryText = historyTexts[historyTexts.length - 1] || '';
-  if (lastHistoryText && lastHistoryText.includes(domainQuestions[nextIdx])) {
-    nextIdx = (nextIdx + 1) % domainQuestions.length;
+  const pickedQuestion = pickNextUnaskedQuestion(domainQuestions, historyTexts, preferredIdx);
+  if (pickedQuestion.index >= 0) {
+    lastClientFallbackIndexBySession.set(sessionKey, pickedQuestion.index);
   }
-  lastClientFallbackIndexBySession.set(sessionKey, nextIdx);
-  const nextRawQuestion = domainQuestions[nextIdx];
+  const nextRawQuestion = pickedQuestion.question;
 
   // فحص استفسارات المستفيد المتخصصة لكل مجال مع مراعاة سياق وخلفية المستفيد
   const directInquiryAnswer = answerUserInquiry(advisor.id, text, userProfile);
+  const expenseCategory = advisor.id === 'financial' ? extractExpenseCategoryFromAnswer(text) : null;
+  const debtAlreadyAnswered = hasDebtStatusAnswered(historyTexts, text);
+
+  // مسار خاص بالإجابة المباشرة على بند إنفاق مالي (مثل: "ممكن الاكل في المطاعم") أو بعد التعديل/التراجع:
+  // اعتراف فوري بالإجابة دون تحية مكررة والانتقال للخطوة المنطقية التالية
+  if (advisor.id === 'financial' && expenseCategory && !userAgreesToComplete) {
+    const debtVerificationQ =
+      'ولنربط هذا البند بتدفقك الشهري قبل وضع خطة الضبط أو الادخار: هل توجد عليك حالياً أي ديون أو أقساط شهرية ثابتة؟';
+    const shouldAskDebtNext =
+      !isStudent && !debtAlreadyAnswered && !isQuestionAlreadyAsked(debtVerificationQ, historyTexts);
+
+    const nextLogicalPrompt = shouldAskDebtNext
+      ? debtVerificationQ
+      : nextRawQuestion ||
+        (stationTurnCount >= 2
+          ? `أقيّم وضعك المالي المبدئي بدرجة (${semanticScore.toFixed(1)}/10). هل تود اعتماد هذا التقييم وبدء خطوة تحديد سقف أسبوعي لبند ${expenseCategory}، أم نواصل الحوار؟`
+          : `ما السقف الأسبوعي المرن الذي تراه مناسباً لبند ${expenseCategory} دون أن تشعر بالحرمان؟`);
+
+    const replyText = stripRepeatedOpeningGreeting(
+      `وضحت الصورة${isEditedOrResent ? ' بعد تعديل إجابتك' : ''}؛ تسرب جزء من الدخل نحو **${expenseCategory}** يعد نقطة قابلة للضبط السريع دون مساس باحتياجاتك الأساسية.\n\n${nextLogicalPrompt}`,
+      hasPriorContext
+    );
+
+    return {
+      isQuestionOrInquiry: false,
+      station_completed: false,
+      score: semanticScore,
+      strengths: [`الوضوح في تحديد ${expenseCategory} كبند قابل للضبط المالي`],
+      challenges: [`ضبط وتقنين الإنفاق على ${expenseCategory} لصالح صمام الأمان`],
+      reasoning: `اعتراف مباشر بإجابة المستفيد ("${text}") والانتقال للخطوة المالية المنطقية التالية دون تكرار التحية أو إعادة سؤال سبق طرحه.`,
+      summary: `تشخيص تسرب الإنفاق في ${expenseCategory} والانتقال للخطوة المالية التالية.`,
+      advice: shouldAskDebtNext
+        ? `حصر أي أقساط أو التزامات شهرية أولاً بالتوازي مع ضبط سقف أسبوعي لبند ${expenseCategory}.`
+        : `تحديد سقف أسبوعي واضح لبند ${expenseCategory} وتوجيه الفارق لصمام الأمان.`,
+      reply: replyText,
+    };
+  }
 
   // شروط مواصلة الحوار: إلزام الاستمرار في الحوار حتى الجولة الرابعة (stationTurnCount < 3) قبل عرض خيار التقييم
   const shouldContinue = !userAgreesToComplete && (
     isBareGreetingOnly ||
     userWantsMoreDepth ||
-    stationTurnCount < 3
+    (stationTurnCount < 3 && Boolean(nextRawQuestion || directInquiryAnswer))
   );
 
   if (shouldContinue) {
+    const fallbackNextQ =
+      hasAcuteIsolationCtx && advisor.id === 'personal'
+        ? 'أحترم رغبتك في حماية مساحتك والابتعاد عمّا يستنزفك. كيف ينعكس هذا الانعزال المستمر على طاقتك النفسية وهدوئك اليومي، وما الذي يساعدك على الشعور ببعض الأمان والاتزان وأنت بمفردك؟'
+        : nextRawQuestion ||
+          `ما أصغر خطوة عملية واقعية تناسب جدولك اليوم في ${advTitle} وتستطيع البدء بها هذا الأسبوع؟`;
+
     let nextProbe = '';
     if (directInquiryAnswer) {
-      nextProbe = `💡 **إجابة استشارية مباشرة عن تساؤلك:**\n${directInquiryAnswer}\n\n🌿 **والآن لنواصل تشخيص واقعك في ${advTitle} بدقة (المحاورة ${stationTurnCount + 1} من 5+):**\n${nextRawQuestion}`;
+      nextProbe = `💡 **إجابة استشارية مباشرة عن تساؤلك:**\n${directInquiryAnswer}\n\n🌿 **وبناءً على ذلك في ${advTitle}:**\n${fallbackNextQ}`;
+    } else if (hasAcuteIsolationCtx && advisor.id === 'personal') {
+      nextProbe = `أسمعك بوضوح واحترام تام لحدودك؛ ولا أفترض أنك تشعر بتقصير أو أنك ملزم بالجلوس في أجواء لا تجد فيها راحة.\n\n${fallbackNextQ}`;
+    } else if (isEditedOrResent) {
+      nextProbe = `تم استلام إجابتك المعدّلة والبناء عليها مباشرة: "${text}".\n\n🌿 **الخطوة التشخيصية التالية في ${advTitle}:**\n${fallbackNextQ}`;
     } else if (isVagueOrShort && stationTurnCount > 0) {
-      nextProbe = `أسمعك يا ${clientName}، لكن إجابتك مقتضبة جداً ولا تسمح لي بتشخيص جذور هذا الجانب بدقة. 🌿\n\nدعنا نتناولها بصراحة أعمق (المحاورة ${stationTurnCount + 1} من 5+):\n${nextRawQuestion}`;
+      nextProbe = `أسمعك يا ${clientName}، لكن إجابتك مقتضبة جداً ولا تسمح لي بتشخيص جذور هذا الجانب بدقة. 🌿\n\nدعنا نتناولها بصراحة أعمق:\n${fallbackNextQ}`;
     } else if (userWantsMoreDepth) {
-      nextProbe = `أحييك على رغبتك الصادقة في التعمق والوضوح! هذا يثبت وعيك وحرصك على اتزانك. 🌿\n\nلنتناول زاوية أعمق (المحاورة ${stationTurnCount + 1}):\n${nextRawQuestion}`;
+      nextProbe = `لنتناول زاوية أعمق بناءً على ما شاركته في ${advTitle}:\n${fallbackNextQ}`;
     } else {
-      nextProbe = `أسمعك بتركيز وتفهم واهتمام. لننتقل إلى زاوية تشخيصية مكملة في ${advTitle} (المحاورة ${stationTurnCount + 1}):\n${nextRawQuestion}`;
+      nextProbe = `وصلت رسالتك بوضوح. لننتقل إلى الخطوة التالية في ${advTitle}:\n${fallbackNextQ}`;
     }
 
     return {
       isQuestionOrInquiry: Boolean(directInquiryAnswer),
       station_completed: false,
       score: semanticScore,
-      strengths: ['الوعي الذاتي والرغبة الصادقة في الاستكشاف والتشخيص الطبي'],
-      challenges: ['الحاجة لاستكمال المحاور التشخيصية الخمسة لبناء التوازن'],
-      reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1} من 5+): متابعة الحوار الاستكشافي المتعمق. ${directInquiryAnswer ? 'تم رصد وإجابة استفسار المستفيد مباشرة.' : ''} الدرجة المحسوبة دلالياً: ${semanticScore.toFixed(1)}/10. لا يتم الإغلاق لضمان استيفاء المعطيات التشخيصية.`,
-      summary: `حوار استكشافي مستمر في ${advTitle} (المحاورة ${stationTurnCount + 1}).`,
+      strengths: ['الوعي الذاتي والرغبة الصادقة في الاستكشاف والتشخيص'],
+      challenges: ['الحاجة لاستكمال المعطيات العملية لبناء التوازن'],
+      reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1}): متابعة الحوار دون تكرار أسئلة أو تحيات سابقة.${isEditedOrResent ? ' (إعادة إرسال بعد تعديل).' : ''}`,
+      summary: `حوار استكشافي متدرج في ${advTitle} (المحاورة ${stationTurnCount + 1}).`,
       advice:
         advisor.id === 'spiritual'
           ? 'احرص على تخصيص مساحة يومية هادئة بعيداً عن الشاشات لصفاء ذهنك وحضور قلبك.'
           : advisor.id === 'financial'
-            ? 'ابدأ بمراقبة بنود الصرف واقتطاع مبلغ رمزي كأول صمام أمان مالي.'
+            ? (isStudent
+              ? 'ابدأ بمراقبة بنود الصرف واقتطاع مبلغ رمزي كأول صمام أمان مالي.'
+              : 'ابدأ بحصر التزاماتك وأقساطك الشهرية أولاً لمعرفة التدفق النقدي الفعلي قبل تخطيط الادخار.')
             : advisor.id === 'health'
               ? 'ركز على تثبيت موعد النوم وشرب الماء والحركة اليومية لرفع طاقتك البدنية.'
               : advisor.id === 'career'
                 ? 'احمِ وقت تركيزك العميق اليومي لإنجاز مهامك المهنية الأساسية.'
-                : `ركز في إجابتك القادمة على تفاصيل ${advTitle} لنشخص الواقع بدقة سريرية.`,
-      reply: nextProbe,
+                : `ركز على تحديد خطوة واحدة عملية قابلة للتطبيق في ${advTitle}.`,
+      reply: stripRepeatedOpeningGreeting(nextProbe, hasPriorContext),
     };
   }
 
@@ -484,11 +675,12 @@ export function getClientAdvisorResponse(
     challenges: dynamicChallenges,
     reasoning: `بروتوكول سقراطي تكيفي - اعتماد سريري توافقي (المحطة ${stationNumber} من 8: ${advTitle}): إتمام الحوار التشخيصي بالكامل (${stationTurnCount + 1} محاورات متعمقة). تم احتساب الدرجة الدلالية بدقة عشرية مستحقة (${semanticScore.toFixed(1)} من 10) بناءً على المشاعر والتحديات الحقيقية.`,
     summary: `اعتماد تقييم ${advTitle} بدرجة (${semanticScore.toFixed(1)} من 10) بعد حوار سقراطي تكيفي شامل.`,
-    advice: semanticScore <= 3.5
-      ? 'الاعتراف بالواقع هو نصف الشفاء؛ لا تكلف نفسك ما لا تطيق وابدأ اليوم بخطوة إسعافية واحدة صغيرة.'
-      : semanticScore <= 6.0
-        ? 'لديك أساس طيب يمكنك البناء عليه؛ خطوة يومية صغيرة ومستمرة تصنع تحولاً جذرياً.'
-        : 'حافظ على هذا الاتزان الجميل فهو رأس مالك الحقيقي أمام تقلبات الحياة.',
+    advice: synthesizeGoldenRecommendation({
+      areaId: advisor.id,
+      userTexts: [...historyTexts, text],
+      userProfile,
+      score: semanticScore,
+    }),
     reply: `بناءً على حوارنا الاستشاري المعمق وما شاركته معي بكل صدق يا ${clientName}: 🌿\n\n📊 **التقييم المستحق لواقعك**: (${semanticScore.toFixed(1)} من 10) — ${levelText}.\n\n🏆 **أبرز مواطن القوة:**\n• ${dynamicStrengths[0]}\n• ${dynamicStrengths[1]}\n\n⚡ **فرص التطوير والتحديات:**\n• ${dynamicChallenges[0]}\n• ${dynamicChallenges[1]}`,
   };
 }

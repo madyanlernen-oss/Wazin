@@ -4,7 +4,23 @@ import { GEMINI_API_KEY, GROQ_API_KEY, GROQ_MODEL, GEMINI_MODEL } from '../confi
 import { AGENT_INFO_MAP } from '../config/constants';
 import { loadAgentPrompt } from '../agents/agentLoader';
 import { generateLocalAgentResponse } from '../agents/localAdvisorEngine';
-import { parseUserContext, buildDomainContextDirectives } from '../../src/utils/contextPersonalization';
+import { parseUserContext, buildDomainContextDirectives, getDomainContextConfig } from '../../src/utils/contextPersonalization';
+import { generateDynamicQuickSuggestions } from '../../src/utils/dynamicSuggestions';
+import {
+  extractAskedQuestionsFromHistory,
+  isQuestionAlreadyAsked,
+  isQuestionContradictingHistory,
+  isRequestingAdvisorSuggestions,
+  extractAnchorSelfRatingFromHistory,
+  hasAcuteIsolationOrRejection,
+  pickNextUnaskedQuestion,
+  stripRepeatedOpeningGreeting,
+} from '../../src/utils/dialogueDeduplication';
+import {
+  generateRealisticAreaGoals,
+  synthesizeGoldenRecommendation,
+  generateConcreteDomainSuggestions,
+} from '../../src/utils/realisticGoalsGenerator';
 import {
   calculateSemanticScore,
   extractExplicitRating,
@@ -68,6 +84,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     evaluationQuestionTitle,
     assessmentMode = 'weekly_checkin',
     stationTurnCount = 0,
+    isEditedOrResent = false,
   } = req.body;
 
   // 1) التحقق من صحة حقل message (نص بطول بين 1 و 2000 حرف)
@@ -139,6 +156,9 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   if (stationTurnCount !== undefined && stationTurnCount !== null && typeof stationTurnCount !== 'number') {
     return res.status(400).json({ error: 'نوع حقل stationTurnCount غير صالح، يجب أن يكون رقماً.' });
   }
+  if (isEditedOrResent !== undefined && isEditedOrResent !== null && typeof isEditedOrResent !== 'boolean') {
+    return res.status(400).json({ error: 'نوع حقل isEditedOrResent غير صالح، يجب أن يكون قيمة منطقية.' });
+  }
   if (req.body.workStatus !== undefined && req.body.workStatus !== null && typeof req.body.workStatus !== 'string') {
     return res.status(400).json({ error: 'نوع حقل workStatus غير صالح، يجب أن يكون نصاً.' });
   }
@@ -208,17 +228,32 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const effectiveAnswers = answers || userAnswers || {};
   const effectiveGoals = goals || userGoals || [];
   const historyMsgTexts = Array.isArray(history) ? history.map((h: any) => h.content || '') : [];
+  const historyUserOnlyTexts = Array.isArray(history)
+    ? history
+        .filter((h: any) => h && (h.role === 'user' || h.sender === 'user'))
+        .map((h: any) => String(h.content || h.text || '').trim())
+        .filter(Boolean)
+    : [];
+  const isAcuteIsolationContext = hasAcuteIsolationOrRejection([...historyUserOnlyTexts, message]);
   const parsedExplicitRating = extractExplicitRating(message);
+  const anchorRatingFromHistory = extractAnchorSelfRatingFromHistory(Array.isArray(history) ? history : []);
   const explicitRatingInMsg = parsedExplicitRating !== null
     ? parsedExplicitRating
-    : (userScore && userScore > 0 ? userScore : undefined);
+    : (isAcuteIsolationContext
+      ? undefined
+      : (anchorRatingFromHistory !== null
+        ? undefined
+        : (userScore && userScore > 0 ? userScore : undefined)));
 
-  // رابعاً: استخراج التقييم الذاتي للمستخدم لضبط الدرجة النهائية بدقة
-  let userSelfScore: number | undefined = explicitRatingInMsg;
-  if (userSelfScore === undefined && typeof userScore === 'number' && userScore > 0) {
+  // رابعاً: استخراج التقييم الذاتي للمستخدم لضبط الدرجة النهائية بدقة (بما في ذلك درجة البداية إن وُجدت)
+  let userSelfScore: number | undefined =
+    parsedExplicitRating !== null
+      ? parsedExplicitRating
+      : (isAcuteIsolationContext ? undefined : (anchorRatingFromHistory ?? undefined));
+  if (userSelfScore === undefined && !isAcuteIsolationContext && typeof userScore === 'number' && userScore > 0) {
     userSelfScore = userScore;
   }
-  if (userSelfScore === undefined && effectiveAnswers && typeof effectiveAnswers === 'object') {
+  if (userSelfScore === undefined && !isAcuteIsolationContext && effectiveAnswers && typeof effectiveAnswers === 'object') {
     const areaAnswer = effectiveAnswers[req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'))];
     if (typeof areaAnswer === 'number') userSelfScore = areaAnswer;
     else if (areaAnswer && typeof areaAnswer === 'object') {
@@ -234,7 +269,10 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const agentKey = req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'));
   const defaultMeta = AGENT_INFO_MAP[agentKey] || { name: 'مستشار وزان', role: 'مستشار الحياة' };
 
-  // Fast In-Memory Cache (TTL 30s) for rapid sub-second repeated queries (scoped strictly to full user context)
+  // Fast In-Memory Cache (TTL 30s) for rapid sub-second repeated queries (scoped strictly to full user context & round chips)
+  const prevChipsKey = Array.isArray(req.body.previousSuggestions)
+    ? req.body.previousSuggestions.slice(-6).join('|')
+    : '';
   const chatCacheKey = JSON.stringify({
     agentKey,
     msg: message.trim(),
@@ -247,9 +285,20 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     currentFocus: parsedCtx.currentFocus,
     turn: stationTurnCount,
     lastMsg: historyMsgTexts[historyMsgTexts.length - 1] || '',
+    prevChips: prevChipsKey,
   });
 
-  const cachedResult = advisorChatCache.get(chatCacheKey);
+  const safeHistoryArray = Array.isArray(history) ? history : [];
+  const askedQuestionsFromHistory = extractAskedQuestionsFromHistory(safeHistoryArray);
+  const hasPriorConversation =
+    Boolean(isEditedOrResent) ||
+    safeHistoryArray.some((h: any) => {
+      const role = h?.role || h?.sender;
+      const txt = String(h?.content || h?.text || '').trim();
+      return (role === 'model' || role === 'advisor') && txt.length > 0;
+    });
+
+  const cachedResult = !isEditedOrResent ? advisorChatCache.get(chatCacheKey) : undefined;
   if (cachedResult && Date.now() - cachedResult.timestamp < 30000) {
     console.log(`[Advisor Chat] استجابة فورية من الذاكرة المؤقتة (Cache Hit < 1ms) لـ ${agentKey}`);
     return res.json(cachedResult.data);
@@ -445,7 +494,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
    - صياغة معتدلة مبنية حصراً على ممارسة أو وعي حقيقي ذكره المستخدم فعلاً في حديثه؛ لا تستخدم "عالية" أو "كامل" إلا بدليل صريح.
    - ⛔ يُمنع منعاً باتاً كتابة نقاط قوة تتعارض مع شكوى المستخدم (مثلاً: لا تكتب "حضور اجتماعي متوازن" إذا اشتكى من الفتور والانعزال، بل اكتب "الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل").
 3. التوصية العلاجية الذهبية (advice و actionSteps[0]):
-   - راجع سجل المحادثة الكامل لهذه المحطة؛ عند اكتمال المحطة أو اقتراح التوصية النهائية، اذكر في حقل "advice" العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار (وليس حكمة عامة أو نصيحة جاهزة).
+   - راجع سجل المحادثة الكامل لهذه المحطة؛ عند اكتمال المحطة أو اقتراح التوصية النهائية، صُغ في حقل "advice" خطوةً عملية واحدة مختصرة ومحددة بأسلوب المستشار المختص ومرتبطة بالتحدي والفكرة التي طرحها المستخدم، ⛔ ويُمنع منعاً باتاً نسخ رسالة المستخدم الخام حرفياً أو وضعها بين علامتي تنصيص.
 4. تجنب المدح المعلب والافتراضات غير المدعومة:
    - لا تفترض أعراضاً لم يذكرها المستفيد (مثل زيادة الوزن، حرق الدهون، أو ضعف الثقة) ولا تمدحه على التزام بعادة لم يقم بها فعلياً.
    - التزم في الردود الاستكشافية بالحياد والاعتراف بضغط المستخدم وطرح سؤال مفتوح يخص المحطة الحالية دون افتراضات مسبقة.
@@ -461,6 +510,11 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
         هل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة؟»
      ج) إذا اختار المستخدم الاعتماد ("اعتمد التقييم" أو "أنهِ المحطة"): ضع station_completed = true واختم بملخص وخطوة عملية مستمدة من كلامه دون أي سؤال استكشافي.
      د) إذا اختار المواصلة: ضع station_completed = false واستكمل بأسئلة محددة وضرورية فقط دون تكرار.
+6. الاقتراحات السريعة التكيفية (suggestedReplies - إلزامي):
+   - أنت الآن تعد ردوداً سريعة تفاعلية للمستخدم للإجابة في الجولة رقم (${(typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 2}) بناءً مباشرة على آخر رسالة كتبها المستخدم ("${String(message || '').slice(0, 80).replace(/"/g, "'")}").
+   - قدّم في حقل "suggestedReplies" مصفوفة من 3 إلى 4 ردود سريعة مقترحة وقصيرة (كل رد أقل من 65 حرفاً وبصيغة المتكلم من زاوية المستخدم مثل: "أكثر ما يضغط علي هو..." أو "سأجرب بدء...").
+   - اجعل زاوية الاقتراحات تتطور مع رقم الجولة: (الجولة 2: تعميق السبب أو المصدر، الجولة 3: اختبار القابلية وكشف العوائق، الجولات 4+: خطوة عملية دقيقة أو متابعة الثبات).
+   - ⛔ يُمنع تماماً تكرار أي عبارة مطابقة لإجابة المستخدم الأخيرة أو إعادة أي من الاقتراحات السابقة التالية: ${Array.isArray(req.body.previousSuggestions) && req.body.previousSuggestions.length > 0 ? req.body.previousSuggestions.slice(-8).join(' | ') : 'لا يوجد'}.
 `;
 
   let evaluationSessionGuideline = '';
@@ -508,7 +562,7 @@ ${parsedCtx.incomeStability ? `- طبيعة واستقرار الدخل: ${parse
 ${parsedCtx.currentFocus ? `- التركيز والتفاصيل الإضافية: ${parsedCtx.currentFocus}` : ''}
 
 ⛔ قاعدة صارمة وملزمة في تخصيص الحوار والأسئلة والنصائح:
-لا تطرح أي سؤال أو نصيحة لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تفترض دخلاً ثابتاً لمن دخله متغير أو باحث عن عمل، ولا تفترض وجود أطفال/زوج لمن اختار "بدون معالين"، ولا تقدم نصائح ترقية وظيفية لمتقاعد أو طالب). كيّف كل سؤال ومثال في جميع جولات الحوار ليطابق هذا السياق الحياتي بدقة. وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في الحوار.
+لا تطرح أي سؤال أو نصيحة لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تفترض دخلاً ثابتاً لمن دخله متغير أو باحث عن عمل، ولا تفترض وجود أطفال/زوج لمن اختار "بدون معالين"، ولا تقدم نصائح ترقية وظيفية لمتقاعد أو طالب، وفي الجانب المالي لا تفترض أبداً أن الموظف بدخل ثابت وبدون معالين خالٍ من الديون أو لديه فائض جاهز للادخار والاستثمار قبل سؤاله أولاً عن الديون والأقساط والالتزامات الشهرية). كيّف كل سؤال ومثال في جميع جولات الحوار ليطابق هذا السياق الحياتي بدقة. وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في الحوار.
 `;
 
   // سابعاً: سياق المحطة الحالية - استخراج ملخص مقتضب من سطرين لأهم ما ذكره المستخدم في هذه المحطة لربط السياق والحديث
@@ -544,10 +598,66 @@ ${parsedCtx.currentFocus ? `- التركيز والتفاصيل الإضافية
 
   const domainSpecificContextGuideline = buildDomainContextDirectives(agentKey, parsedCtx);
 
+  const antiRepeatDialogueGuideline = `
+[قواعد حاسمة لمنع التكرار ومسار التعديل والاستئناف 🚫]:
+1. يُمنع منعاً باتاً إعادة طرح أي سؤال سبق طرحه أو أجاب عنه المستخدم في سجل المحادثة الحالية.
+${askedQuestionsFromHistory.length > 0 ? `- أسئلة طُرحت سابقاً في هذه المحادثة (ممنوع تكرارها أو إعادة صياغتها):\n${askedQuestionsFromHistory.slice(-6).map((q) => `  * "${q}"`).join('\n')}` : '- لا توجد أسئلة سابقة مطروحة بعد.'}
+2. تعامل مع آخر رسالة كتبها المستفيد ("${String(message || '').slice(0, 120).replace(/"/g, "'")}") كإجابة مؤكدة ومباشرة على السؤال السابق، حتى لو بدأها بصيغة ظنية مثل "ممكن..." (مثال: "ممكن الاكل في المطاعم" هي إجابة فعلية عن بند الصرف وليس سؤالاً عاماً). اعترف بما ذكره مباشرة في أول جملة وابنِ عليه للانتقال إلى الخطوة المنطقية التالية (مثل التحقق من الالتزامات/الديون إن لم تُذكر، أو اقتراح خطوة ضبط عملية، أو عرض التقييم المرحلي).
+${hasPriorConversation ? `3. ⛔ محظور في هذا الرد البدء بتحية افتتاحية متكررة (مثل: "أهلاً بك..." أو "مرحباً بك..." أو إعادة تقديم نفسك).${isEditedOrResent ? ' المستفيد أعاد إرسال/تعديل إجابته عبر "تراجع / تعديل"، فادخل مباشرة في الاعتراف بالإجابة والانتقال للخطوة التالية.' : ''}` : ''}
+4. ⛔ اتساق الدرجات والأسئلة مع البداية الإيجابية: إذا بدأ المستفيد بتقييم مرتفع (مثل 8/10) أو وصف إيجابي واضح (مثل منحه عائلته الكثير من الوقت)، لا تخفّض الدرجة إلى أقل من 5/10 لمجرد تحدٍّ فرعي (كتشتت الهاتف أو الخجل)، بل اجعلها متوازنة (6.5 إلى 7.5). ويُمنع طرح سؤال يناقض ما أثبته (كأن تسأله ما الذي يمنعه من قضاء وقت أطول مع عائلته بعد تأكيده منحه لهم الكثير من الوقت).
+5. إذا طلب المستفيد اقتراحات مباشرة (مثل "لا أدري أعطيني اقتراحاتك")، قدّم له 2-3 اقتراحات عملية قصيرة ومباشرة مبنية على حواره في نفس الرد قبل عرض درجة التقييم المبدئي.
+6. التوصية الذهبية (advice) عند الاكتمال يجب أن تلخص الإجراء العملي المتفق عليه في الحوار بأسلوب المستشار دون عبارات قالبية عامة ودون نسخ كلام المستفيد داخل علامات تنصيص.
+7. ⛔ عدالة التقييم عند السلبية الواضحة أو العزلة الحادة (خصوصاً في الجانب الشخصي): إذا عبّر المستفيد بصراحة واستمرار عن العزلة التامة أو رفض الجلوس مع الأسرة/الآخرين أو سوء المعاملة المستمر، امنحه درجة منخفضة واقعية (2.5 إلى 3.8 من 10) دون تجميل أو رفعها لنحو 4.8 بذريعة التوازن أو وجود نشاط فردي كالمشي منفرداً. ويُمنع افتراض شعوره بـ"التقصير تجاه معاليه" أو طرح أسئلة تفترض جلوسه معهم؛ احترم حدوده بهدوء وناقش أثر العزلة على توازنه الشخصي.
+`;
+
+  const enforceAntiRepeatOnReply = (
+    rawReply: string,
+    isCompleted: boolean,
+    reconciledScore: number
+  ): string => {
+    let cleaned = stripRepeatedOpeningGreeting(rawReply || '', hasPriorConversation);
+    if (!isCompleted && isRequestingAdvisorSuggestions(message)) {
+      const hasNumberedOrBulleted = /(?:^|\n)\s*(?:[1-3][.)]|[-•])\s+\S+/m.test(cleaned);
+      if (!hasNumberedOrBulleted) {
+        const concrete = generateConcreteDomainSuggestions(
+          agentKey,
+          [...historyUserOnlyTexts, message],
+          effectiveUserProfile,
+          reconciledScore
+        );
+        const listBlock = concrete.map((s, idx) => `${idx + 1}. ${s}`).join('\n');
+        cleaned = `إليك 3 اقتراحات عملية قصيرة تناسب واقعك:\n\n${listBlock}\n\n${cleaned}`;
+      }
+    }
+    if (isCompleted || (askedQuestionsFromHistory.length === 0 && safeHistoryArray.length === 0)) {
+      return cleaned;
+    }
+
+    const questionMatches = cleaned.match(/[^.!؟?\n]+[؟?]/g) || [];
+    if (questionMatches.length > 0) {
+      const lastQ = questionMatches[questionMatches.length - 1].trim();
+      if (
+        isQuestionAlreadyAsked(lastQ, askedQuestionsFromHistory) ||
+        isQuestionContradictingHistory(lastQ, [...safeHistoryArray, message])
+      ) {
+        const domainPool = getDomainContextConfig(agentKey, parsedCtx).exploratoryQuestions;
+        const nextPick = pickNextUnaskedQuestion(domainPool, [...safeHistoryArray, message], stationTurnCount);
+        const replacementQuestion =
+          nextPick.question ||
+          (stationTurnCount >= 3
+            ? 'هل ترغب في اعتماد التقييم المرحلي الحالي والانتقال للمحطة التالية، أم تفضل إضافة تفصيل آخر؟'
+            : `ما الخطوة العملية البسيطة التي تراها مناسبة لتطبيقها في ${stationTitle} هذا الأسبوع؟`);
+        cleaned = cleaned.replace(lastQ, replacementQuestion).trim();
+      }
+    }
+    return cleaned;
+  };
+
   // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
   systemInstruction = `
 ${userContextBlock}
 ${domainSpecificContextGuideline}
+${antiRepeatDialogueGuideline}
 
 ${agentRoleDescription}
 
@@ -710,6 +820,11 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
             type: Type.ARRAY,
             items: { type: Type.STRING },
             description: '1 to 3 improvement opportunities/challenges extracted from what the user actually said in this session',
+          },
+          suggestedReplies: {
+            type: Type.ARRAY,
+            items: { type: Type.STRING },
+            description: '3 to 4 concise, clickable quick replies (written in first person from the user perspective, < 65 chars each) tailored specifically to the latest advisor question, the user previous message, and current round number without repeating prior chips',
           },
         },
         required: ['reasoning', 'advice', 'reply', 'actionSteps'],
@@ -961,13 +1076,37 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     const rawModelScore = parsed.score !== undefined ? parsed.score : effectiveScore;
     parsed.score = processAndReconcileScore(rawModelScore, userSelfScore, message, historyMsgTexts, effectiveScore);
     parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyMsgTexts);
-    parsed.reply = sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed);
+    parsed.reply = enforceAntiRepeatOnReply(
+      sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
+      Boolean(parsed.station_completed),
+      parsed.score
+    );
+    if (parsed.station_completed) {
+      parsed.advice = synthesizeGoldenRecommendation({
+        areaId: agentKey,
+        userTexts: [...historyUserOnlyTexts, message],
+        userProfile: effectiveUserProfile,
+        score: parsed.score,
+        advisorCandidate: parsed.advice,
+      });
+    }
 
     if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
       if (parsed.advice) parsed.actionSteps = [parsed.advice];
       else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
       else parsed.actionSteps = [];
     }
+    const nextRoundNumGemini = Math.max(1, (typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 2);
+    parsed.suggestedReplies = generateDynamicQuickSuggestions({
+      domainId: agentKey,
+      roundNumber: nextRoundNumGemini,
+      lastUserMessage: message,
+      advisorReply: parsed.reply || '',
+      userProfile: effectiveUserProfile,
+      previousChips: Array.isArray(req.body.previousSuggestions) ? req.body.previousSuggestions : [],
+      userHistory: historyMsgTexts,
+      aiSuggestedReplies: Array.isArray(parsed.suggestedReplies) ? parsed.suggestedReplies : [],
+    });
     // 3) إضافة حقل source: "gemini"
     parsed.source = 'gemini';
     advisorChatCache.set(chatCacheKey, { data: parsed, timestamp: Date.now() });
@@ -1003,7 +1142,8 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
   "reflectionQuestion": "سؤال تأملي ذكي للمستفيد باللغة العربية",
   "station_completed": false,
   "strengths": ["نقاط القوة"],
-  "challenges": ["فرصة تطوير من كلامه"]
+  "challenges": ["فرصة تطوير من كلامه"],
+  "suggestedReplies": ["رد سريع مخصص ١ يبني على إجابة المستخدم", "رد سريع مخصص ٢", "رد سريع مخصص ٣"]
 }`;
 
         groqMessages.push({ role: 'system', content: groqSystemPrompt });
@@ -1166,13 +1306,38 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
         const rawGroqScore = parsed.score !== undefined ? parsed.score : effectiveScore;
         parsed.score = processAndReconcileScore(rawGroqScore, userSelfScore, message, historyMsgTexts, effectiveScore);
         parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyMsgTexts);
-        parsed.reply = sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed);
+        parsed.reply = enforceAntiRepeatOnReply(
+          sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
+          Boolean(parsed.station_completed),
+          parsed.score
+        );
+        if (parsed.station_completed) {
+          parsed.advice = synthesizeGoldenRecommendation({
+            areaId: agentKey,
+            userTexts: [...historyUserOnlyTexts, message],
+            userProfile: effectiveUserProfile,
+            score: parsed.score,
+            advisorCandidate: parsed.advice,
+          });
+        }
 
         if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
           if (parsed.advice) parsed.actionSteps = [parsed.advice];
           else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
           else parsed.actionSteps = [];
         }
+
+        const nextRoundNumGroq = Math.max(1, (typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 2);
+        parsed.suggestedReplies = generateDynamicQuickSuggestions({
+          domainId: agentKey,
+          roundNumber: nextRoundNumGroq,
+          lastUserMessage: message,
+          advisorReply: parsed.reply || '',
+          userProfile: effectiveUserProfile,
+          previousChips: Array.isArray(req.body.previousSuggestions) ? req.body.previousSuggestions : [],
+          userHistory: historyMsgTexts,
+          aiSuggestedReplies: Array.isArray(parsed.suggestedReplies) ? parsed.suggestedReplies : [],
+        });
 
         // 3) أضف source: "groq"
         parsed.source = 'groq';
@@ -1196,13 +1361,16 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
       message || '',
       effectiveUserProfile?.name || userName || 'عزيزي',
       advisor,
-      userScore || 5,
+      isAcuteIsolationContext ? effectiveScore : (userScore || effectiveScore || 5),
       isEvaluationSession,
       evaluationStep,
       evaluationQuestionTitle,
       assessmentMode,
       stationTurnCount,
-      effectiveUserProfile
+      effectiveUserProfile,
+      Array.isArray(req.body.previousSuggestions) ? req.body.previousSuggestions : [],
+      historyMsgTexts,
+      Boolean(isEditedOrResent)
     );
     // 3) إضافة حقل source: "local-fallback" (لا نُخزّن الردود الاحتياطية في الذاكرة المؤقتة حتى نُعطي Gemini الأولوية في المرة القادمة)
     (localFallback as any).source = 'local-fallback';
@@ -1215,7 +1383,8 @@ export function buildConversationAwareStationSummary(
   agentKey: string,
   stationTitle: string,
   history: any[],
-  userScore?: number
+  userScore?: number,
+  userProfile?: any
 ): {
   strengths: string[];
   challenges: string[];
@@ -1238,7 +1407,7 @@ export function buildConversationAwareStationSummary(
 
   const allUserText = userUtterances.join(' ').trim();
 
-  // 1. البحث عن العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار (عكسياً من الأحدث للأقدم)
+  // 1. صياغة التوصية العلاجية الذهبية بأسلوب المستشار دون نسخ كلام المستخدم حرفياً
   const proposalPattern = /(?:^|\s)(?:سأخصص|ساخصص|سأبدأ|سابدا|سأجرب|ساجرب|سأحاول|ساحاول|سألتزم|سالتزم|سأنظم|سانظم|سأتواصل|ساتواصل|سأمشي|سامشي|سأقرأ|ساقرا|سأدخر|سادخر|سأوفر|ساوفر|سأغلق|ساغلق|أخطط|اخطط|أنوي|انوي|قررت|اتفقنا على|فكرت في|خطة|ممكن أبدأ|أفضل أن)(?:\s|$)/i;
   let userProposedPlan = '';
   for (let i = userUtterances.length - 1; i >= 0; i--) {
@@ -1249,20 +1418,12 @@ export function buildConversationAwareStationSummary(
     }
   }
 
-  // إن لم توجد جملة بصيغة مستقبلية صريحة، نبحث عن جملة تحتوي مدة زمنية أو خطوة عملية ذكرها المستخدم
-  if (!userProposedPlan) {
-    for (let i = userUtterances.length - 1; i >= 0; i--) {
-      const u = userUtterances[i];
-      if (/(\d+\s*(?:دقيقة|دقائق|ساعة|ساعات|صفحة|صفحات|ريال|مرات)|أسبوعياً|يومياً|تخصيص\s+وقت|تنظيم\s+وقت)/i.test(u) && u.length >= 12) {
-        userProposedPlan = u.trim();
-        break;
-      }
-    }
-  }
-
-  const goldenRecommendation = userProposedPlan
-    ? `تطبيق الخطة التي اقترحتها في الحوار: "${userProposedPlan.slice(0, 140)}${userProposedPlan.length > 140 ? '...' : ''}"`
-    : `البدء بخطوة عملية واحدة صغيرة ومحددة تعالج التحدي الذي وصفته في ${stationTitle}`;
+  const goldenRecommendation = synthesizeGoldenRecommendation({
+    areaId: agentKey,
+    userTexts: userUtterances,
+    userProfile,
+    score: typeof userScore === 'number' && !isNaN(userScore) ? userScore : 6,
+  });
 
   // 2. نقاط القوة: متوافقة تماماً مع شكوى المستخدم دون أي تناقض
   const isSocialStruggle = /(فتور|انعزال|عزلة|وحيد|وحدة|قطيعة|انقطاع|قلة\s*تواصل|مقص[ّ]?ر\s*مع\s*أصدق|انطواء|تراجع\s*(?:في\s*)?التواصل)/i.test(allUserText);
@@ -1294,9 +1455,6 @@ export function buildConversationAwareStationSummary(
 
   // 3. فرص التحسين بناءً على ما ورد في الحوار
   const challenges: string[] = [];
-  if (userProposedPlan) {
-    challenges.push(`حماية وتثبيت خطتك المحددة (${userProposedPlan.slice(0, 80)}${userProposedPlan.length > 80 ? '...' : ''})`);
-  }
   if (isSocialStruggle) {
     challenges.push('تقليص الفتور والانعزال عبر جدول تواصل بسيط ومريح مع المقربين');
   } else if (/(نوم|أرق|إرهاق|تعب|سهر)/i.test(allUserText)) {
@@ -1308,7 +1466,7 @@ export function buildConversationAwareStationSummary(
   }
 
   if (challenges.length === 0) {
-    challenges.push(`المداومة على الخطوة العملية التي اخترتها في ${stationTitle}`);
+    challenges.push(`حماية وتثبيت خطوة التحسين المتفق عليها في ${stationTitle}`);
   }
 
   return {
@@ -1370,10 +1528,22 @@ advisorChatRouter.post('/station-summary', async (req: Request, res: Response) =
   }
 
   const allUserText = historyTexts.join(' ');
-  const deterministicFallback = buildConversationAwareStationSummary(agentKey, stationTitle, safeHistory, Number(score));
+  const deterministicFallback = buildConversationAwareStationSummary(agentKey, stationTitle, safeHistory, Number(score), userProfile);
+  const deterministicGoals = generateRealisticAreaGoals({
+    areaId: agentKey as any,
+    userTexts: historyTexts,
+    userProfile,
+    score: Number(score) || 6,
+    goldenRecommendation: deterministicFallback.goldenRecommendation,
+    challenges: deterministicFallback.challenges,
+    strengths: deterministicFallback.strengths,
+  });
 
   if (!GEMINI_API_KEY || transcriptLines.length === 0) {
-    return res.json(deterministicFallback);
+    return res.json({
+      ...deterministicFallback,
+      suggestedGoals: deterministicGoals,
+    });
   }
 
   const summaryCtx = parseUserContext(userProfile, userName);
@@ -1391,13 +1561,17 @@ ${summaryCtx.incomeSource ? `- مصدر الدخل: ${summaryCtx.incomeSource}` 
 
 ⚠️ تعليمات صارمة وملزمة لا يجوز مخالفتها:
 1. التوصية العلاجية الذهبية (goldenRecommendation):
-   - اذكر فيها **العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار** (وليس حكمة عامة أو نصيحة جاهزة).
-   - استخرج عبارته وخطته بدقة واضحة وعملية وقابلة للتنفيذ.
+   - استخلص الفكرة أو التحدي أو العادة التي وردت في حوار المستخدم، واصغها كخطوة عملية واحدة محددة ومختصرة بأسلوب "${advisorName}" (12 إلى 24 كلمة).
+   - يُمنع تماماً نسخ رسالة المستخدم حرفياً أو اقتباسها أو استخدام عبارة مثل "تطبيق الخطة التي اقترحتها في الحوار".
+   - يجب أن تناسب الدرجة المعتمدة (${score ?? 'غير محددة'}/10) وسياق المستفيد (${summaryCtx.workStatus}).
 2. نقاط القوة (strengths - من 2 إلى 3 نقاط):
    - يجب أن تستند حصراً لما ذكره المستخدم بلسانه في الحوار.
    - ⛔ يُمنع منعاً باتاً كتابة نقاط قوة تتعارض مع شكوى المستخدم (مثلاً: لا تكتب "حضور اجتماعي متوازن" إذا اشتكى من الفتور والانعزال، بل اكتب "الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل").
 3. فرص التحسين (challenges - من 2 إلى 3 نقاط):
    - اذكر التحديات الفعلية وفرص التحسين المرتبطة مباشرة بشكوى المستخدم في الحوار.
+4. الأهداف العملية للجانب (suggestedGoals - من 2 إلى 3 أهداف قصيرة):
+   - ⛔ يُمنع التناقض المباشر مع ظروف المستخدم (مثلاً: إذا ذكر العمل 12 ساعة والنوم 4 ساعات، يُمنع اقتراح النوم 7 ساعات عند 11 مساءً؛ اقترح خطوة تدريجية واقعية تناسب دوامه).
+   - ⛔ يُمنع اختلاق ديون أو بطاقات ائتمان أو مبالغ مالية أو زيارات أو أشخاص (أبناء/زوج) لم يردوا في السياق أو الحوار.
 `;
 
   const userPrompt = `سجل المحادثة الكامل لمحطة "${stationTitle}":\n\n${transcriptLines.join('\n\n')}`;
@@ -1426,7 +1600,12 @@ ${summaryCtx.incomeSource ? `- مصدر الدخل: ${summaryCtx.incomeSource}` 
             },
             goldenRecommendation: {
               type: Type.STRING,
-              description: 'التوصية العلاجية الذهبية: العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار وليس حكمة عامة',
+              description: 'التوصية العلاجية الذهبية: خطوة عملية واحدة مختصرة (12-24 كلمة) مصاغة بأسلوب المستشار ومبنية على سياق الحوار والدرجة، دون نسخ جملة المستخدم حرفياً',
+            },
+            suggestedGoals: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: '2 to 3 short, realistic goals strictly aligned with user constraints and dialogue without contradiction or fabrication',
             },
           },
           required: ['strengths', 'challenges', 'goldenRecommendation'],
@@ -1450,18 +1629,41 @@ ${summaryCtx.incomeSource ? `- مصدر الدخل: ${summaryCtx.incomeSource}` 
     const finalChallenges = Array.isArray(parsed.challenges) && parsed.challenges.length > 0
       ? parsed.challenges.map((c: any) => String(c || '').trim()).filter(Boolean)
       : deterministicFallback.challenges;
-    const finalGolden = typeof parsed.goldenRecommendation === 'string' && parsed.goldenRecommendation.trim().length > 5
+    const rawGolden = typeof parsed.goldenRecommendation === 'string' && parsed.goldenRecommendation.trim().length > 5
       ? parsed.goldenRecommendation.trim()
       : deterministicFallback.goldenRecommendation;
+    const finalGolden = synthesizeGoldenRecommendation({
+      areaId: agentKey,
+      userTexts: historyTexts,
+      userProfile,
+      score: Number(score) || 6,
+      advisorCandidate: rawGolden,
+    });
+
+    const finalGoals = generateRealisticAreaGoals({
+      areaId: agentKey as any,
+      userTexts: historyTexts,
+      userProfile,
+      score: Number(score) || 6,
+      goldenRecommendation: Array.isArray(parsed.suggestedGoals) && parsed.suggestedGoals.length > 0
+        ? String(parsed.suggestedGoals[0] || finalGolden)
+        : finalGolden,
+      challenges: finalChallenges,
+      strengths: finalStrengths,
+    });
 
     return res.json({
       strengths: finalStrengths.slice(0, 3),
       challenges: finalChallenges.slice(0, 3),
       goldenRecommendation: finalGolden,
+      suggestedGoals: finalGoals,
       source: 'gemini',
     });
   } catch (err: any) {
     console.warn('[Station Summary] تعذر توليد الملخص عبر Gemini، استخدام الاستخلاص المحلي المرتبط بسجل الحوار:', err?.message || err);
-    return res.json(deterministicFallback);
+    return res.json({
+      ...deterministicFallback,
+      suggestedGoals: deterministicGoals,
+    });
   }
 });

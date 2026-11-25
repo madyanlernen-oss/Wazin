@@ -19,29 +19,8 @@ import {
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { OverlappingRadarChart } from '../components/OverlappingRadarChart';
 import { LifeAreaId, UserProfile } from '../types/lifeBalance';
-
-// Helper to isolate numbers, percentages, and ratios like "4.8/10", "85%", "+1.5", "8/10" in LTR so Arabic text flow remains natural
-function renderWithIsolatedNumbers(text: string): React.ReactNode {
-  if (!text) return null;
-  const regex = /(\b[+-]?\d+(?:\.\d+)?%|\(?\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\)?|[+-]\d+(?:\.\d+)?)/g;
-  const parts = text.split(regex);
-
-  return parts.map((part, idx) => {
-    if (regex.test(part)) {
-      return (
-        <span
-          key={idx}
-          dir="ltr"
-          className="inline-block font-sans font-bold mx-0.5 text-inherit"
-          style={{ unicodeBidi: 'isolate' }}
-        >
-          {part}
-        </span>
-      );
-    }
-    return part;
-  });
-}
+import { isolateNumbersInText } from '../components/FormattedChatMessage';
+import { localizeDomainText } from '../utils/arabicDomainLabels';
 
 // Historical Years Data
 interface PeriodItem {
@@ -444,10 +423,10 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
    - رصدنا نمواً بمقدار **${isPositive ? `+${diff}` : diff} درجة** على مؤشر التوازن العام بين بداية الفترة (${firstItem.name}) ونهايتها (${lastItem.name}).
    - المنظومة أظهرت تماسكاً كبيراً، حيث انتقلت من مرحلة التذبذب إلى مرحلة **الاستقرار التكاملي**.
 
-2. **المجال الأكثر نمواً وإلهاماً (Super Catalyst):**
+2. **المجال الأكثر نمواً وإلهاماً (المحفّز الأكبر):**
    - **الجانب الصحي والروحي:** كانا الرافعة الأساسية للنمو، حيث انعكس تثبيت مواعيد النوم والمشي اليومي بنسبة تحسن تفوق 45% في المزاج الأسري والإنتاجية المهنية.
 
-3. **نقاط عنق الزجاجة (Bottlenecks) وكيف تم تجاوزها:**
+3. **نقاط عنق الزجاجة وكيف تم تجاوزها:**
    - في الفترات الأولى، كان الضغط المالي والمهني يستنزف الطاقة الاجتماعية.
    - التحول الحاسم حدث عندما تم إيقاف التسرب المالي ببطاقة منفصلة ووضع حدود واضحة لساعات العمل.
 
@@ -616,10 +595,10 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                   className="text-[10px] font-black uppercase px-2 py-0.5 rounded-md text-white inline-block mb-1.5"
                   style={{ backgroundColor: color }}
                 >
-                  فترة #{idx + 1}
+                  فترة <span dir="ltr" className="font-mono [unicode-bidi:isolate]">#{idx + 1}</span>
                 </span>
-                <h3 className="font-black text-sm text-[#0F172A] dark:text-[#F1F5F9]">{item.name}</h3>
-                <p className="text-[11px] text-[#475569] dark:text-[#94A3B8] line-clamp-1">{item.subtitle}</p>
+                <h3 className="font-black text-sm text-[#0F172A] dark:text-[#F1F5F9]">{isolateNumbersInText(item.name)}</h3>
+                <p className="text-[11px] text-[#475569] dark:text-[#94A3B8] line-clamp-1">{isolateNumbersInText(item.subtitle)}</p>
               </div>
 
               <div className="pt-2 border-t border-[#E2E8F0] dark:border-[#1E343F] flex items-center justify-between">
@@ -889,7 +868,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
                     <p className="leading-relaxed text-[#334155] dark:text-slate-300">
                       {isImproved
                         ? `استمرارية الأداء في ${activeAdv.title} تدل على ترسخ العادات المحورية. حافظ على التوازن ولا ترفع التوقعات بشكل يولد ضغطاً غير ضروري.`
-                        : `هذا الجانب يحتاج إلى خطوة إجرائية صغيرة ومحددة هذا الأسبوع في مصفوفة أيزنهاور (المربع 2) لاستعادة زخمه.`}
+                        : `هذا الجانب يحتاج إلى خطوة إجرائية صغيرة ومحددة هذا الأسبوع في المربع 2 بمصفوفة أيزنهاور لاستعادة زخمه.`}
                     </p>
                   </div>
                 </div>
@@ -939,7 +918,7 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
         {analysisResult && (
           <div className="bg-white/10 dark:bg-black/30 backdrop-blur-md border border-white/20 dark:border-white/10 rounded-2xl p-5 sm:p-6 text-xs sm:text-sm leading-relaxed text-white space-y-3 animate-fadeIn">
             <div className="whitespace-pre-line prose prose-invert max-w-none text-right">
-              {renderWithIsolatedNumbers(analysisResult)}
+              {isolateNumbersInText(localizeDomainText(analysisResult))}
             </div>
           </div>
         )}

@@ -1,8 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { ai, Type } from '../config/ai';
 import { GEMINI_API_KEY, GEMINI_MODEL } from '../config/env';
+import { getDomainArabicName, localizeDomainText } from '../../src/utils/arabicDomainLabels';
 
 export const eisenhowerSuggestionsRouter = Router();
+
+function sanitizeSuggestionItem(item: any) {
+  return {
+    ...item,
+    title: localizeDomainText(String(item?.title || '')),
+    quadrant_label: localizeDomainText(String(item?.quadrant_label || 'المربع 2 (جدوله)')),
+    domain: getDomainArabicName(String(item?.domain || 'الجانب الشخصي والوعي بالذات')),
+    rationale: localizeDomainText(String(item?.rationale || '')),
+    sourceTypeLabel: item?.sourceTypeLabel ? localizeDomainText(String(item.sourceTypeLabel)) : item?.sourceTypeLabel,
+  };
+}
 
 // In-memory short-lived cache (TTL 60s) for instant response on re-navigation
 const eisenhowerCache = new Map<string, { data: any; timestamp: number }>();
@@ -87,8 +99,8 @@ eisenhowerSuggestionsRouter.post('/eisenhower-suggestions', async (req: Request,
       return {
         agent_name: 'وكيل اقتراح الخطط (مصفوفة أيزنهاور)',
         has_sufficient_context: Boolean(directorReport || scores),
-        suggestions: items.slice(0, 5),
-        reply: 'إليك أهم الأولويات والخطط الذكية المستخلصة بعناية من تحليلات م. معتز التكاملي ود. هاني الموجه. يمكنك طرحها مباشرة في مصفوفتك أو تخصيصها يدوياً.',
+        suggestions: items.slice(0, 5).map(sanitizeSuggestionItem),
+        reply: localizeDomainText('إليك أهم الأولويات والخطط الذكية المستخلصة بعناية من تحليلات م. معتز التكاملي ود. هاني الموجه. يمكنك طرحها مباشرة في مصفوفتك أو تخصيصها يدوياً.'),
         source: 'fallback',
       };
     };
@@ -123,8 +135,13 @@ ${eisenhowerUserContext}
 1. اقتراحات فقط (Suggestions Only): قدّم 3 إلى 5 اقتراحات مركزة وعملية للمربعات الأربعة تناسب واقع حالته.
 2. التركيز الأكبر على "المربع الثاني" (مهم وغير عاجل) كوقود للتوازن المستدام.
 3. الربط الصريح والواضح بسبب الاقتراح المشتق من تشخيص م. معتز (عنق الزجاجة، العادات المحورية) أو توجيه د. هاني.
-4. إخراج كائن JSON فقط وفق المخطط المطلوب.
+4. التزم باللغة العربية الخالصة الفصيحة دون أي مفاتيح أو كلمات إنجليزية (مثل financial أو health أو career أو Keystone أو Deep Study) ودون أقواس زائدة مثل (المربع (2).
+5. إخراج كائن JSON فقط وفق المخطط المطلوب.
 `;
+
+    const localizedScoresPrompt = Object.fromEntries(
+      Object.entries(scores || {}).map(([k, v]) => [getDomainArabicName(k), v])
+    );
 
     const prompt = `
 ${eisenhowerUserContext}
@@ -136,7 +153,7 @@ ${eisenhowerUserContext}
   * عنق الزجاجة: ${JSON.stringify(directorReport?.criticalBottleneck || 'غير محدد')}
   * العادات المحورية: ${JSON.stringify(directorReport?.keystoneHabits || [])}
   * خارطة 30 يوماً: ${JSON.stringify(directorReport?.thirtyDayRoadmap?.[0] || 'غير محدد')}
-- الدرجات الحالية: ${JSON.stringify(scores || {})}
+- الدرجات الحالية: ${JSON.stringify(localizedScoresPrompt)}
 - الأهداف الحالية المسجلة مسبقاً (تجنب تكرارها): ${JSON.stringify(currentGoals?.map((g: any) => g.title) || [])}
 
 اقترح من 3 إلى 5 مهام وخطط محددة وفق المخطط.
@@ -192,6 +209,10 @@ ${eisenhowerUserContext}
     if (!parsed.suggestions || parsed.suggestions.length === 0) {
       return res.json(getLocalSuggestions());
     }
+    parsed.suggestions = parsed.suggestions.map(sanitizeSuggestionItem);
+    if (typeof parsed.reply === 'string') {
+      parsed.reply = localizeDomainText(parsed.reply);
+    }
     parsed.source = 'gemini';
     eisenhowerCache.set(cacheKey, { data: parsed, timestamp: Date.now() });
     return res.json(parsed);
@@ -229,7 +250,7 @@ ${eisenhowerUserContext}
     return res.json({
       agent_name: 'وكيل اقتراح الخطط (مصفوفة أيزنهاور)',
       has_sufficient_context: Boolean(directorReport || scores),
-      suggestions: items,
+      suggestions: items.map(sanitizeSuggestionItem),
       reply: 'إليك أهم الأولويات والخطط الذكية المستخلصة بعناية من تحليلات م. معتز التكاملي ود. هاني الموجه.',
       source: 'fallback',
     });

@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../../data/advisorsData';
 import { EisenhowerSuggestionItem } from '../../utils/eisenhowerAgent';
+import { isolateNumbersInText } from '../FormattedChatMessage';
+import { localizeDomainText } from '../../utils/arabicDomainLabels';
 
 interface EisenhowerSuggestionsSectionProps {
   suggestions: EisenhowerSuggestionItem[];
@@ -127,7 +129,7 @@ export const EisenhowerSuggestionsSection: React.FC<EisenhowerSuggestionsSection
                           <span>{sug.sourceAgentName}</span>
                         </span>
                         <span className="inline-flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/40">
-                          {sug.sourceTypeLabel}
+                          {localizeDomainText(sug.sourceTypeLabel)}
                         </span>
                       </div>
 
@@ -160,19 +162,19 @@ export const EisenhowerSuggestionsSection: React.FC<EisenhowerSuggestionsSection
                               : 'bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                           }`}
                         >
-                          {sug.quadrantLabel}
+                          {isolateNumbersInText(localizeDomainText(sug.quadrantLabel))}
                         </span>
                       </div>
 
                       <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white leading-relaxed">
-                        {sug.title}
+                        {isolateNumbersInText(localizeDomainText(sug.title))}
                       </h4>
 
                       <div className="text-[11px] text-[#475569] dark:text-slate-300 bg-slate-50/90 dark:bg-[#071318]/70 border border-slate-200/70 dark:border-slate-800/70 rounded-xl p-2.5 leading-relaxed">
                         <strong className="text-[#0B6E72] dark:text-cyan-400 font-black">
                           سبب الاقتراح:{' '}
                         </strong>
-                        <span>{sug.rationale}</span>
+                        <span>{isolateNumbersInText(localizeDomainText(sug.rationale))}</span>
                       </div>
                     </div>
 

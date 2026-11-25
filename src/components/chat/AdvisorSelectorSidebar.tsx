@@ -53,7 +53,7 @@ export const AdvisorSelectorSidebar: React.FC<AdvisorSelectorSidebarProps> = ({
                 </div>
               </div>
 
-              <div dir="ltr" className="text-left font-mono font-bold">
+              <div dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-left font-mono font-bold">
                 <span className="text-xs" style={{ color: advisor.themeColor }}>
                   {sc.toFixed(1)}
                 </span>

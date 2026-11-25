@@ -1,7 +1,14 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { readFileSync } from 'fs';
+import { resolve } from 'path';
 import { GEMINI_API_KEY, GEMINI_MODEL, GROQ_API_KEY, GROQ_MODEL } from '../server/config/env';
 import { generateLocalAgentResponse, resetLocalFallbackTracker } from '../server/agents/localAdvisorEngine';
-import { extractExplicitRating as extractServerExplicitRating, sanitizeStrengths } from '../server/middleware/validation';
+import {
+  extractExplicitRating as extractServerExplicitRating,
+  sanitizeStrengths,
+  calculateSemanticScore as calculateServerSemanticScore,
+  processAndReconcileScore,
+} from '../server/middleware/validation';
 import { buildConversationAwareStationSummary } from '../server/routes/advisorChat';
 import { getClientAdvisorResponse, calculateSemanticScore, extractExplicitRating as extractClientExplicitRating } from '../src/components/onboarding/clientIntelligence';
 import { extractInsightsFromAnswers } from '../src/utils/storage';
@@ -18,6 +25,41 @@ import {
   buildDomainContextDirectives,
   getDomainContextConfig,
 } from '../src/utils/contextPersonalization';
+import {
+  generateDynamicQuickSuggestions,
+  normalizeSuggestionText,
+} from '../src/utils/dynamicSuggestions';
+import {
+  extractPriorityDomains,
+  getPrioritizedScoredDomains,
+  generateThirtyDayPlan,
+  syncThirtyDayPlanWithScores,
+  resolveActivePlanDayAndWeek,
+  exportPlanAsText,
+} from '../src/utils/thirtyDayPlanGenerator';
+import { isolateNumbersForPlainText } from '../src/components/FormattedChatMessage';
+import {
+  generateRealisticAreaGoals,
+  isGoalConsistentWithReality,
+  parseDialogueConstraints,
+  synthesizeGoldenRecommendation,
+  isVerbatimUserCopy,
+} from '../src/utils/realisticGoalsGenerator';
+import {
+  getDomainArabicName,
+  localizeDomainText,
+  prefixLamArabic,
+  reconcileDirectorReportWithScores,
+  sanitizeDirectorReportArabic,
+} from '../src/utils/arabicDomainLabels';
+import { getDemoBannerCopy } from '../src/components/DemoModeBanner';
+import {
+  isGenuineUserQuestion,
+  isQuestionAlreadyAsked,
+  isQuestionContradictingHistory,
+  pickNextUnaskedQuestion,
+  stripRepeatedOpeningGreeting,
+} from '../src/utils/dialogueDeduplication';
 
 // In-memory localStorage polyfill for non-browser runtimes (Node / Bun CLI)
 if (typeof (globalThis as any).localStorage === 'undefined') {
@@ -649,8 +691,10 @@ async function testAgentBehaviors() {
       6.0
     );
     assert(
-      stationSummary.goldenRecommendation.includes('مساء كل خميس') && stationSummary.goldenRecommendation.includes('أصدقائي المقربين'),
-      'Golden recommendation MUST capture the specific habit proposed by the user'
+      !stationSummary.goldenRecommendation.includes('تطبيق الخطة التي اقترحتها في الحوار') &&
+        !isVerbatimUserCopy(stationSummary.goldenRecommendation, ['سأخصص مساء كل خميس للقاء أصدقائي المقربين لمدة ساعة واحدة']) &&
+        /(لقاء|صديق|تواصل|أسبوعي|مكالمة|أقرب)/.test(stationSummary.goldenRecommendation),
+      `Golden recommendation must synthesize social action in advisor voice without verbatim copying; got: ${stationSummary.goldenRecommendation}`
     );
     assert(
       !stationSummary.strengths.some((s) => s.includes('حضور اجتماعي متوازن')),
@@ -768,6 +812,140 @@ async function testAgentBehaviors() {
       name: 'Turn 1.5: Student Obligations & No-Debt Template ("التزامات دراسية وبدون ديون")',
       passed: false,
       durationMs: Date.now() - fObligStart,
+      message: err.message,
+    });
+  }
+
+  // Turn 1.6: Employee Context & No Debt Assumption (Inquires Debts & Prioritizes Debt Management)
+  const fDebtStart = Date.now();
+  try {
+    const employeeNoDepProfile: UserProfile = {
+      name: 'سعود المنصور',
+      email: 'saud@wazan.test',
+      ageGroup: '30 - 39 سنة',
+      currentFocus: 'الاستقرار المالي وإدارة الالتزامات',
+      registeredAt: '2026-01-01T00:00:00.000Z',
+      workStatus: 'موظف',
+      hasDependents: 'لا',
+      incomeStability: 'نعم (دخل ثابت)',
+    };
+    const parsedEmp = parseUserContext(employeeNoDepProfile);
+    const empConfig = getDomainContextConfig('financial', parsedEmp);
+    assert(
+      empConfig.openingQuestion.includes('ديون') || empConfig.openingQuestion.includes('أقساط') || empConfig.openingQuestion.includes('الالتزامات'),
+      'Employee opening question must explicitly inquire about debts, installments, or commitments'
+    );
+    assert(
+      empConfig.exploratoryQuestions[0].includes('ديون') || empConfig.exploratoryQuestions[0].includes('أقساط'),
+      'First exploratory question for fixed-income no-dependents employee must verify debts/installments first'
+    );
+
+    const empStationCfg = getAdaptiveStationConfig('financial', employeeNoDepProfile);
+    assert(
+      empStationCfg?.consultation?.title.includes('ديون') || empStationCfg?.consultation?.title.includes('أقساط'),
+      'Adaptive station consultation opening must inquire about debts/installments before saving automation'
+    );
+
+    const empDirectives = buildDomainContextDirectives('financial', parsedEmp);
+    assert(
+      empDirectives.includes('بدون ديون') && empDirectives.includes('أقساط') && empDirectives.includes('أتمتة الادخار'),
+      'Directives must warn against assuming employee is without debts or ready for savings automation'
+    );
+
+    const finPromptMd = readFileSync(resolve(process.cwd(), 'Agents/01-financial.md'), 'utf8');
+    assert(
+      finPromptMd.includes('خالٍ من الديون') && finPromptMd.includes('فائضاً جاهزاً'),
+      'Agents/01-financial.md must explicitly forbid assuming fixed-income / no-dependents employee is debt-free with ready surplus'
+    );
+
+    // A) Direct question about automating savings & investing before debt status is known
+    const rDirectSaving = generateLocalAgentResponse(
+      'financial',
+      'كيف أبدأ أتمتة الادخار والاستثمار؟',
+      'سعود المنصور',
+      advFinancial,
+      5,
+      true,
+      2,
+      'إدارة الميزانية',
+      'initial_assessment',
+      0,
+      employeeNoDepProfile
+    );
+    assert(
+      rDirectSaving.reply.includes('أقساط') || rDirectSaving.reply.includes('ديون') || rDirectSaving.reply.includes('التزامات'),
+      'Local engine direct saving inquiry MUST ask/verify installments & obligations before savings automation'
+    );
+    assert(
+      !rDirectSaving.reply.includes('مع أتمتة الادخار في بداية كل شهر'),
+      'Local engine MUST NOT blindly tell unverified fixed-income employee to automate savings without checking debts'
+    );
+
+    // B) Client intelligence Round 1 neutral input must ask about debts/installments first
+    const rClientNeutral = getClientAdvisorResponse(
+      advFinancial,
+      'أريد تنظيم وضعي المالي الشهري',
+      2,
+      undefined,
+      0,
+      [],
+      employeeNoDepProfile
+    );
+    assert(
+      rClientNeutral.reply.includes('أقساط') || rClientNeutral.reply.includes('التزامات') || rClientNeutral.reply.includes('قروض'),
+      'Client advisor Round 1 reply for fixed-income no-dep employee must check debts/installments first'
+    );
+    assert(!rClientNeutral.advice.includes('خلو سجلك'), 'Client advice must not fabricate zero-debt claim');
+
+    // C) Dynamic Round 2 suggestions when debt status isn't confirmed no-debt must NOT assume investable surplus
+    const finR2Chips = generateDynamicQuickSuggestions({
+      domainId: 'financial',
+      roundNumber: 2,
+      lastUserMessage: 'أريد تنظيم وضعي المالي الشهري',
+      userProfile: employeeNoDepProfile,
+    });
+    assert(
+      !finR2Chips.some((c) => c.includes('استثمار الفائض')),
+      'Round 2 financial suggestions must not presume investable surplus before debt status is clarified'
+    );
+    assert(
+      finR2Chips.some((c) => c.includes('أقساط') || c.includes('التزامات')),
+      'Round 2 financial suggestions must include checking installments/obligations'
+    );
+
+    // D) When employee reports having monthly loan/installments:
+    const rDebt = generateLocalAgentResponse(
+      'financial',
+      'عندي قرض شخصي وقسط سيارة يقتطع 40% من الراتب وما يبقى شيء للادخار',
+      'سعود المنصور',
+      advFinancial,
+      5,
+      true,
+      2,
+      'إدارة الميزانية والأقساط',
+      'initial_assessment',
+      0,
+      employeeNoDepProfile
+    );
+    assert(rDebt.reply.includes('أقساط') || rDebt.reply.includes('الالتزامات') || rDebt.reply.includes('ديون'), 'Must address installments and debts');
+    assert(!rDebt.reply.includes('خلو سجلك من أي ديون'), 'MUST NOT assume user has zero debts');
+    assert(rDebt.station_completed === false, 'Station must remain open in Turn 1');
+
+    results.push({
+      suite,
+      domain: 'Financial',
+      name: 'Turn 1.6: Employee Context & Debt Awareness (No False Zero-Debt Assumption)',
+      passed: true,
+      durationMs: Date.now() - fDebtStart,
+      details: 'System prompt, opening questions, local/client engines & Round 2 chips verify debts/obligations first without presuming surplus',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Financial',
+      name: 'Turn 1.6: Employee Context & Debt Awareness (No False Zero-Debt Assumption)',
+      passed: false,
+      durationMs: Date.now() - fDebtStart,
       message: err.message,
     });
   }
@@ -1031,6 +1209,212 @@ async function testAgentBehaviors() {
       name: 'Context-Aware Personalization (Student w/o Dependents vs Employee w/ Dependents)',
       passed: false,
       durationMs: Date.now() - ctxDiffStart,
+      message: err.message,
+    });
+  }
+
+  // --- 2.6 Dynamic Round-by-Round Quick Suggestions (4 Rounds Consecutive Test) ---
+  const dynSuggStart = Date.now();
+  try {
+    const empProfile: UserProfile = {
+      name: 'سعود المنصور',
+      email: 'saud.dyn@wazan.test',
+      ageGroup: '30 - 39 سنة',
+      currentFocus: 'الاستقرار المالي',
+      registeredAt: '2026-01-01T00:00:00.000Z',
+      workStatus: 'موظف',
+      hasDependents: 'لا',
+      incomeStability: 'نعم (دخل ثابت)',
+    };
+
+    // Round 1 (before any answer)
+    const r1Chips = generateDynamicQuickSuggestions({
+      domainId: 'financial',
+      roundNumber: 1,
+      userProfile: empProfile,
+    });
+    assert(r1Chips.length >= 3, 'Round 1 must produce at least 3 quick suggestions');
+
+    // User picks/sends a debt-related Round 1 answer
+    const userMsg1 = 'لدي قرض شخصي وقسط شهري يضغط على الراتب';
+    const serverRes1 = generateLocalAgentResponse(
+      'financial',
+      userMsg1,
+      empProfile.name,
+      advFinancial,
+      5,
+      true,
+      2,
+      'التخطيط المالي',
+      'initial_assessment',
+      0,
+      empProfile,
+      r1Chips,
+      []
+    );
+    const r2Chips = serverRes1.suggestedReplies;
+    assert(Array.isArray(r2Chips) && r2Chips.length >= 3, 'Round 2 must return 3-4 quick suggestions');
+    assert(
+      !r2Chips.some((c) => r1Chips.map(normalizeSuggestionText).includes(normalizeSuggestionText(c))),
+      'Round 2 chips MUST NOT repeat Round 1 chips'
+    );
+    assert(
+      !r2Chips.some((c) => normalizeSuggestionText(c) === normalizeSuggestionText(userMsg1)),
+      'Round 2 chips MUST NOT echo userMsg1'
+    );
+    assert(
+      r2Chips.some((c) => /(قسط|أقساط|قرض|التزامات|بطاقة|سداد)/.test(c)),
+      'Round 2 chips must react dynamically to userMsg1 debt topic'
+    );
+
+    // Also verify branching: different Round 1 answer (spending leaks, no debt mention) yields DIFFERENT Round 2 chips!
+    const altUserMsg1 = 'ينفد الراتب بسرعة بسبب المطاعم والكماليات ولا أدخر';
+    const altServerRes1 = generateLocalAgentResponse(
+      'financial',
+      altUserMsg1,
+      empProfile.name,
+      advFinancial,
+      5,
+      true,
+      2,
+      'التخطيط المالي',
+      'initial_assessment',
+      0,
+      empProfile,
+      r1Chips,
+      []
+    );
+    assert(
+      JSON.stringify(altServerRes1.suggestedReplies) !== JSON.stringify(r2Chips),
+      'Different Round 1 answers MUST generate different Round 2 quick suggestions'
+    );
+
+    // Round 3 (user answers Round 2)
+    const userMsg2 = r2Chips[0];
+    const clientRes2 = getClientAdvisorResponse(
+      advFinancial,
+      userMsg2,
+      2,
+      5,
+      1,
+      [userMsg1],
+      empProfile,
+      r2Chips
+    );
+    const r3Chips = clientRes2.suggestedReplies;
+    assert(Array.isArray(r3Chips) && r3Chips.length >= 3, 'Round 3 (client engine) must return 3-4 quick suggestions');
+    assert(
+      !r3Chips.some((c) => r2Chips.map(normalizeSuggestionText).includes(normalizeSuggestionText(c))),
+      'Round 3 chips MUST NOT repeat Round 2 chips'
+    );
+    assert(
+      !r3Chips.some((c) => normalizeSuggestionText(c) === normalizeSuggestionText(userMsg2)),
+      'Round 3 chips MUST NOT repeat userMsg2'
+    );
+
+    // Round 4 (user answers Round 3)
+    const userMsg3 = r3Chips[0];
+    const serverRes3 = generateLocalAgentResponse(
+      'financial',
+      userMsg3,
+      empProfile.name,
+      advFinancial,
+      5,
+      true,
+      2,
+      'التخطيط المالي',
+      'initial_assessment',
+      2,
+      empProfile,
+      r3Chips,
+      [userMsg1, userMsg2]
+    );
+    const r4Chips = serverRes3.suggestedReplies;
+    assert(Array.isArray(r4Chips) && r4Chips.length >= 3, 'Round 4 must return 3-4 quick suggestions');
+    assert(
+      !r4Chips.some((c) => r3Chips.map(normalizeSuggestionText).includes(normalizeSuggestionText(c))),
+      'Round 4 chips MUST NOT repeat Round 3 chips'
+    );
+    assert(
+      !r4Chips.some((c) => normalizeSuggestionText(c) === normalizeSuggestionText(userMsg3)),
+      'Round 4 chips MUST NOT repeat userMsg3'
+    );
+
+    // Consecutive 3+ turns in Health station verifying answer reactivity & cumulative anti-duplication
+    const advHealth = getAdvisor('health');
+    const hR1 = generateDynamicQuickSuggestions({
+      domainId: 'health',
+      roundNumber: 1,
+      userProfile: empProfile,
+    });
+    const hMsgSleep = 'أعاني من قلة النوم والسهر أمام الشاشات ليلاً';
+    const hR2Sleep = generateDynamicQuickSuggestions({
+      domainId: 'health',
+      roundNumber: 2,
+      lastUserMessage: hMsgSleep,
+      userProfile: empProfile,
+      previousChips: hR1,
+      userHistory: [hMsgSleep],
+    });
+    const hMsgWalk = 'إيقاع نومي مستقر لكن عندي خمول ولا أمشي أبداً';
+    const hR2Walk = generateDynamicQuickSuggestions({
+      domainId: 'health',
+      roundNumber: 2,
+      lastUserMessage: hMsgWalk,
+      userProfile: empProfile,
+      previousChips: hR1,
+      userHistory: [hMsgWalk],
+    });
+    assert(
+      JSON.stringify(hR2Sleep) !== JSON.stringify(hR2Walk),
+      'Health Round 2 chips MUST differ when user mentions sleep/screens vs inactivity'
+    );
+    const hMsg2 = 'أستخدم الشاشات والهاتف قبل النوم بساعة أو أكثر يومياً';
+    const hR3 = generateDynamicQuickSuggestions({
+      domainId: 'health',
+      roundNumber: 3,
+      lastUserMessage: hMsg2,
+      userProfile: empProfile,
+      previousChips: [...hR1, ...hR2Sleep],
+      userHistory: [hMsgSleep, hMsg2],
+    });
+    assert(
+      hR3.length >= 3 &&
+        !hR3.some((c) => [...hR1, ...hR2Sleep].map(normalizeSuggestionText).includes(normalizeSuggestionText(c))) &&
+        hR3.some((c) => /(شاشات|نوم|غرفة النوم|سهر|استيقاظ)/.test(c)),
+      'Health Round 3 chips MUST react to Round 2 screen/sleep answer with zero overlap against Rounds 1 & 2'
+    );
+    const hR4Client = getClientAdvisorResponse(
+      advHealth,
+      hR3[0],
+      3,
+      5,
+      2,
+      [hMsgSleep, hMsg2],
+      empProfile,
+      [...hR1, ...hR2Sleep, ...hR3]
+    ).suggestedReplies;
+    assert(
+      hR4Client.length >= 3 &&
+        !hR4Client.some((c) => [...hR1, ...hR2Sleep, ...hR3].map(normalizeSuggestionText).includes(normalizeSuggestionText(c))),
+      'Health Round 4 chips MUST remain non-empty and never repeat Rounds 1-3 chips'
+    );
+
+    results.push({
+      suite,
+      domain: 'Quick Chips',
+      name: '4-Round Dynamic Quick Suggestions (Zero Repetition & Answer Reactivity)',
+      passed: true,
+      durationMs: Date.now() - dynSuggStart,
+      details: `R1(${r1Chips.length}) -> R2(${r2Chips.length}) -> R3(${r3Chips.length}) -> R4(${r4Chips.length}) all unique & reactive`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'Quick Chips',
+      name: '4-Round Dynamic Quick Suggestions (Zero Repetition & Answer Reactivity)',
+      passed: false,
+      durationMs: Date.now() - dynSuggStart,
       message: err.message,
     });
   }
@@ -1837,6 +2221,759 @@ async function testDemoModeStateAndIsolation() {
       message: err.message,
     });
   }
+
+  // Test 4: 30-Day Plan Lowest-Score Priority Selection & Stale State Sync
+  const planSyncStart = Date.now();
+  try {
+    const staleOldScores: Record<LifeAreaId, number> = {
+      spiritual: 8.5,
+      financial: 8.0,
+      career: 8.0,
+      personal: 7.5,
+      learning: 7.5,
+      family: 7.0,
+      social: 3.5, // previously low
+      health: 4.0,
+    };
+    const staleCachedPlan = generateThirtyDayPlan(staleOldScores);
+    assert(staleCachedPlan.focusDomains.includes('social'), 'Stale baseline plan initially contained social');
+
+    // Now actual Life Wheel scores change (user's exact verification example)
+    const liveScores: Record<LifeAreaId, number> = {
+      health: 4.5,
+      learning: 4.7,
+      spiritual: 5.0,
+      financial: 5.0,
+      family: 5.5,
+      personal: 6.5,
+      social: 6.9,
+      career: 8.0,
+    };
+
+    const prioritized = extractPriorityDomains(liveScores);
+    assert(
+      prioritized[0] === 'health' && prioritized[1] === 'learning' && (prioritized[2] === 'spiritual' || prioritized[2] === 'financial'),
+      `Must select lowest 3 domains ascending (health 4.5, learning 4.7, spiritual/financial 5.0), got: ${prioritized.join(', ')}`
+    );
+    assert(!prioritized.includes('social'), 'MUST NEVER pick higher-scored social (6.9) over lower-scored domains');
+
+    const { plan: syncedPlan, didUpdate } = syncThirtyDayPlanWithScores(staleCachedPlan, liveScores);
+    assert(didUpdate === true, 'syncThirtyDayPlanWithScores must detect stale focusDomains and update');
+    assert(
+      JSON.stringify(syncedPlan.focusDomains) === JSON.stringify(prioritized),
+      `Synced plan focusDomains must match lowest-first domains (${prioritized.join(',')}), got ${syncedPlan.focusDomains.join(',')}`
+    );
+    assert(
+      syncedPlan.days.length === 30 && syncedPlan.days.every((d) => prioritized.includes(d.domainId)),
+      'All 30 days in synced plan must distribute strictly across the new 3 lowest-scored focus domains'
+    );
+
+    const scoredCards = getPrioritizedScoredDomains(liveScores);
+    assert(
+      scoredCards.length === 3 &&
+        scoredCards[0].score === 4.5 &&
+        scoredCards[1].score === 4.7 &&
+        scoredCards[2].score === 5.0,
+      'Prioritized card list must match ascending scores 4.5, 4.7, 5.0'
+    );
+
+    results.push({
+      suite: '30-Day Plan',
+      domain: 'Priority',
+      name: 'Lowest-Score Focus Domains & Stale Plan Synchronization',
+      passed: true,
+      durationMs: Date.now() - planSyncStart,
+      details: `Selected [${prioritized.join(', ')}] (4.5, 4.7, 5.0); purged stale social (6.9) across 30 days`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite: '30-Day Plan',
+      domain: 'Priority',
+      name: 'Lowest-Score Focus Domains & Stale Plan Synchronization',
+      passed: false,
+      durationMs: Date.now() - planSyncStart,
+      message: err.message,
+    });
+  }
+
+  // Test 5: Realistic Context-Grounded Station Goals (No Contradictions & No Fabrications)
+  const realGoalsStart = Date.now();
+  try {
+    const empNoDep: UserProfile = {
+      name: 'سعود المنصور',
+      email: 'saud.real@wazan.test',
+      ageGroup: '30 - 39 سنة',
+      currentFocus: 'استقرار النوم والصحة',
+      registeredAt: '2026-01-01T00:00:00.000Z',
+      workStatus: 'موظف',
+      hasDependents: 'لا',
+      incomeStability: 'نعم (دخل ثابت)',
+    };
+
+    // Scenario A: Health (User works 12 hours, sleeps 4 hours, compensates on weekend)
+    const healthDialogue = [
+      'أعمل 12 ساعة يومياً وأنام 4 ساعات فقط وأعتمد على تعويض النوم في نهاية الأسبوع',
+    ];
+    const healthGoals = generateRealisticAreaGoals({
+      areaId: 'health',
+      userTexts: healthDialogue,
+      userProfile: empNoDep,
+      score: 4.5,
+      goldenRecommendation: 'تثبيت موعد النوم عند الحادية عشرة مساءً لضمان 7 ساعات راحة', // deliberately contradictory input!
+    });
+    assert(healthGoals.length >= 2, 'Health goals must return at least 2 realistic steps');
+    assert(
+      !healthGoals.some((g) => g.includes('11 مساء') || g.includes('الحادية عشرة') || g.includes('7 ساعات')),
+      `MUST reject contradictory 11pm / 7h sleep goals for 12h-shift user, got: ${healthGoals.join(' | ')}`
+    );
+    assert(
+      healthGoals.some((g) => g.includes('تدريجياً') || g.includes('4 ساعات') || g.includes('العمل')),
+      'Health goals must reflect gradual realistic improvement aligned with shift'
+    );
+
+    const healthInsights = extractInsightsFromAnswers(
+      getAdvisor('health'),
+      4.5,
+      { health_response_0: healthDialogue[0] },
+      healthDialogue,
+      empNoDep
+    );
+    assert(
+      healthInsights.challenges.some((c) => c.includes('4 ساعات') || c.includes('النوم') || c.includes('العمل')),
+      'Health insights must cite real sleep/work constraints'
+    );
+
+    // Scenario B: Financial (Employee confirms no debts + spending leaks — never fabricate credit cards or 30,000 SAR)
+    const finGoals = generateRealisticAreaGoals({
+      areaId: 'financial',
+      userTexts: ['راتبي ثابت وليس لدي ديون لكن هناك تسرب في المصاريف المتغيرة'],
+      userProfile: empNoDep,
+      score: 6.0,
+      goldenRecommendation: 'سداد بطاقتي الائتمان بالكامل وتوفير 30,000 ريال', // deliberately fabricated!
+    });
+    assert(finGoals.length >= 2, 'Financial goals must generate 2-3 realistic goals');
+    assert(
+      !finGoals.some((g) => g.includes('بطاقتي') || g.includes('ائتمان') || g.includes('30,000')),
+      `MUST reject fabricated credit card / 30,000 SAR amounts, got: ${finGoals.join(' | ')}`
+    );
+
+    // Scenario C: Family / Social for no-dependents employee (no fabricated children or twice-weekly visits)
+    const famGoals = generateRealisticAreaGoals({
+      areaId: 'family',
+      userTexts: ['انشغالي في العمل يقلل تواصلي مع الأهل'],
+      userProfile: empNoDep,
+      score: 5.5,
+      goldenRecommendation: 'رحلة نهاية الأسبوع في الطبيعة مع الأبناء', // deliberately contradictory!
+    });
+    assert(
+      !famGoals.some((g) => g.includes('الأبناء') || g.includes('شريك الحياة')),
+      'Family goals MUST NOT invent spouse/children when hasDependents=لا'
+    );
+
+    // Scenario D: Demo Mode starts with empty station goals instead of fabricated DEMO_GOALS
+    const demoStateCheck = activateDemoMode();
+    const totalPreSeededGoals = Object.values(demoStateCheck.goals).reduce((s, arr) => s + arr.length, 0);
+    assert(totalPreSeededGoals === 0, 'Demo Mode must start with 0 pre-seeded fabricated station goals');
+    exitDemoMode();
+
+    // Also verify constraints parser on custom negative assertions
+    const cParsed = parseDialogueConstraints(healthDialogue, empNoDep);
+    assert(cParsed.workHours === 12 && cParsed.sleepHours === 4 && cParsed.compensatesOnWeekend, 'Constraint parser must extract exact hours');
+    assert(!isGoalConsistentWithReality('تثبيت النوم عند 11 مساءً', 'health', cParsed, parseUserContext(empNoDep)), 'Guard must block 11pm goal');
+
+    results.push({
+      suite: 'Station Goals',
+      domain: 'Realism',
+      name: 'Dialogue-Grounded Goals (No Contradictions & No Fabrications)',
+      passed: true,
+      durationMs: Date.now() - realGoalsStart,
+      details: `Health (${healthGoals.length}), Financial (${finGoals.length}), Family (${famGoals.length}) strictly consistent`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite: 'Station Goals',
+      domain: 'Realism',
+      name: 'Dialogue-Grounded Goals (No Contradictions & No Fabrications)',
+      passed: false,
+      durationMs: Date.now() - realGoalsStart,
+      message: err.message,
+    });
+  }
+}
+
+async function testGoldenRecommendationSynthesis() {
+  const goldenStart = Date.now();
+  try {
+    const empProfile: UserProfile = {
+      name: 'سعود المنصور',
+      email: 'golden@tadbeer.sa',
+      workStatus: 'موظف',
+      incomeStability: 'ثابت شهري',
+      ageGroup: '30-39',
+      hasDependents: 'لا',
+      currentFocus: 'الاستقرار والتوازن',
+      registeredAt: '2026-01-01T00:00:00.000Z',
+    };
+    const spiritualRaw =
+      'بصراحة جربت أحياناً أكتب على السريع، لكن أحياناً أتكاسل بنهاية اليوم أو أكتب أشياء كثيرة فتزيدني توتراً بدل ما تريحني، فأرجع أعتمد على إني أقول لنفسي "خلاص سكر الموضوع لبكرة" وغالباً ما ينجح هذا الشيء بسرعة.';
+    const spiritualHistory = [
+      { role: 'user', content: spiritualRaw },
+      { role: 'model', content: 'أقدّر صراحتك، التقييم التقديري (4.7/10).' },
+    ];
+
+    // 1. Station summary builder must craft an advisor-voiced step and NEVER copy user prose verbatim
+    const summaryRes = buildConversationAwareStationSummary(
+      'spiritual',
+      'الجانب الروحي والإيماني',
+      spiritualHistory,
+      4.7,
+      empProfile
+    );
+    assert(
+      !summaryRes.goldenRecommendation.includes('تطبيق الخطة التي اقترحتها في الحوار'),
+      'Station summary goldenRecommendation must NOT use verbatim template "تطبيق الخطة التي اقترحتها في الحوار"'
+    );
+    assert(
+      !summaryRes.goldenRecommendation.includes('خلاص سكر الموضوع') &&
+        !summaryRes.goldenRecommendation.includes('بصراحة جربت'),
+      'Station summary goldenRecommendation must NOT quote user colloquial prose verbatim'
+    );
+    assert(
+      !isVerbatimUserCopy(summaryRes.goldenRecommendation, [spiritualRaw]),
+      'isVerbatimUserCopy must return false for synthesized station summary recommendation'
+    );
+    assert(
+      summaryRes.goldenRecommendation.length >= 15 && summaryRes.goldenRecommendation.length <= 240,
+      'Synthesized goldenRecommendation must be concise and non-empty'
+    );
+
+    // 2. Direct synthesizer rejects a verbatim advisorCandidate echo and replaces it with advisor-voiced action
+    const rejectedEcho = synthesizeGoldenRecommendation({
+      areaId: 'spiritual',
+      userTexts: [spiritualRaw],
+      userProfile: empProfile,
+      score: 4.7,
+      advisorCandidate: spiritualRaw,
+    });
+    assert(
+      !isVerbatimUserCopy(rejectedEcho, [spiritualRaw]),
+      'synthesizeGoldenRecommendation must reject verbatim user copy even if supplied as advisorCandidate'
+    );
+
+    // 3. Client intelligence upon station adoption produces advisor-crafted golden advice
+    const spiritualAdvisor = ADVISORS_LIST.find((a) => a.id === 'spiritual')!;
+    const clientAdopted = getClientAdvisorResponse(
+      spiritualAdvisor,
+      'اعتمد التقييم',
+      1,
+      undefined,
+      4,
+      [spiritualRaw],
+      empProfile
+    );
+    assert(clientAdopted.station_completed === true, 'Client explicit adoption must complete station');
+    assert(
+      !isVerbatimUserCopy(clientAdopted.advice, [spiritualRaw]) &&
+        !clientAdopted.advice.includes('تطبيق الخطة التي اقترحتها'),
+      'Client adoption advice must be synthesized in advisor voice, not verbatim user text'
+    );
+
+    // 4. Local server advisor engine upon financial debt adoption produces debt-aware advisor recommendation
+    const financialAdvisor = ADVISORS_LIST.find((a) => a.id === 'financial')!;
+    const debtMsg = 'أعاني من أقساط شهرية وديون حالية ولا أستطيع الادخار الآن';
+    const localAdopted = generateLocalAgentResponse(
+      'financial',
+      'اعتمد التقييم',
+      'سعود المنصور',
+      financialAdvisor,
+      5,
+      true,
+      2,
+      'إدارة الميزانية',
+      'initial_assessment',
+      4,
+      empProfile,
+      [],
+      [debtMsg]
+    );
+    assert(localAdopted.station_completed === true, 'Local engine explicit adoption must complete station');
+    assert(
+      !isVerbatimUserCopy(localAdopted.advice, [debtMsg]) &&
+        /(التزام|دين|ديون|قسط|أقساط|مصروف|ميزانية|ادخار|سيولة)/.test(localAdopted.advice),
+      `Local engine financial adoption advice must address debt/cashflow reality in advisor voice; got: ${localAdopted.advice}`
+    );
+
+    const planExport = exportPlanAsText(
+      generateThirtyDayPlan({
+        spiritual: 5.0,
+        financial: 5.8,
+        career: 8.0,
+        personal: 6.5,
+        learning: 4.7,
+        family: 5.5,
+        social: 6.9,
+        health: 4.5,
+      })
+    );
+    assert(
+      planExport.includes('\u20660 / 30\u2069') && planExport.includes('\u20660%\u2069'),
+      'Exported plan text must isolate fractions and percentages in LTR'
+    );
+    const bidiSample = isolateNumbersForPlainText('المعدل 5.8 / 10 واليوم 12 / 30 والنسبة 40% والفترة 1 - 7 من 15 دقيقة');
+    assert(
+      bidiSample.includes('\u20665.8 / 10\u2069') &&
+        bidiSample.includes('\u206612 / 30\u2069') &&
+        bidiSample.includes('\u206640%\u2069') &&
+        bidiSample.includes('\u20661 - 7\u2069'),
+      `Export bidi helper must isolate fractions, percentages, and ranges; got: ${bidiSample}`
+    );
+
+    const fallbackDirector = generateFallbackDirectorReport(
+      { employmentStatus: 'موظف' },
+      {
+        spiritual: 6.0,
+        financial: 5.5,
+        career: 8.0,
+        health: 4.5,
+      },
+      {}
+    );
+    const serializedDirector = JSON.stringify(fallbackDirector);
+    assert(
+      !/(career|health|financial|spiritual|Deep Study|Pomodoro)/i.test(serializedDirector),
+      `Fallback director report must not expose raw English keys/terms; got: ${serializedDirector}`
+    );
+    assert(
+      serializedDirector.includes('الجانب المهني والوظيفي') &&
+        serializedDirector.includes('الجانب الصحي والبدني'),
+      'Fallback director report must use approved Arabic domain names'
+    );
+    const sanitizedLegacy = sanitizeDirectorReportArabic({
+      overallDiagnosis: 'نقطة قوة في career وفجوة في health أثناء Demo Mode.',
+      strongestSynergy: {
+        title: 'ترابط career و spiritual',
+        description: 'تحسين health عبر Deep Work.',
+        domainsInvolved: ['career', 'spiritual'],
+      },
+      criticalBottleneck: {
+        title: 'فجوة health',
+        impact: 'أثر health على التركيز',
+        recommendation: 'ابدأ بعادة صغرى (Micro-habit) ضمن Keystone Habits',
+        domain: 'health',
+      },
+    });
+    const sanitizedJson = JSON.stringify(sanitizedLegacy);
+    assert(
+      !/(career|health|spiritual|Demo Mode|Deep Work|Micro-habit|Keystone Habits)/i.test(sanitizedJson) &&
+        getDomainArabicName('career') === 'الجانب المهني والوظيفي' &&
+        localizeDomainText('فجوة health').includes('الجانب الصحي والبدني'),
+      `sanitizeDirectorReportArabic must eliminate raw English keys and jargon; got: ${sanitizedJson}`
+    );
+
+    // Top bar progress synchronization & Arabic phrasing/bracket normalization checks
+    const bannerCompleted = getDemoBannerCopy({
+      userName: 'سعود المنصور',
+      completedCount: 8,
+      totalStations: 8,
+      activeScreen: 'director_summary',
+      hasDirectorReport: true,
+    });
+    assert(
+      !bannerCompleted.headlineSuffix.includes('بانتظار') &&
+        !bannerCompleted.detail.includes('المستشار الروحي لإكمال') &&
+        bannerCompleted.headlineSuffix.includes('8 / 8'),
+      `Completed demo banner must reflect 8/8 completion instead of pending station 1; got: ${bannerCompleted.headlineSuffix}`
+    );
+
+    const bannerPlanCompleted = getDemoBannerCopy({
+      userName: 'سعود المنصور',
+      completedCount: 8,
+      totalStations: 8,
+      activeScreen: 'thirty_day_plan',
+      hasThirtyDayPlan: true,
+    });
+    assert(
+      bannerPlanCompleted.headlineSuffix.includes('30 يوماً') &&
+        bannerPlanCompleted.headlineSuffix.includes('8 / 8'),
+      `30-day plan completed demo banner must reflect plan & 8/8 state; got: ${bannerPlanCompleted.headlineSuffix}`
+    );
+
+    assert(
+      prefixLamArabic('الجانب الصحي والبدني') === 'للجانب الصحي والبدني' &&
+        localizeDomainText('عادة مخصصة لـ الجانب الأسرى لمدة (10) دقائق في (المربع (2))') ===
+          'عادة مخصصة للجانب الأسري لمدة 10 دقائق في (المربع 2)' &&
+        localizeDomainText('عنوان بدون قوس مفتوح)') === 'عنوان بدون قوس مفتوح',
+      'Arabic normalizer must fix detached lam, الأسرى typo, and broken/unbalanced parentheses'
+    );
+
+    const demoProgressPlan = generateThirtyDayPlan({
+      spiritual: 8.9,
+      financial: 8.4,
+      career: 8.7,
+      personal: 8.3,
+      learning: 8.5,
+      family: 8.6,
+      social: 8.0,
+      health: 8.1,
+    });
+    demoProgressPlan.days = demoProgressPlan.days.map((d) =>
+      d.dayNumber <= 12 ? { ...d, isCompleted: true } : d
+    );
+    const activeAfter12 = resolveActivePlanDayAndWeek(demoProgressPlan);
+    assert(
+      activeAfter12.dayNumber === 13 && activeAfter12.weekNumber === 2,
+      `Active plan day with 12/30 completed must be Day 13 in Week 2 (not Day 1 in Week 1); got Day ${activeAfter12.dayNumber} Week ${activeAfter12.weekNumber}`
+    );
+
+    // Anti-repeat & edit/undo ("تراجع / تعديل") checks across server local engine and client engine
+    assert(
+      !isGenuineUserQuestion('ممكن الاكل في المطاعم') &&
+        isGenuineUserQuestion('ممكن توضح لي كيف أبدأ؟'),
+      'isGenuineUserQuestion must treat "ممكن الاكل في المطاعم" as a tentative answer, not a question'
+    );
+
+    const priorFinQuestion =
+      'ما البند غير الأساسي الذي تلاحظ أنه يلتهم النسبة الأكبر من دخلك الشهري؟';
+    const localEditReply = generateLocalAgentResponse(
+      'financial',
+      'ممكن الاكل في المطاعم',
+      'سعود المنصور',
+      ADVISORS_LIST.find((a) => a.id === 'financial'),
+      5.5,
+      true,
+      2,
+      undefined,
+      'weekly_checkin',
+      1,
+      {
+        name: 'سعود المنصور',
+        ageGroup: '30-39',
+        currentFocus: 'الاستقرار المالي',
+        registeredAt: new Date().toISOString(),
+        employmentStatus: 'موظف قطاع خاص (دوام كامل)',
+        incomeStability: 'نعم (دخل ثابت)',
+        hasDependents: 'لا',
+      },
+      [],
+      [priorFinQuestion],
+      true
+    );
+    assert(
+      !/^(?:أهلاً|مرحباً)/.test(localEditReply.reply.trim()) &&
+        localEditReply.reply.includes('المطاعم') &&
+        !isQuestionAlreadyAsked(priorFinQuestion, [localEditReply.reply]),
+      `Local engine after edit/undo must acknowledge restaurant answer directly without repeated greeting or re-asking prior question; got: ${localEditReply.reply}`
+    );
+
+    const clientEditReply = getClientAdvisorResponse(
+      ADVISORS_LIST.find((a) => a.id === 'financial')!,
+      'ممكن الاكل في المطاعم',
+      2,
+      5.5,
+      1,
+      [priorFinQuestion],
+      {
+        name: 'سعود المنصور',
+        ageGroup: '30-39',
+        currentFocus: 'الاستقرار المالي',
+        registeredAt: new Date().toISOString(),
+        employmentStatus: 'موظف قطاع خاص (دوام كامل)',
+        incomeStability: 'نعم (دخل ثابت)',
+        hasDependents: 'لا',
+      },
+      [],
+      true
+    );
+    assert(
+      !/^(?:أهلاً|مرحباً)/.test(clientEditReply.reply.trim()) &&
+        clientEditReply.reply.includes('المطاعم') &&
+        !isQuestionAlreadyAsked(priorFinQuestion, [clientEditReply.reply]) &&
+        stripRepeatedOpeningGreeting('أهلاً بك يا سعود! خطوة ممتازة في ضبط الميزانية.', true) ===
+          'خطوة ممتازة في ضبط الميزانية.',
+      `Client engine after edit/undo must acknowledge answer without repeated greeting or repeating prior question; got: ${clientEditReply.reply}`
+    );
+
+    const poolPick = pickNextUnaskedQuestion(
+      [priorFinQuestion, 'ما هو القسط الشهري الأهم الذي ترغب في إنهائه؟'],
+      [priorFinQuestion],
+      0
+    );
+    assert(
+      poolPick.question === 'ما هو القسط الشهري الأهم الذي ترغب في إنهائه؟',
+      'pickNextUnaskedQuestion must skip questions already present in history'
+    );
+
+    // 1. High-anchor / positive-baseline score balance (8/10 personal + shyness OR ample family time + phone -> 6.5 - 7.5, never < 5)
+    const personalBalancedScore = calculateSemanticScore(
+      'أعاني أحياناً من الخجل عند التحدث',
+      ['تقييمي 8/10 في الجانب الشخصي وأموري مستقرة']
+    );
+    assert(
+      personalBalancedScore >= 6.5 && personalBalancedScore <= 7.8,
+      `Personal score with 8/10 anchor + minor shyness must remain balanced (6.5-7.8); got: ${personalBalancedScore}`
+    );
+
+    const familyBalancedScore = calculateSemanticScore(
+      'يشتتني الهاتف أحياناً عند الجلوس معهم',
+      ['أمنح عائلتي الكثير من الوقت والترابط دافئ']
+    );
+    assert(
+      familyBalancedScore >= 6.5 && familyBalancedScore <= 7.8,
+      `Family score with ample-time baseline + phone distraction must not drop below 6.5; got: ${familyBalancedScore}`
+    );
+
+    // 2. Non-contradiction guard for family ample time
+    const contradictingFamilyQ = 'ما الذي يمنعك غالباً من تخصيص وقت أطول للتقارب والحديث الودود مع عائلتك؟';
+    assert(
+      isQuestionContradictingHistory(contradictingFamilyQ, ['أمنح عائلتي الكثير من الوقت يومياً']),
+      'Must detect and block family-time deficit question when user affirmed ample family time'
+    );
+    const familyFilteredPick = pickNextUnaskedQuestion(
+      [
+        contradictingFamilyQ,
+        'ما المبادرة البسيطة واللطيفة التي تدخل بها السرور على والديك وأهلك هذا الأسبوع؟',
+      ],
+      ['أمنح عائلتي الكثير من الوقت يومياً'],
+      0
+    );
+    assert(
+      familyFilteredPick.question !== contradictingFamilyQ,
+      'pickNextUnaskedQuestion must skip contradicting family-time question'
+    );
+
+    // 3. Customized Golden Recommendations (reject generic filler + cover all 8 domains)
+    const finPiggyRec = synthesizeGoldenRecommendation({
+      areaId: 'financial',
+      userTexts: ['سأخصص حصالة مستقلة للادخار'],
+      score: 6.5,
+      advisorCandidate: 'البدء بخطوة عملية واحدة صغيرة',
+    });
+    const learnPhoneRec = synthesizeGoldenRecommendation({
+      areaId: 'learning',
+      userTexts: ['الهاتف يشتتني أثناء المذاكرة'],
+      score: 6.5,
+      advisorCandidate: 'التوازن يبدأ بخطوة واضحة ومستمرة',
+    });
+    assert(
+      finPiggyRec.includes('حصالة') &&
+        !finPiggyRec.includes('البدء بخطوة عملية واحدة صغيرة') &&
+        learnPhoneRec.includes('الهاتف') &&
+        learnPhoneRec.includes('المذاكرة'),
+      `Golden recommendation must synthesize specific agreed action and reject generic filler; fin="${finPiggyRec}", learn="${learnPhoneRec}"`
+    );
+
+    // 4. Direct suggestions request in Round 4 ("لا أدري أعطيني اقتراحاتك")
+    const round4SuggestionsReply = generateLocalAgentResponse(
+      'learning',
+      'لا أدري أعطيني اقتراحاتك',
+      'سعود المنصور',
+      ADVISORS_LIST.find((a) => a.id === 'learning'),
+      6.5,
+      true,
+      5,
+      undefined,
+      'weekly_checkin',
+      3,
+      {
+        name: 'سعود المنصور',
+        ageGroup: '30-39',
+        currentFocus: 'التعلم',
+        registeredAt: new Date().toISOString(),
+        employmentStatus: 'موظف قطاع خاص (دوام كامل)',
+        incomeStability: 'نعم (دخل ثابت)',
+        hasDependents: 'لا',
+      },
+      [],
+      ['الهاتف يشتتني أثناء القراءة المسائية']
+    );
+    assert(
+      /(?:1\.|2\.)/.test(round4SuggestionsReply.reply) &&
+        /(?:أقيّم|اقيم).*\d+(?:\.\d+)?\s*\/\s*10/.test(round4SuggestionsReply.reply),
+      `Round 4 "لا أدري أعطيني اقتراحاتك" must provide 2-3 numbered suggestions BEFORE interim rating; got: ${round4SuggestionsReply.reply}`
+    );
+
+    // 5. Full Arabization, Director Score Reconciliation (no 6.5 exaggeration), & 30-day ascending order
+    const messyArabic = localizeDomainText(
+      'تطوير الجانب المالي (financial) و(health) وcareer عبر Keystone Habits وجلسة (Deep Study) في (المربع (2) لـ الجانب الأسرى واهداف الإستقرار'
+    );
+    assert(
+      !/\b(financial|health|career|Keystone|Deep\s+Study)\b/i.test(messyArabic) &&
+        !messyArabic.includes('(المربع (2)') &&
+        !messyArabic.includes('الأسرى') &&
+        !messyArabic.includes('لـ الجانب') &&
+        messyArabic.includes('الجانب المالي والاستقلال') &&
+        messyArabic.includes('الجانب الصحي والبدني') &&
+        messyArabic.includes('الجانب المهني والوظيفي') &&
+        messyArabic.includes('العادات المحورية') &&
+        messyArabic.includes('المذاكرة العميقة') &&
+        messyArabic.includes('المربع 2') &&
+        messyArabic.includes('للجانب الأسري') &&
+        (messyArabic.includes('الأهداف') || messyArabic.includes('أهداف')) &&
+        messyArabic.includes('الاستقرار'),
+      `Arabization & parent/hamza normalization failed: "${messyArabic}"`
+    );
+
+    const reconciledModerateReport = reconcileDirectorReportWithScores(
+      {
+        overallDiagnosis: 'يمثل career قوة استثنائية مطلقة في حياتك مع تحدٍ في (health).',
+        balanceIndexLabel: 'تناغم استثنائي',
+        strongestSynergy: {
+          title: 'قوة career الاستثنائية',
+          description: 'تقدمك في career استثناءً مطلقاً.',
+          domainsInvolved: ['career', 'financial'],
+        },
+        criticalBottleneck: {
+          title: 'تحدي (financial)',
+          impact: 'أثر مالي',
+          recommendation: 'ابدأ في (المربع (2) بحماية financial',
+          domain: 'financial',
+        },
+        keystoneHabits: [
+          {
+            name: 'Deep Study صباحي عبر Keystone Habits',
+            triggerTime: 'صباحاً',
+            targetDomains: ['learning', 'health'],
+            expectedImpact: 'تحسن ملموس',
+          },
+        ],
+        thirtyDayRoadmap: [],
+        directorGoldenRule: 'الاستمرار في المربع (2).',
+      },
+      {
+        spiritual: 6.0,
+        financial: 4.8,
+        career: 6.5,
+        personal: 6.1,
+        learning: 6.2,
+        family: 6.4,
+        social: 5.9,
+        health: 4.5,
+      }
+    );
+    const serializedReport = JSON.stringify(reconciledModerateReport);
+    assert(
+      !/\b(career|health|financial|learning|Keystone|Deep\s+Study)\b/i.test(serializedReport) &&
+        !serializedReport.includes('استثناءً مطلقاً') &&
+        !serializedReport.includes('استثنائية مطلقة') &&
+        reconciledModerateReport.criticalBottleneck.domain === 'الجانب الصحي والبدني',
+      `Director reconciliation must localize all English keys, avoid 6.5 exaggeration, and align bottleneck to health (4.5); got: ${serializedReport}`
+    );
+
+    const ascendingPriority = getPrioritizedScoredDomains({
+      spiritual: 6.0,
+      financial: 4.8,
+      career: 7.2,
+      personal: 6.9,
+      learning: 7.5,
+      family: 7.1,
+      social: 6.8,
+      health: 4.5,
+    });
+    assert(
+      ascendingPriority.length === 3 &&
+        ascendingPriority[0].score === 4.5 &&
+        ascendingPriority[1].score === 4.8 &&
+        ascendingPriority[2].score === 6.0,
+      `30-day priority domains must sort strictly ascending (4.5 -> 4.8 -> 6.0); got: ${JSON.stringify(ascendingPriority)}`
+    );
+
+    // Personal Station fairness & consistency under explicit acute isolation / mistreatment
+    const isolationHistory = [
+      'لا أجلس مع أسرتي إطلاقاً بسبب سوء المعاملة المستمر ولا أريد الجلوس مع أحد',
+      'لا أشعر بأي فائدة من وجودهم حولي',
+    ];
+    const soloWalkMsg = 'أخرج للمشي منفرداً فقط بعيداً عنهم';
+    const srvIsoScore = calculateServerSemanticScore(soloWalkMsg, isolationHistory);
+    const cliIsoScore = calculateSemanticScore(soloWalkMsg, isolationHistory);
+    const reconciledIso = processAndReconcileScore(4.8, 4.8, soloWalkMsg, isolationHistory, srvIsoScore);
+    assert(
+      srvIsoScore >= 2.5 && srvIsoScore <= 3.8 &&
+        cliIsoScore >= 2.5 && cliIsoScore <= 3.8 &&
+        reconciledIso >= 2.5 && reconciledIso <= 3.8,
+      `Acute isolation + solo walk must score fairly in [2.5, 3.8] (not ~4.8); got server=${srvIsoScore}, client=${cliIsoScore}, reconciled=${reconciledIso}`
+    );
+
+    const personalAdv = ADVISORS_LIST.find((a) => a.id === 'personal')!;
+    const isolationCtxProfile: UserProfile = {
+      name: 'فهد',
+      ageGroup: '26 - 35 سنة',
+      currentFocus: 'استعادة التوازن النفسي والشخصي',
+      registeredAt: '2026-01-01T00:00:00.000Z',
+      employmentStatus: 'موظف',
+      hasDependents: 'نعم',
+    };
+    const localIsoReply = generateLocalAgentResponse(
+      'personal',
+      soloWalkMsg,
+      'فهد',
+      personalAdv,
+      4.8,
+      true,
+      0,
+      'الجانب الشخصي والوعي بالذات',
+      'initial_assessment',
+      3,
+      isolationCtxProfile,
+      [],
+      isolationHistory
+    );
+    const clientIsoReply = getClientAdvisorResponse(
+      personalAdv,
+      soloWalkMsg,
+      4,
+      4.8,
+      3,
+      isolationHistory,
+      isolationCtxProfile
+    );
+    const localIsoAdopt = generateLocalAgentResponse(
+      'personal',
+      'اعتمد التقييم',
+      'فهد',
+      personalAdv,
+      4.8,
+      true,
+      0,
+      'الجانب الشخصي والوعي بالذات',
+      'initial_assessment',
+      4,
+      isolationCtxProfile,
+      [],
+      [...isolationHistory, soloWalkMsg]
+    );
+    assert(
+      localIsoReply.score >= 2.5 && localIsoReply.score <= 3.8 &&
+        clientIsoReply.score >= 2.5 && clientIsoReply.score <= 3.8 &&
+        localIsoAdopt.score >= 2.5 && localIsoAdopt.score <= 3.8 &&
+        localIsoAdopt.station_completed === true,
+      `Local & client Personal replies under acute isolation must keep score in [2.5, 3.8]; got local=${localIsoReply.score}, client=${clientIsoReply.score}, adopt=${localIsoAdopt.score}`
+    );
+    assert(
+      !/التقصير\s*تجاه\s*معاليك|تأنيب\s*ضمير|تخصص\s*وقت[اً ]*للجلوس\s*مع\s*أسرتك/.test(localIsoReply.reply) &&
+        !/التقصير\s*تجاه\s*معاليك|تأنيب\s*ضمير|تخصص\s*وقت[اً ]*للجلوس\s*مع\s*أسرتك/.test(clientIsoReply.reply) &&
+        isQuestionContradictingHistory('هل تستطيع أخذ 20 دقيقة دون أن تشعر بالتقصير تجاه معاليك؟', isolationHistory) &&
+        isQuestionContradictingHistory('متى يمكنك الجلوس مع أسرتك للتفاهم معهم؟', isolationHistory),
+      `Personal station & contradiction detector must block guilt/dependents-sitting assumptions under acute isolation; got local="${localIsoReply.reply}"`
+    );
+
+    results.push({
+      suite: 'Golden Recommendation',
+      domain: 'All 8',
+      name: 'Golden Recommendation Advisor Synthesis & Zero Verbatim Copy',
+      passed: true,
+      durationMs: Date.now() - goldenStart,
+      details: `Spiritual="${summaryRes.goldenRecommendation.slice(0, 40)}..." | Financial="${localAdopted.advice.slice(0, 40)}..."`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite: 'Golden Recommendation',
+      domain: 'All 8',
+      name: 'Golden Recommendation Advisor Synthesis & Zero Verbatim Copy',
+      passed: false,
+      durationMs: Date.now() - goldenStart,
+      message: err.message,
+    });
+  }
 }
 
 // ==========================================
@@ -1895,6 +3032,7 @@ async function main() {
   await testLifeWheelLatencyAndIntegrity();
   await testEisenhowerMatrixOperations();
   await testDemoModeStateAndIsolation();
+  await testGoldenRecommendationSynthesis();
 
   if (isLiveMode) {
     await testLiveGeminiScenarios();

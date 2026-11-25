@@ -114,7 +114,7 @@ export const DEMO_DIRECTOR_REPORT: DirectorSummaryReport = {
   },
   keystoneHabits: [
     {
-      name: 'طقس الإغلاق الرقمي الليلي (النوم 7 ساعات)',
+      name: 'طقس الإغلاق الرقمي الليلي لنوم 7 ساعات',
       triggerTime: '10:30 مساءً يومياً',
       targetDomains: ['الصحي', 'الأسري', 'الشخصي'],
       expectedImpact: 'رفع طاقة الصباح الذهنية بنسبة 35% والقضاء على إجهاد الظهيرة.',
@@ -127,7 +127,7 @@ export const DEMO_DIRECTOR_REPORT: DirectorSummaryReport = {
     },
     {
       name: 'جلسة الأحد الأسبوعية للميزانية وتتبع الأهداف',
-      triggerTime: 'عصر كل أحد (20 دقيقة)',
+      triggerTime: 'عصر كل أحد لمدة 20 دقيقة',
       targetDomains: ['المالي', 'الشخصي', 'المهني'],
       expectedImpact: 'الحفاظ على فائض ادخاري بنسبة 20% ومتابعة أهداف مصفوفة أيزنهاور.',
     },
@@ -156,7 +156,7 @@ export const DEMO_DIRECTOR_REPORT: DirectorSummaryReport = {
     {
       weekNumber: 3,
       weekTitle: 'أسبوع التمكين والحدود الشخصية',
-      coreFocus: 'وضع حدود واضحة لمنع استنزاف الساعات غير المنتجة وتطوير مهارات الـ AI.',
+      coreFocus: 'وضع حدود واضحة لمنع استنزاف الساعات غير المنتجة وتطوير مهارات الذكاء الاصطناعي.',
       actions: [
         'الاعتذار بذكاء عن المناسبات الاجتماعية المرهقة لحماية وقت النوم',
         'تخصيص 45 دقيقة يومياً للتطبيق العملي في أدوات الذكاء الاصطناعي',
@@ -391,7 +391,16 @@ export function activateDemoMode(): StoredAppState {
       health: 0,
     },
     answers: sampleAnswers,
-    goals: DEMO_GOALS,
+    goals: {
+      spiritual: [],
+      financial: [],
+      career: [],
+      personal: [],
+      learning: [],
+      family: [],
+      social: [],
+      health: [],
+    },
     eisenhowerGoals: DEMO_EISENHOWER_GOALS,
     completedAdvisors: [], // Start with 0/8 completed for live demonstration
     completedDates: {},

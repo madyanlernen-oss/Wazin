@@ -11,23 +11,27 @@ interface FormattedChatMessageProps {
  * so that Arabic text flow, brackets, and punctuation marks remain naturally aligned.
  */
 export const NUMBER_ISOLATION_REGEX =
-  /(\(\s*\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?\s*\)|\b\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?|[+-]?\d+(?:\.\d+)?%|\b\d{1,2}:\d{2}\b|[+-]\d+(?:\.\d+)?)/g;
+  /(\(\s*\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?\s*\)|\d{1,2}:\d{2}\s*[–—-]\s*\d{1,2}:\d{2}|\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?|[+-]?\d+(?:\.\d+)?%|\b\d{1,2}:\d{2}\b|[+-]\d+(?:\.\d+)?|\d+(?:\.\d+)?)/g;
+
+const SINGLE_TOKEN_TEST_REGEX =
+  /^(?:\(\s*\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?\s*\)|\d{1,2}:\d{2}\s*[–—-]\s*\d{1,2}:\d{2}|\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?|[+-]?\d+(?:\.\d+)?%|\d{1,2}:\d{2}|[+-]\d+(?:\.\d+)?|\d+(?:\.\d+)?)$/;
 
 /**
- * Isolates numbers, fractions (e.g. 1/8, 8/10), percentages (e.g. 85%),
- * and numeric ranges inside a text chunk using dir="ltr" and unicodeBidi="isolate".
+ * Isolates numbers, fractions (e.g. 1 / 8, 5.8 / 10), percentages (e.g. 40%),
+ * and numeric/time ranges (e.g. 1 - 7, 12 - 18) inside a text chunk using dir="ltr" and unicodeBidi="isolate".
  */
 export function isolateNumbersInText(text: string): React.ReactNode {
   if (!text) return null;
   const parts = text.split(NUMBER_ISOLATION_REGEX);
 
   return parts.map((part, idx) => {
-    if (NUMBER_ISOLATION_REGEX.test(part)) {
+    if (!part) return null;
+    if (SINGLE_TOKEN_TEST_REGEX.test(part)) {
       return (
         <span
           key={idx}
           dir="ltr"
-          className="inline-block font-sans font-bold mx-0.5 text-inherit"
+          className="inline font-sans mx-[1px] text-inherit"
           style={{ unicodeBidi: 'isolate' }}
         >
           {part}
@@ -36,6 +40,15 @@ export function isolateNumbersInText(text: string): React.ReactNode {
     }
     return part;
   });
+}
+
+/**
+ * Isolates numbers, fractions, percentages, and ranges in exported plain text (e.g. copied summaries & text reports)
+ * using Unicode Left-to-Right Isolate (\u2066 ... \u2069) so RTL readers & PDF viewers preserve exact LTR visual order.
+ */
+export function isolateNumbersForPlainText(text: string): string {
+  if (!text) return '';
+  return text.replace(NUMBER_ISOLATION_REGEX, (match) => `\u2066${match}\u2069`);
 }
 
 /**

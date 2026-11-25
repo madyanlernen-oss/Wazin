@@ -8,6 +8,12 @@ import {
   getAdaptiveStationConfig,
 } from '../data/assessmentQuestions';
 import { parseUserContext, getDomainContextConfig } from '../utils/contextPersonalization';
+import { generateDynamicQuickSuggestions } from '../utils/dynamicSuggestions';
+import {
+  generateRealisticAreaGoals,
+  extractUserDialogueTextsForArea,
+  synthesizeGoldenRecommendation,
+} from '../utils/realisticGoalsGenerator';
 import {
   calculateScoreForAdvisor,
   extractInsightsFromAnswers,
@@ -44,6 +50,7 @@ interface OnboardingScreenProps {
   onUpdateProfile?: (updated: Partial<UserProfile>) => void;
   onSaveAnswer: (advisorId: LifeAreaId, questionId: string, value: any) => void;
   onFinishAdvisor: (advisorId: LifeAreaId, score: number) => boolean | void;
+  onSaveStationGoals?: (advisorId: LifeAreaId, stationGoals: string[]) => void;
   onResetAdvisor?: (advisorId: LifeAreaId) => void;
   onStartNewWeeklyAssessment?: () => void;
   onCompleteAll: () => void;
@@ -64,37 +71,27 @@ interface OnboardingScreenProps {
 function getDynamicGoldenHabit(
   advisor: AdvisorConfig,
   messages: EvaluationChatMessage[] = [],
-  latestAdvice?: string
+  latestAdvice?: string,
+  userProfile?: UserProfile | null,
+  score: number = 5
 ): string {
-  // 1. إذا توفرت توصية أو خطوة مخصصة معتمدة من Gemini أو المستشار
-  if (latestAdvice && latestAdvice.trim().length > 10 && latestAdvice.trim().length < 320) {
-    return latestAdvice.trim();
-  }
-
-  // 2. البحث أولاً في كلام المستفيد نفسه عن العادة أو الخطة المحددة التي اقترحها خلال الحوار
   const userMessages = messages.filter((m) => m.sender === 'user').map((m) => m.text.trim());
-  const proposalPattern = /(?:^|\s)(?:سأخصص|ساخصص|سأبدأ|سابدا|سأجرب|ساجرب|سأحاول|ساحاول|سألتزم|سالتزم|سأنظم|سانظم|سأتواصل|ساتواصل|سأمشي|سامشي|سأقرأ|ساقرا|سأدخر|سادخر|سأوفر|ساوفر|سأغلق|ساغلق|أخطط|اخطط|أنوي|انوي|قررت)(?:\s|$)/i;
-  for (let i = userMessages.length - 1; i >= 0; i--) {
-    const u = userMessages[i];
-    if (
-      u.length >= 10 &&
-      !/^(?:اعتمد\s*التقييم|نعم\s*اعتمد|أرغب في الاستمرار)/i.test(u) &&
-      (proposalPattern.test(u) || /(\d+\s*(?:دقيقة|دقائق|ساعة|ساعات|صفحة|صفحات|ريال|مرات)|أسبوعياً|يومياً)/i.test(u))
-    ) {
-      return `تطبيق الخطة التي اقترحتها في الحوار: "${u.slice(0, 140)}${u.length > 140 ? '...' : ''}"`;
-    }
-  }
-
-  // 3. البحث في رسائل المستشار الأخيرة عن نصيحة مستخلصة
   const advisorWithAdvice = [...messages]
     .reverse()
     .find((m) => m.sender === 'advisor' && m.advice && m.advice.trim().length > 10 && m.advice.trim().length < 320);
-  if (advisorWithAdvice?.advice) {
-    return advisorWithAdvice.advice.trim();
-  }
 
-  // 4. البديل المعتمد المخصص للمحطة عند غياب خطة مصرح بها
-  return advisor.defaultGoals?.[0] || 'تحديد خطوة عملية واحدة صغيرة ومحددة تناسب واقعك في هذا الجانب';
+  const advisorCandidate =
+    latestAdvice && latestAdvice.trim().length > 10 && latestAdvice.trim().length < 320
+      ? latestAdvice.trim()
+      : advisorWithAdvice?.advice?.trim();
+
+  return synthesizeGoldenRecommendation({
+    areaId: advisor.id,
+    userTexts: userMessages,
+    userProfile,
+    score,
+    advisorCandidate,
+  });
 }
 
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
@@ -106,6 +103,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   onUpdateProfile,
   onSaveAnswer,
   onFinishAdvisor,
+  onSaveStationGoals,
   onResetAdvisor,
   onStartNewWeeklyAssessment,
   onCompleteAll,
@@ -124,13 +122,16 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   // Track turn count per advisor station for the adaptive clinical flow
   const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>({});
+  // Track pending edit/undo resend per advisor so advisor never repeats greeting or prior question
+  const [isEditResendByAdvisor, setIsEditResendByAdvisor] = useState<Record<string, boolean>>({});
   // Track temporary dismissal of score adoption choice when user clicks "الاستمرار في الحوار"
   const [dismissedChoiceTurns, setDismissedChoiceTurns] = useState<Record<string, number>>({});
 
   // Dynamic insights per station in memory only (never saved to localStorage across sessions)
   const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>({});
 
-  const [inputText, setInputText] = useState('');
+  // Isolate input draft per advisor station so switching advisors (e.g. Sufyan -> Layla) never leaks text across rooms
+  const [draftsByAdvisor, setDraftsByAdvisor] = useState<Record<string, string>>({});
   const [showCelebration, setShowCelebration] = useState(false);
   const [isAdvisorReplying, setIsAdvisorReplying] = useState(false);
   const [aiMode, setAiMode] = useState<AiModelMode>(() => {
@@ -210,6 +211,7 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   const currentRequestIdRef = useRef<string>('');
   const lastSentUserTextRef = useRef<string>('');
   const lastSentMsgIdRef = useRef<string>('');
+  const lastSentAdvisorIdRef = useRef<string>('');
   const [dismissedPrivacyNotices, setDismissedPrivacyNotices] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
@@ -231,6 +233,11 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
   const stationNumber = currentAdvisorIndex + 1; // 1 to 8
+  const inputText = draftsByAdvisor[currentAdvisor.id] || '';
+  const setInputText = (val: string) => {
+    const key = currentAdvisor.id;
+    setDraftsByAdvisor((prev) => ({ ...prev, [key]: val }));
+  };
 
   const currentStationConfig: StationAssessmentConfig =
     getAdaptiveStationConfig(currentAdvisor.id, userProfile) || {
@@ -297,33 +304,55 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     };
     const icon = iconByArea[advisor.id] || '🌿';
 
-    const openingQuestion = consult?.title || domainCtx.openingQuestion;
+    const openingQuestion = domainCtx.openingQuestion || consult?.title;
+    const existingScoreRaw = Number(answers?.[`${advisor.id}_score`]);
+    const hasRecordedScore = Number.isFinite(existingScoreRaw) && existingScoreRaw >= 1 && existingScoreRaw <= 10;
+    const scoreContextLine = hasRecordedScore
+      ? `\n📊 التقييم المسجل حالياً لهذا الجانب: (${existingScoreRaw.toFixed(1)} من 10).`
+      : '';
     const text = `أهلاً بك يا ${userDisplayName} في محطة ${advisor.title} ${icon}
 
 أنا **${advisor.name}**، ${advisor.role}.
-${domainCtx.contextIntro}
+${domainCtx.contextIntro}${scoreContextLine}
 
 📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**
 ${openingQuestion}
 
 💡 ${domainCtx.guidanceNote}`;
 
+    const initialQuickSuggestions = generateDynamicQuickSuggestions({
+      domainId: advisor.id,
+      roundNumber: 1,
+      userProfile,
+    });
+
     return {
       id: `welcome_${advisor.id}_${Date.now()}`,
       sender: 'advisor',
       text,
+      suggestedReplies: initialQuickSuggestions,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
   };
 
   // إعادة تصفير كافة المحطات والعودة الفورية للمحطة 1 من 8 (الجانب الروحي) مع رسالة الترحيب الأولى
   const resetToFirstStation = () => {
+    currentRequestIdRef.current = `reset_all_${Date.now()}`;
     if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
+      try {
+        abortControllerRef.current.abort();
+      } catch {
+        // ignore
+      }
+      abortControllerRef.current = null;
     }
     setIsAdvisorReplying(false);
     setShowCelebration(false);
-    setInputText('');
+    setDraftsByAdvisor({});
+    setIsEditResendByAdvisor({});
+    lastSentUserTextRef.current = '';
+    lastSentMsgIdRef.current = '';
+    lastSentAdvisorIdRef.current = '';
     setDismissedChoiceTurns({});
     const firstAdvisor = ADVISORS_LIST[0];
     const firstStationConfig = getAdaptiveStationConfig(firstAdvisor.id, userProfile) || currentStationConfig;
@@ -342,6 +371,25 @@ ${openingQuestion}
     }
   };
 
+  // Switch cleanly between advisor stations: abort in-flight requests and isolate transient state
+  const switchAdvisorStation = (targetIndex: number) => {
+    currentRequestIdRef.current = `switch_${targetIndex}_${Date.now()}`;
+    if (abortControllerRef.current) {
+      try {
+        abortControllerRef.current.abort();
+      } catch {
+        // ignore
+      }
+      abortControllerRef.current = null;
+    }
+    setIsAdvisorReplying(false);
+    lastSentUserTextRef.current = '';
+    lastSentMsgIdRef.current = '';
+    lastSentAdvisorIdRef.current = '';
+    setShowCelebration(false);
+    setCurrentAdvisorIndex(targetIndex);
+  };
+
   useEffect(() => {
     const isNewSession = assessmentSessionId !== undefined && assessmentSessionId !== prevSessionIdRef.current;
     if (isNewSession) {
@@ -354,17 +402,24 @@ ${openingQuestion}
     }
   }, [completedAdvisors.length, assessmentSessionId]);
 
-  // تحديث رسالة الافتتاح عند اكتمال أو تعديل سياق المستفيد إذا لم تبدأ المحادثة بعد
+  // تحديث رسائل الافتتاح في كافة المحطات التي لم تبدأ فيها المحادثة بعد عند اكتمال أو تعديل سياق المستفيد أو الدرجات
   useEffect(() => {
-    const advisorKey = currentAdvisor.id;
-    const currentMsgs = chatMessages[advisorKey];
-    if (currentMsgs && currentMsgs.length === 1 && currentMsgs[0].id.startsWith('welcome_')) {
-      const refreshedOpening = getOpeningMessage(currentAdvisor, currentStationConfig, stationNumber);
-      setChatMessages((prev) => ({
-        ...prev,
-        [advisorKey]: [refreshedOpening],
-      }));
-    }
+    setChatMessages((prev) => {
+      let changed = false;
+      const next: Record<string, EvaluationChatMessage[]> = { ...prev };
+      ADVISORS_LIST.forEach((adv, idx) => {
+        const msgs = next[adv.id];
+        if (msgs && msgs.length === 1 && msgs[0].id.startsWith('welcome_')) {
+          const stCfg = getAdaptiveStationConfig(adv.id, userProfile) || currentStationConfig;
+          const refreshedOpening = getOpeningMessage(adv, stCfg, idx + 1);
+          if (msgs[0].text !== refreshedOpening.text) {
+            next[adv.id] = [refreshedOpening];
+            changed = true;
+          }
+        }
+      });
+      return changed ? next : prev;
+    });
   }, [
     userProfile?.name,
     userProfile?.employmentStatus,
@@ -374,6 +429,7 @@ ${openingQuestion}
     userProfile?.incomeStability,
     userProfile?.ageGroup,
     userProfile?.currentFocus,
+    answers?.[`${currentAdvisor.id}_score`],
   ]);
 
   // 1) Initialize welcoming message for station
@@ -398,6 +454,21 @@ ${openingQuestion}
   // Reopen and restart evaluation for current advisor station
   const handleReopenStation = () => {
     const advisorKey = currentAdvisor.id;
+    currentRequestIdRef.current = `reopen_${advisorKey}_${Date.now()}`;
+    if (abortControllerRef.current) {
+      try {
+        abortControllerRef.current.abort();
+      } catch {
+        // ignore
+      }
+      abortControllerRef.current = null;
+    }
+    setIsAdvisorReplying(false);
+    lastSentUserTextRef.current = '';
+    lastSentMsgIdRef.current = '';
+    lastSentAdvisorIdRef.current = '';
+    setDraftsByAdvisor((prev) => ({ ...prev, [advisorKey]: '' }));
+    setIsEditResendByAdvisor((prev) => ({ ...prev, [advisorKey]: false }));
     setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
     const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, stationNumber);
     setChatMessages((prev) => ({ ...prev, [advisorKey]: [openingMsg] }));
@@ -423,13 +494,13 @@ ${openingQuestion}
       (adv, i) => i > currentAdvisorIndex && !completedAdvisors.includes(adv.id)
     );
     if (nextIdx >= 0) {
-      setCurrentAdvisorIndex(nextIdx);
+      switchAdvisorStation(nextIdx);
     } else {
       const firstIncomplete = ADVISORS_LIST.findIndex(
         (adv) => !completedAdvisors.includes(adv.id)
       );
       if (firstIncomplete >= 0) {
-        setCurrentAdvisorIndex(firstIncomplete);
+        switchAdvisorStation(firstIncomplete);
       } else {
         onCompleteAll();
       }
@@ -446,11 +517,12 @@ ${openingQuestion}
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    const reqId = Date.now().toString();
+    const advisorKey = currentAdvisor.id;
+    const reqId = `${advisorKey}_${Date.now()}`;
     currentRequestIdRef.current = reqId;
     lastSentUserTextRef.current = text;
+    lastSentAdvisorIdRef.current = advisorKey;
 
-    const advisorKey = currentAdvisor.id;
     const userMsg: EvaluationChatMessage = {
       id: `usr_${Date.now()}`,
       sender: 'user',
@@ -459,9 +531,13 @@ ${openingQuestion}
     };
     lastSentMsgIdRef.current = userMsg.id;
 
-    setInputText('');
+    setDraftsByAdvisor((prev) => ({ ...prev, [advisorKey]: '' }));
     const currentList = chatMessages[advisorKey] || [];
     const currentTurns = stationTurnCount[advisorKey] || 0;
+    const isEditedOrResent = Boolean(isEditResendByAdvisor[advisorKey]);
+    if (isEditedOrResent) {
+      setIsEditResendByAdvisor((prev) => ({ ...prev, [advisorKey]: false }));
+    }
 
     // التقاط التقييم الصريح فقط (مثل "تقييمي: 7 من 10" أو "8/10") ومنع التقاط أرقام عادية مثل "25 دقيقة" أو "ساعتين"
     let detectedScore: number | null = extractExplicitRating(text);
@@ -528,9 +604,15 @@ ${openingQuestion}
       let adviceContent = '';
       let isStationCompleted = false;
       const historyTextsArray = currentList.map((m) => m.text);
+      const userOnlyHistory = currentList.filter((m) => m.sender === 'user').map((m) => m.text);
+      const previousSuggestions = currentList
+        .filter((m) => m.sender === 'advisor')
+        .slice(-3)
+        .flatMap((m) => m.suggestedReplies || []);
       let earnedScore = calculateSemanticScore(text, historyTextsArray, detectedScore || undefined);
       let dynamicStrengths: string[] = [];
       let dynamicChallenges: string[] = [];
+      let aiSuggestedReplies: string[] = [];
       let responseSource: 'gemini' | 'groq' | 'local-fallback' = 'gemini';
 
       try {
@@ -563,6 +645,8 @@ ${openingQuestion}
             evaluationStep: stationNumber,
             evaluationQuestionTitle: currentStationConfig.consultation?.title || currentStationConfig.initialDiagnostic?.title,
             stationTurnCount: currentTurns,
+            previousSuggestions,
+            isEditedOrResent,
           }),
         });
 
@@ -592,6 +676,9 @@ ${openingQuestion}
           if (Array.isArray(data.challenges) && data.challenges.length > 0) {
             dynamicChallenges = data.challenges;
           }
+          if (Array.isArray(data.suggestedReplies) && data.suggestedReplies.length > 0) {
+            aiSuggestedReplies = data.suggestedReplies;
+          }
 
           if (typeof replyContent === 'string' && (replyContent.startsWith('{') || replyContent.includes('"reasoning"'))) {
             try {
@@ -611,6 +698,7 @@ ${openingQuestion}
                 }
                 if (Array.isArray(inner.strengths) && inner.strengths.length > 0) dynamicStrengths = inner.strengths;
                 if (Array.isArray(inner.challenges) && inner.challenges.length > 0) dynamicChallenges = inner.challenges;
+                if (Array.isArray(inner.suggestedReplies) && inner.suggestedReplies.length > 0) aiSuggestedReplies = inner.suggestedReplies;
               }
             } catch {
               // keep
@@ -644,7 +732,9 @@ ${openingQuestion}
           earnedScore,
           currentTurns,
           historyTextsArray,
-          userProfile
+          userProfile,
+          previousSuggestions,
+          isEditedOrResent
         );
         reasoningContent = local.reasoning;
         summaryContent = local.summary;
@@ -654,6 +744,7 @@ ${openingQuestion}
         if (local.score !== undefined) earnedScore = local.score;
         if (local.strengths && local.strengths.length > 0) dynamicStrengths = local.strengths;
         if (local.challenges && local.challenges.length > 0) dynamicChallenges = local.challenges;
+        if (Array.isArray(local.suggestedReplies) && local.suggestedReplies.length > 0) aiSuggestedReplies = local.suggestedReplies;
       }
 
       const isMinimumRoundsReached = currentTurns >= 3; // الجولة الرابعة (3 ردود سابقة + الرد الرابع الحالي)
@@ -675,10 +766,16 @@ ${openingQuestion}
 
       // التحقق من صلاحية الدرجة وتنفيذ State Commit أولاً قبل إصدار أي رسالة اعتماد
       let stateCommitSucceeded = false;
+      const stationMsgsWithLatest = [
+        ...(chatMessages[advisorKey] || []),
+        { id: 'latest_user', sender: 'user' as const, text, timestamp: '' },
+      ];
       const goldenHabit = getDynamicGoldenHabit(
         currentAdvisor,
-        [...(chatMessages[advisorKey] || []), { id: 'latest_user', sender: 'user', text, timestamp: '' }],
-        adviceContent
+        stationMsgsWithLatest,
+        adviceContent,
+        userProfile,
+        pendingOfferedScore ?? earnedScore ?? 5
       );
 
       if (isStationCompleted) {
@@ -717,11 +814,29 @@ ${openingQuestion}
         if (onAddEisenhowerGoal) {
           onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
         }
+        const stationUserTexts = extractUserDialogueTextsForArea(
+          currentAdvisor.id,
+          answers,
+          stationMsgsWithLatest
+        );
+        const realisticGoals = generateRealisticAreaGoals({
+          areaId: currentAdvisor.id,
+          userTexts: stationUserTexts,
+          userProfile,
+          score: earnedScore,
+          goldenRecommendation: goldenHabit,
+          challenges: dynamicChallenges,
+          strengths: dynamicStrengths,
+        });
+        if (onSaveStationGoals && realisticGoals.length > 0) {
+          onSaveStationGoals(currentAdvisor.id, realisticGoals);
+        }
         const fallbackInsights = extractInsightsFromAnswers(
           currentAdvisor,
           earnedScore,
           answers,
-          [...(chatMessages[advisorKey] || []).map((m) => m.text), text]
+          stationMsgsWithLatest.map((m) => m.text),
+          userProfile
         );
         setStationInsights((prev) => ({
           ...prev,
@@ -734,6 +849,19 @@ ${openingQuestion}
         }));
       }
 
+      const nextSuggestedReplies = isStationCompleted
+        ? []
+        : generateDynamicQuickSuggestions({
+            domainId: currentAdvisor.id,
+            roundNumber: Math.max(1, currentTurns + 2),
+            lastUserMessage: text,
+            advisorReply: replyContent,
+            userProfile,
+            previousChips: previousSuggestions,
+            userHistory: userOnlyHistory,
+            aiSuggestedReplies,
+          });
+
       const nextAdvisorMsg: EvaluationChatMessage = {
         id: `agent_${Date.now()}`,
         sender: 'advisor',
@@ -741,6 +869,7 @@ ${openingQuestion}
         reasoning: reasoningContent,
         summary: summaryContent,
         advice: adviceContent,
+        suggestedReplies: nextSuggestedReplies,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isCrisis: isCrisisMessage(replyContent) || isCrisisMessage(text),
         source: responseSource,
@@ -796,17 +925,21 @@ ${openingQuestion}
       abortControllerRef.current = null;
     }
 
+    const originAdvisorKey = lastSentAdvisorIdRef.current || currentAdvisor.id;
     setIsAdvisorReplying(false);
 
     if (lastSentUserTextRef.current) {
-      setInputText(lastSentUserTextRef.current);
+      setDraftsByAdvisor((prev) => ({
+        ...prev,
+        [originAdvisorKey]: lastSentUserTextRef.current,
+      }));
     }
 
     const sentId = lastSentMsgIdRef.current;
     if (sentId) {
       setChatMessages((prev) => ({
         ...prev,
-        [currentAdvisor.id]: (prev[currentAdvisor.id] || []).filter((m) => m.id !== sentId),
+        [originAdvisorKey]: (prev[originAdvisorKey] || []).filter((m) => m.id !== sentId),
       }));
     }
 
@@ -814,7 +947,7 @@ ${openingQuestion}
     if (!isCrisis) {
       setStationTurnCount((prev) => ({
         ...prev,
-        [currentAdvisor.id]: Math.max(0, (prev[currentAdvisor.id] || 1) - 1),
+        [originAdvisorKey]: Math.max(0, (prev[originAdvisorKey] || 1) - 1),
       }));
     }
   };
@@ -833,6 +966,10 @@ ${openingQuestion}
 
     const undoneMsg = currentList[lastUserIdx];
     setInputText(undoneMsg.text);
+    setIsEditResendByAdvisor((prev) => ({
+      ...prev,
+      [currentAdvisor.id]: true,
+    }));
 
     const isCrisis = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|الموت|بالموت|اموت|أموت|بموت)/i.test(undoneMsg.text);
     if (!isCrisis) {
@@ -877,6 +1014,26 @@ ${openingQuestion}
   const effectiveOfferedScore = lastOfferedScore ?? (currentAdvisorScore > 0 ? currentAdvisorScore : (currentAdvisor.id === 'financial' ? 5.5 : 6.0));
   const isChoiceTemporarilyDismissed = dismissedChoiceTurns[currentAdvisor.id] === currentStationTurns && lastOfferedScore === null;
 
+  const userMessagesInStation = activeConversation.filter((m) => m.sender === 'user').map((m) => m.text);
+  const lastUserMsgText = userMessagesInStation[userMessagesInStation.length - 1] || '';
+  const stationPreviousChips = activeConversation
+    .filter((m) => m.sender === 'advisor')
+    .slice(-4, -1)
+    .flatMap((m) => m.suggestedReplies || []);
+  const dynamicQuickSuggestions = isCompleted
+    ? []
+    : (lastAdvisorMessage?.suggestedReplies && lastAdvisorMessage.suggestedReplies.length > 0
+        ? lastAdvisorMessage.suggestedReplies
+        : generateDynamicQuickSuggestions({
+            domainId: currentAdvisor.id,
+            roundNumber: Math.max(1, currentStationTurns + 1),
+            lastUserMessage: lastUserMsgText,
+            advisorReply: lastAdvisorMessage?.text || '',
+            userProfile,
+            previousChips: stationPreviousChips,
+            userHistory: userMessagesInStation,
+          }));
+
   const handleContinueDialogue = () => {
     setDismissedChoiceTurns((prev) => ({
       ...prev,
@@ -909,11 +1066,13 @@ ${openingQuestion}
       currentAdvisor,
       finalScore,
       answers,
-      currentAdvisorMsgs.map((m) => m.text)
+      currentAdvisorMsgs.map((m) => m.text),
+      userProfile
     );
-    let goldenHabit = getDynamicGoldenHabit(currentAdvisor, currentAdvisorMsgs);
+    let goldenHabit = getDynamicGoldenHabit(currentAdvisor, currentAdvisorMsgs, undefined, userProfile, finalScore);
     let finalStrengths = fallbackInsights?.strengths || ['الصراحة في توصيف واقع هذا الجانب'];
     let finalChallenges = [goldenHabit, ...(fallbackInsights?.challenges?.slice(1) || [])];
+    let apiSuggestedGoals: string[] = [];
 
     // 2. تمرير سجل محادثة المستخدم الكامل في هذه المحطة إلى Gemini API لتخصيص نقاط القوة وفرص التحسين والتوصية العلاجية الذهبية
     setIsAdvisorReplying(true);
@@ -941,13 +1100,22 @@ ${openingQuestion}
       if (summaryRes.ok) {
         const summaryData = await summaryRes.json();
         if (typeof summaryData.goldenRecommendation === 'string' && summaryData.goldenRecommendation.trim().length > 5) {
-          goldenHabit = summaryData.goldenRecommendation.trim();
+          goldenHabit = synthesizeGoldenRecommendation({
+            areaId: currentAdvisor.id,
+            userTexts: currentAdvisorMsgs.filter((m) => m.sender === 'user').map((m) => m.text),
+            userProfile,
+            score: finalScore,
+            advisorCandidate: summaryData.goldenRecommendation.trim(),
+          });
         }
         if (Array.isArray(summaryData.strengths) && summaryData.strengths.length > 0) {
           finalStrengths = summaryData.strengths;
         }
         if (Array.isArray(summaryData.challenges) && summaryData.challenges.length > 0) {
           finalChallenges = summaryData.challenges;
+        }
+        if (Array.isArray(summaryData.suggestedGoals) && summaryData.suggestedGoals.length > 0) {
+          apiSuggestedGoals = summaryData.suggestedGoals;
         }
       }
     } catch (summaryErr) {
@@ -958,6 +1126,24 @@ ${openingQuestion}
 
     if (onAddEisenhowerGoal) {
       onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
+    }
+
+    const stationUserTexts = extractUserDialogueTextsForArea(
+      currentAdvisor.id,
+      answers,
+      currentAdvisorMsgs
+    );
+    const realisticGoals = generateRealisticAreaGoals({
+      areaId: currentAdvisor.id,
+      userTexts: stationUserTexts,
+      userProfile,
+      score: finalScore,
+      goldenRecommendation: apiSuggestedGoals[0] || goldenHabit,
+      challenges: finalChallenges,
+      strengths: finalStrengths,
+    });
+    if (onSaveStationGoals && realisticGoals.length > 0) {
+      onSaveStationGoals(currentAdvisor.id, realisticGoals);
     }
 
     setStationInsights((prev) => ({
@@ -1019,8 +1205,7 @@ ${openingQuestion}
         currentAdvisorIndex={currentAdvisorIndex}
         completedAdvisors={completedAdvisors}
         onSelectAdvisor={(idx) => {
-          setCurrentAdvisorIndex(idx);
-          setShowCelebration(false);
+          switchAdvisorStation(idx);
         }}
         onNavigateToDashboard={onNavigateToDashboard}
       />
@@ -1047,6 +1232,7 @@ ${openingQuestion}
 
         {/* Messages Stream */}
         <AssessmentChatStream
+          key={`stream_${currentAdvisor.id}`}
           messages={activeConversation}
           currentAdvisor={currentAdvisor}
           isAdvisorReplying={isAdvisorReplying}
@@ -1064,6 +1250,7 @@ ${openingQuestion}
 
         {/* Input Bar & Dynamic Quick Choices */}
         <AssessmentInputBar
+          key={`bar_${currentAdvisor.id}`}
           inputText={inputText}
           isAdvisorReplying={isAdvisorReplying}
           isCompleted={isCompleted}
@@ -1073,6 +1260,7 @@ ${openingQuestion}
           currentActiveInsights={currentActiveInsights}
           currentStationConfig={currentStationConfig}
           currentAdvisorIndex={currentAdvisorIndex}
+          quickSuggestions={dynamicQuickSuggestions}
           offeredScore={isAdvisorReadyForScoring ? effectiveOfferedScore : null}
           isChoiceDismissed={isChoiceTemporarilyDismissed}
           onAdoptScoreAndComplete={handleAdoptScoreAndComplete}

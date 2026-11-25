@@ -16,6 +16,7 @@ import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
 import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
 import { ThirtyDayPlanScreen } from './screens/ThirtyDayPlanScreen';
+import { clearThirtyDayPlanFromStorage } from './utils/thirtyDayPlanGenerator';
 import { DemoModeBanner } from './components/DemoModeBanner';
 import { Menu, Sun, Moon } from 'lucide-react';
 import { ADVISORS_LIST } from './data/advisorsData';
@@ -159,6 +160,13 @@ export default function App() {
   // Handler: Switch from Demo Mode to a fresh profile
   const handleStartFreshProfile = () => {
     exitDemoMode();
+    clearThirtyDayPlanFromStorage();
+    try {
+      localStorage.removeItem('wazan_advisor_chats');
+      localStorage.removeItem('wazan_added_goals');
+    } catch {
+      // ignore
+    }
     setIsDemoMode(false);
     const fresh = getDefaultInitialState();
     setAppState(fresh);
@@ -199,6 +207,12 @@ export default function App() {
       setIsDemoMode(true);
     } else {
       exitDemoMode();
+      try {
+        localStorage.removeItem('wazan_advisor_chats');
+        localStorage.removeItem('wazan_added_goals');
+      } catch {
+        // ignore
+      }
       setIsDemoMode(false);
       const fresh = getDefaultInitialState();
       setAppState({
@@ -344,8 +358,10 @@ export default function App() {
     setWeeklySessionKey((k) => k + 1);
     setAppState((prev) => {
       const resetScores: Record<string, number> = {};
+      const resetGoals: Record<string, string[]> = {};
       ADVISORS_LIST.forEach((adv) => {
         resetScores[adv.id] = 0;
+        resetGoals[adv.id] = [];
       });
 
       const nextState: StoredAppState = {
@@ -355,6 +371,7 @@ export default function App() {
         completedDates: {},
         answers: {},
         scores: resetScores as Record<LifeAreaId, number>,
+        goals: resetGoals as Record<LifeAreaId, string[]>,
         directorReport: null,
         selectedAdvisorId: 'spiritual',
       };
@@ -362,6 +379,7 @@ export default function App() {
       return nextState;
     });
 
+    clearThirtyDayPlanFromStorage();
     try {
       localStorage.removeItem('wazan_eval_chats');
       localStorage.removeItem('wazan_eval_insights');
@@ -390,6 +408,23 @@ export default function App() {
           [advisorId]: [goal, ...currentList],
         },
       };
+    });
+  };
+
+  // Handler: Save realistic dialogue-derived goals when a station completes
+  const handleSaveStationGoals = (advisorId: LifeAreaId, stationGoals: string[]) => {
+    if (!Array.isArray(stationGoals) || stationGoals.length === 0) return;
+    setAppState((prev) => {
+      const nextGoals = {
+        ...prev.goals,
+        [advisorId]: stationGoals.slice(0, 3),
+      };
+      const nextState: StoredAppState = {
+        ...prev,
+        goals: nextGoals,
+      };
+      saveStoredState(nextState);
+      return nextState;
     });
   };
 
@@ -430,6 +465,12 @@ export default function App() {
     setAppState(fresh);
     resetStoredState();
     saveStoredState(fresh);
+    try {
+      localStorage.removeItem('wazan_advisor_chats');
+      localStorage.removeItem('wazan_added_goals');
+    } catch {
+      // ignore
+    }
     setActiveScreen('landing');
   };
 
@@ -523,6 +564,12 @@ export default function App() {
           <DemoModeBanner
             onResetDemo={handleResetDemoData}
             onStartFreshProfile={handleStartFreshProfile}
+            userName={appState.userProfile?.name}
+            completedCount={appState.completedAdvisors.length}
+            totalStations={8}
+            activeScreen={activeScreen}
+            hasDirectorReport={Boolean(appState.directorReport)}
+            hasThirtyDayPlan={Boolean(appState.thirtyDayPlan)}
           />
         )}
         {/* Mobile Header with Menu Toggle */}
@@ -591,6 +638,7 @@ export default function App() {
 
           {activeScreen === 'onboarding' && (
             <OnboardingScreen
+              key={`onboarding_${weeklySessionKey}`}
               initialAdvisorId={selectedAdvisorId}
               assessmentMode={appState.assessmentMode}
               assessmentSessionId={weeklySessionKey}
@@ -599,6 +647,7 @@ export default function App() {
               onUpdateProfile={handleUpdateUserProfile}
               onSaveAnswer={handleSaveAnswer}
               onFinishAdvisor={handleFinishAdvisor}
+              onSaveStationGoals={handleSaveStationGoals}
               onResetAdvisor={handleResetAdvisorStation}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               onCompleteAll={handleCompleteAll}
@@ -620,6 +669,7 @@ export default function App() {
 
           {activeScreen === 'advisor_chat' && (
             <AdvisorChatScreen
+              key={`chat_${appState.userProfile?.email || 'guest'}_${weeklySessionKey}`}
               currentAdvisorId={selectedAdvisorId}
               onSelectAdvisor={(id) => setSelectedAdvisorId(id)}
               userProfile={appState.userProfile}

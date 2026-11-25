@@ -143,7 +143,7 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
                             ) : (
                               <>
                                 <Plus className="w-3 h-3" />
-                                <span>إضافة لمصفوفة أيزنهاور (المربع 2)</span>
+                                <span>إضافة إلى المربع الثاني بمصفوفة أيزنهاور</span>
                               </>
                             )}
                           </button>

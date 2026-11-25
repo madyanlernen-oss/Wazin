@@ -1,6 +1,7 @@
 import React from 'react';
 import { Send, Square } from 'lucide-react';
 import { VoiceInput } from '../VoiceInput';
+import { isolateNumbersInText } from '../FormattedChatMessage';
 import { AdvisorConfig } from '../../types/lifeBalance';
 import { AiModelMode, AI_MODES } from './types';
 
@@ -13,6 +14,7 @@ interface ChatPromptInputBarProps {
   onSelectAiMode: (mode: AiModelMode) => void;
   onSendMessage: (text?: string) => void;
   onStopMessage: (e?: React.SyntheticEvent) => void;
+  quickSuggestions?: string[];
 }
 
 export const ChatPromptInputBar: React.FC<ChatPromptInputBarProps> = ({
@@ -24,25 +26,30 @@ export const ChatPromptInputBar: React.FC<ChatPromptInputBarProps> = ({
   onSelectAiMode,
   onSendMessage,
   onStopMessage,
+  quickSuggestions,
 }) => {
   const currentModeConfig = AI_MODES.find((m) => m.id === aiMode) || AI_MODES[1];
+  const activeChips =
+    quickSuggestions && quickSuggestions.length > 0
+      ? quickSuggestions
+      : currentAdvisor.suggestedQuestions;
 
   return (
     <>
       {/* Suggested Questions Chips */}
       <div className="px-4 py-2 border-t border-[#E2E8F0] dark:border-[#1E343F] bg-[#F7F6F2] dark:bg-[#0B161C] flex items-center gap-1.5 overflow-x-auto scrollbar-none text-xs transition-colors">
         <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] font-bold flex-shrink-0">
-          أسئلة مقترحة:
+          اقتراحات الرد:
         </span>
-        {currentAdvisor.suggestedQuestions.map((qText, idx) => (
+        {activeChips.map((qText, idx) => (
           <button
-            key={idx}
+            key={`${idx}_${qText.slice(0, 14)}`}
             type="button"
             onClick={() => onSendMessage(qText)}
             disabled={isLoading}
             className="flex-shrink-0 px-2.5 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-[11px] transition-all shadow-xs cursor-pointer disabled:opacity-50 disabled:pointer-events-none"
           >
-            {qText}
+            {isolateNumbersInText(qText)}
           </button>
         ))}
       </div>

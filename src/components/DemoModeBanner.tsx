@@ -1,16 +1,104 @@
 import React, { useState } from 'react';
 import {
-  Sparkles,
   RotateCcw,
   UserPlus,
   X,
   Zap,
-  CheckCircle2,
   ChevronDown,
   ChevronUp,
 } from 'lucide-react';
+import { isolateNumbersInText } from './FormattedChatMessage';
 
-interface DemoModeBannerProps {
+export interface DemoBannerStateInput {
+  userName?: string;
+  completedCount?: number;
+  totalStations?: number;
+  activeScreen?: string;
+  hasDirectorReport?: boolean;
+  hasThirtyDayPlan?: boolean;
+}
+
+export function getDemoBannerCopy({
+  userName = 'سعود المنصور',
+  completedCount = 0,
+  totalStations = 8,
+  activeScreen = 'onboarding',
+  hasDirectorReport = false,
+  hasThirtyDayPlan = false,
+}: DemoBannerStateInput): { headlineSuffix: string; detail: string } {
+  const safeCompleted = Math.max(0, Math.min(totalStations, completedCount));
+
+  if (safeCompleted >= totalStations) {
+    if (activeScreen === 'director_summary') {
+      return {
+        headlineSuffix: `تقرير المنسق العام الشامل جاهز (${safeCompleted} / ${totalStations} محطات مكتملة)`,
+        detail:
+          'تم إكمال جميع محطات التقييم الثماني بنجاح، ويعرض التقرير قراءتك التكاملية وتوصيات الموازنة المعتمدة.',
+      };
+    }
+    if (activeScreen === 'thirty_day_plan') {
+      return {
+        headlineSuffix: `خطتك الذكية لـ 30 يوماً مفعّلة (${safeCompleted} / ${totalStations} محطات مكتملة)`,
+        detail:
+          'تم ترتيب مجالات التركيز تلقائياً من أدنى الدرجات المعتمدة في عجلة الحياة لبناء خطة الـ 30 يوماً.',
+      };
+    }
+    if (activeScreen === 'goals_matrix') {
+      return {
+        headlineSuffix: `مصفوفة أيزنهاور محدّثة (${safeCompleted} / ${totalStations} محطات مكتملة)`,
+        detail:
+          'الأهداف والمقترحات موزعة وفق أولوياتك المعتمدة من جميع المستشارين الثمانية.',
+      };
+    }
+    return {
+      headlineSuffix: `اكتملت محطات التقييم الثماني بنجاح (${safeCompleted} / ${totalStations})`,
+      detail:
+        'جميع مخرجات رادار الحياة، تقرير المنسق العام، وخطة الـ 30 يوماً محدثة وجاهزة للاستعراض أو التصدير.',
+    };
+  }
+
+  if (safeCompleted > 0) {
+    if (activeScreen === 'director_summary' && hasDirectorReport) {
+      return {
+        headlineSuffix: `تقرير المنسق العام المبدئي (${safeCompleted} / ${totalStations} محطات مكتملة)`,
+        detail: `أتممت ${safeCompleted} من أصل ${totalStations} محطات؛ أكمل بقية المحطات لتحديث القراءة التكاملية بالكامل.`,
+      };
+    }
+    if (activeScreen === 'thirty_day_plan' && hasThirtyDayPlan) {
+      return {
+        headlineSuffix: `خطة الـ 30 يوماً محدّثة لتقدمك (${safeCompleted} / ${totalStations} محطات مكتملة)`,
+        detail: `تمت مواءمة مجالات التركيز مع المحطات المنجزة (${safeCompleted} من ${totalStations})، وتُحدّث تلقائياً عند إكمال البقية.`,
+      };
+    }
+    return {
+      headlineSuffix: `جلسة تقييم أسبوعية جارية (${safeCompleted} / ${totalStations} محطات مكتملة)`,
+      detail: `أتممت ${safeCompleted} من أصل ${totalStations} محطات؛ يمكنك مواصلة الحوار مع المستشارين أو استعراض النتائج الحالية.`,
+    };
+  }
+
+  if (activeScreen === 'director_summary') {
+    return {
+      headlineSuffix: `تقرير المنسق العام الاسترشادي (0 / ${totalStations} محطات معتمدة بعد)`,
+      detail:
+        'يعرض هذا التقرير قراءة تمهيدية؛ وبمجرد اعتماد تقييمات المحطات سيتحدّث التحليل التكاملي بناءً على إجاباتك الفعلية.',
+    };
+  }
+
+  if (activeScreen === 'thirty_day_plan') {
+    return {
+      headlineSuffix: `خطة الـ 30 يوماً التمهيدية (بانتظار اعتماد تقييماتك)`,
+      detail:
+        'عند إكمال محطات التقييم سيتم إعادة ترتيب مجالات التركيز تلقائياً وفق أدنى الدرجات المعتمدة في عجلة حياتك.',
+    };
+  }
+
+  return {
+    headlineSuffix: `جلسة تقييم أسبوعية نشطة وجاهزة للبدء (0 / ${totalStations} محطات مكتملة)`,
+    detail: `خض الحوار التفاعلي مع المستشار المختص لإكمال المحطات، وستُفتح مخرجات رادار الحياة وخطة الـ 30 يوماً تلقائياً بناءً على تقييمك الفعلي يا ${userName}.`,
+  };
+}
+
+interface DemoModeBannerProps extends DemoBannerStateInput {
   onResetDemo: () => void;
   onStartFreshProfile: () => void;
 }
@@ -18,9 +106,25 @@ interface DemoModeBannerProps {
 export const DemoModeBanner: React.FC<DemoModeBannerProps> = ({
   onResetDemo,
   onStartFreshProfile,
+  userName = 'سعود المنصور',
+  completedCount = 0,
+  totalStations = 8,
+  activeScreen = 'onboarding',
+  hasDirectorReport = false,
+  hasThirtyDayPlan = false,
 }) => {
   const [isDismissed, setIsDismissed] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const displayName = (userName || '').trim() || 'سعود المنصور';
+  const bannerCopy = getDemoBannerCopy({
+    userName: displayName,
+    completedCount,
+    totalStations,
+    activeScreen,
+    hasDirectorReport,
+    hasThirtyDayPlan,
+  });
 
   if (isDismissed) {
     return (
@@ -31,7 +135,7 @@ export const DemoModeBanner: React.FC<DemoModeBannerProps> = ({
         title="إظهار شريط وضع المحكّمين"
       >
         <Zap className="w-3.5 h-3.5 fill-current" />
-        <span>وضع المحكّمين (Demo Mode)</span>
+        <span>وضع المحكّمين</span>
       </button>
     );
   }
@@ -50,15 +154,15 @@ export const DemoModeBanner: React.FC<DemoModeBannerProps> = ({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-[10px] sm:text-[11px] font-black">
-                <span>وضع المحكّمين • Demo Mode</span>
+                <span>وضع المحكّمين • العرض التجريبي</span>
               </span>
               <span className="text-xs font-bold text-[#0F172A] dark:text-slate-200 truncate">
-                المستفيد: <strong>سعود المنصور</strong> • تقييم أسبوعي حي ونشط بانتظار إنجازك
+                المستفيد: <strong>{displayName}</strong> • {isolateNumbersInText(bannerCopy.headlineSuffix)}
               </span>
             </div>
             {!isCollapsed && (
               <p className="text-[11px] text-[#64748B] dark:text-slate-400 hidden sm:block mt-0.5">
-                خض تجربة الحوار الحي مع المستشار الروحي لإكمال المحطة، وستُفتح مخرجات رادار الحياة وخريطة الـ 30 يوماً تلقائياً بناءً على تقييمك الفعلي.
+                {isolateNumbersInText(bannerCopy.detail)}
               </p>
             )}
           </div>

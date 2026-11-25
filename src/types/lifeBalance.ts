@@ -146,6 +146,7 @@ export interface ChatMessage {
   summary?: string;
   advice?: string;
   isCrisis?: boolean;
+  suggestedReplies?: string[];
   source?: 'gemini' | 'groq' | 'local-fallback';
 }
 

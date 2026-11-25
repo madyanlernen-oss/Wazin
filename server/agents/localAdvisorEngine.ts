@@ -1,5 +1,21 @@
-import { extractExplicitRating } from '../middleware/validation';
+import { extractExplicitRating, calculateSemanticScore } from '../middleware/validation';
 import { parseUserContext, getDomainContextConfig } from '../../src/utils/contextPersonalization';
+import { generateDynamicQuickSuggestions } from '../../src/utils/dynamicSuggestions';
+import {
+  synthesizeGoldenRecommendation,
+  generateConcreteDomainSuggestions,
+} from '../../src/utils/realisticGoalsGenerator';
+import {
+  isGenuineUserQuestion,
+  pickNextUnaskedQuestion,
+  isQuestionAlreadyAsked,
+  isQuestionContradictingHistory,
+  isRequestingAdvisorSuggestions,
+  stripRepeatedOpeningGreeting,
+  hasDebtStatusAnswered,
+  extractExpenseCategoryFromAnswer,
+  hasAcuteIsolationOrRejection,
+} from '../../src/utils/dialogueDeduplication';
 
 // مصفوفة من 4 ردود استكشافية محايدة ومختلفة لكل محطة من المحطات الثماني لمنع التكرار عند اللجوء للمحرك المحلي
 export const STATION_NEUTRAL_FALLBACKS: Record<string, string[]> = {
@@ -10,10 +26,10 @@ export const STATION_NEUTRAL_FALLBACKS: Record<string, string[]> = {
     'حديثك يوضح وعيك بما تحتاج إليه نفسك. ما العادة البسيطة والخفيفة التي تشعر أنها قريبة من قلبك ويمكن أن تمنحك طمأنينة أسبوعية دون ضغط؟',
   ],
   financial: [
-    'أقدر صراحتك في وصف واقعك المالي. ما هو البند اليومي أو الأسبوعي الذي تلاحظ أنه يسحب النسبة الأكبر من ميزانيتك دون أن تشعر؟',
-    'الوضوح المالي يبدأ خطوة بخطوة. كيف تتصرف عادةً عندما يقترب الشهر من نهايته وتقل السيولة المتاحة بين يديك؟',
-    'أفهم طبيعة التحدي المالي في مرحلتك الحالية. هل جربت سابقاً تخصيص مبلغ رمزي ثابت في مكان منفصل فور استلام دخلك، وما الذي أعاق استمراره؟',
-    'نظرتك الواقعية ممتازة. لو أردنا وضع خطوة مالية واحدة خفيفة للأسبوع القادم تحمي ميزانيتك دون تضييق، ما الإجراء الأقرب لواقعك؟',
+    'أقدر صراحتك في وصف واقعك المالي. قبل التخطيط للادخار، هل تقتطع أي أقساط أو ديون أو التزامات حتمية جزءاً من دخلك الشهري؟',
+    'الوضوح المالي يبدأ بحصر الواقع. ما هو البند الشهري أو الأسبوعي الذي تلاحظ أنه يستهلك النسبة الأكبر من تدفقك النقدي؟',
+    'أفهم طبيعة التحدي المالي في مرحلتك الحالية. كيف تتصرف عادةً عندما تتزاحم الالتزامات الثابتة وتقترب نهاية الشهر؟',
+    'نظرتك الواقعية ممتازة. ما الإجراء المالي العملي الأهم للأسبوع القادم: ترتيب سداد التزاماتك أم ضبط مصاريفك وبناء احتياطي ميسر؟',
   ],
   health: [
     'أسمعك باهتمام. كيف يبدو إيقاع نومك واستيقاظك في الأيام الأخيرة، وهل تستيقظ بطاقة كافية لبدء يومك؟',
@@ -69,7 +85,8 @@ export function pickNonRepeatingFallbackReply(
   turnCount: number = 0,
   sessionIdentifier: string = 'default',
   userProfile?: any,
-  userName?: string
+  userName?: string,
+  historyTexts: string[] = []
 ): { reply: string; index: number } {
   const ctx = parseUserContext(userProfile, userName);
   const contextPool = userProfile
@@ -87,6 +104,15 @@ export function pickNonRepeatingFallbackReply(
     nextIdx = (lastIdx + 1) % pool.length;
   }
 
+  // تأكد من عدم تكرار أي سؤال ورد سابقاً في سجل المحادثة الحالية
+  if (historyTexts.length > 0) {
+    const unasked = pickNextUnaskedQuestion(pool, historyTexts, nextIdx);
+    if (unasked.question && unasked.index >= 0) {
+      lastFallbackIndexBySession.set(trackerKey, unasked.index);
+      return { reply: unasked.question, index: unasked.index };
+    }
+  }
+
   lastFallbackIndexBySession.set(trackerKey, nextIdx);
   return { reply: pool[nextIdx], index: nextIdx };
 }
@@ -102,7 +128,10 @@ export function generateLocalAgentResponse(
   evaluationQuestionTitle?: string,
   assessmentMode: 'initial_assessment' | 'weekly_checkin' = 'weekly_checkin',
   stationTurnCount: number = 0,
-  userProfile?: any
+  userProfile?: any,
+  previousSuggestions?: string[],
+  historyTexts?: string[],
+  isEditedOrResent: boolean = false
 ) {
   const msg = message.toLowerCase().trim();
   const parsedCtx = parseUserContext(userProfile, userName);
@@ -121,7 +150,12 @@ export function generateLocalAgentResponse(
   // تنظيف الرسالة من التحيات التمهيدية لاستخراج الجوهر الحقيقي لكلام المستفيد
   const salutationRegex = /^(?:أهلاً|اهلا|هلا|مرحبا|مرحباً|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|حيّاك|أهلين)\s*(?:دكتور|يا دكتور|دكتورة|يا دكتورة|استاذ|أستاذ|يا استاذ|يا أستاذ|باشمهندس|يا باشمهندس|بروفيسور|يا بروفيسور|صديقي|يا غالي|كمال|سفيان|ريان|طارق|ليلى|زياد|مريم|سامي|معتز|هاني)?\s*/i;
   const coreMsg = msg.replace(salutationRegex, '').trim();
-  const isBareGreetingOnly = !coreMsg && /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(msg);
+  const hasPriorHistory = Boolean(isEditedOrResent) || (Array.isArray(historyTexts) && historyTexts.length > 0);
+  const isBareGreetingOnly =
+    !isEditedOrResent &&
+    !hasPriorHistory &&
+    !coreMsg &&
+    /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(msg);
 
   // 0. بروتوكول استثناء طوارئ إنساني حاسم ومطلق (Safety & Empathy Override) - الأولوية القصوى المطلقة
   const isCrisisOrDeath = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|ايذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(msg);
@@ -157,14 +191,15 @@ export function generateLocalAgentResponse(
   // 5. التحية العادية الودية العفوية المجردة (فقط إذا لم يكن هناك كلام إضافي)
   const isSimpleGreeting = !isCrisisOrDeath && !isDomainBoundaryQuery && !isGriefOrExhaustion && !isCurseOrAnger && !isFinancialDistress && !isHealthDistress && !isCareerDistress && !isSpiritualDistress && !isPersonalDistress && !isSocialDistress && !isAskingHowAdvisorIs && isBareGreetingOnly;
 
-  // 6. الأسئلة والاستفسارات المباشرة (Direct Questions - استثناء جمل النفي العادية مثل "ما عندي" أو "ما أقدر")
-  const isNegatedMaStatement = /^(?:ما\s+(?:عندي|ألاقي|الاقي|أشعر|اشعر|أصلي|اصلي|أقدر|اقدر|أعرف|اعرف|في|أحب|احب|أجد|اجد|يوجد))/i.test(coreMsg);
-  const isDirectQuestion = !isCrisisOrDeath && !isDomainBoundaryQuery && !isGriefOrExhaustion && !isCurseOrAnger && !isAskingHowAdvisorIs && !isSimpleGreeting && !isNegatedMaStatement && (
-    msg.includes('؟') ||
-    msg.includes('?') ||
-    /^(?:هل|كيف|لماذا|ليه|ماذا|ايش|وش|من هو|من هي|من هم|من أنت|من انت|مين|متى|أين|اين|كم|شو|شلون|شنو|جاوب|جاوبني|أنا أسألك|انا اسالك|ما رأيك|برأيك)(?:\s|\?|؟|$)/i.test(coreMsg) ||
-    (/(^|\s)ممكن(\s|\?|؟|$)/i.test(msg) && !/(نصف\s*ساعة|ساعة|ربع\s*ساعة|\d+\s*دقيقة|\d+\s*دقائق|أبدأ|ابدأ|أجرب|اجرب|أحاول|احاول|مشي|رياضة|تأمل|تخفيف)/i.test(msg))
-  );
+  // 6. الأسئلة والاستفسارات المباشرة (باستخدام الفاحص الدقيق الذي يستثني الإجابات الظنية مثل "ممكن الاكل في المطاعم")
+  const isDirectQuestion =
+    !isCrisisOrDeath &&
+    !isDomainBoundaryQuery &&
+    !isGriefOrExhaustion &&
+    !isCurseOrAnger &&
+    !isAskingHowAdvisorIs &&
+    !isSimpleGreeting &&
+    isGenuineUserQuestion(message);
 
   // 7. الإجابة التقييمية الصريحة (فقط عند وجود صيغة تقييم صريحة، ومنع التقاط أرقام عادية مثل 25 دقيقة)
   const explicitRatingScore = extractExplicitRating(message);
@@ -222,14 +257,34 @@ export function generateLocalAgentResponse(
     station_completed?: boolean;
     strengths?: string[];
     challenges?: string[];
+    suggestedReplies?: string[];
   }) => {
     const finalName = data.agent_name || advName;
     let finalReply = data.reply || data.advice || data.summary || 'أنا معك في كل خطوة نحو الاتزان والنمو.';
-    // Ensure the reply ends with an engaging question if it doesn't already contain one
-    if (data.reflectionQuestion && !finalReply.includes('؟') && !finalReply.includes('?')) {
-      finalReply = `${finalReply}\n\n${data.reflectionQuestion}`;
+    finalReply = stripRepeatedOpeningGreeting(finalReply, hasPriorHistory);
+
+    let safeReflectionQ = data.reflectionQuestion || '';
+    const isCompletedEval = Boolean(isEvaluationSession) && Boolean(data.station_completed);
+    if (!isCompletedEval && safeReflectionQ && Array.isArray(historyTexts) && historyTexts.length > 0) {
+      if (
+        isQuestionAlreadyAsked(safeReflectionQ, historyTexts) ||
+        isQuestionContradictingHistory(safeReflectionQ, historyTexts)
+      ) {
+        const pool = getDomainContextConfig(agentKey, parsedCtx).exploratoryQuestions;
+        const nextPick = pickNextUnaskedQuestion(pool, historyTexts, stationTurnCount);
+        safeReflectionQ =
+          nextPick.question ||
+          (stationTurnCount >= 3
+            ? 'هل ترغب في اعتماد التقييم المرحلي الحالي والانتقال للمحطة التالية، أم تفضل إضافة تفصيل آخر؟'
+            : `ما الخطوة العملية البسيطة التي تراها مناسبة لتطبيقها في ${stationTitle} هذا الأسبوع؟`);
+      }
     }
-    const finalAdvice = data.advice || (data.actionSteps && data.actionSteps.length > 0 ? data.actionSteps[0] : finalReply);
+
+    // Ensure the reply ends with an engaging question if it doesn't already contain one
+    if (safeReflectionQ && !finalReply.includes('؟') && !finalReply.includes('?')) {
+      finalReply = `${finalReply}\n\n${safeReflectionQ}`;
+    }
+    const rawAdvice = data.advice || (data.actionSteps && data.actionSteps.length > 0 ? data.actionSteps[0] : finalReply);
     const finalSummary = data.summary || (finalReply.length > 120 ? finalReply.slice(0, 120) + '...' : finalReply);
     const finalReasoning = data.reasoning || `محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد (${userName}) في مجال (${stationTitle})، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي لتحقيق التوازن المستدام.`;
 
@@ -242,6 +297,30 @@ export function generateLocalAgentResponse(
     };
     const computedScore = data.score !== undefined ? normalizeScore(data.score) : normalizeScore(score > 0 ? score : 5.0);
 
+    const combinedUserTexts = [...(historyTexts || []), message].filter(Boolean);
+    const finalAdvice = isCompletedEval
+      ? synthesizeGoldenRecommendation({
+          areaId: agentKey,
+          userTexts: combinedUserTexts,
+          userProfile,
+          score: computedScore,
+          advisorCandidate: rawAdvice,
+        })
+      : rawAdvice;
+
+    // Dynamic round-aware, non-repeating quick suggestions reacting to user's last answer & round
+    const nextRoundNumber = Math.max(1, (stationTurnCount || 0) + 2);
+    const dynamicSuggestedReplies = generateDynamicQuickSuggestions({
+      domainId: agentKey,
+      roundNumber: nextRoundNumber,
+      lastUserMessage: message,
+      advisorReply: finalReply,
+      userProfile,
+      previousChips: previousSuggestions || [],
+      userHistory: historyTexts || [],
+      aiSuggestedReplies: data.suggestedReplies,
+    });
+
     return {
       agent_name: finalName,
       reasoning: finalReasoning,
@@ -250,10 +329,11 @@ export function generateLocalAgentResponse(
       advice: finalAdvice,
       reply: finalReply,
       actionSteps: data.actionSteps || [finalAdvice],
-      reflectionQuestion: data.reflectionQuestion || 'ما هي الخطوة البسيطة التي ستبدأ بها اليوم؟',
+      reflectionQuestion: safeReflectionQ || (isCompletedEval ? '' : 'ما هي الخطوة البسيطة التي ستبدأ بها اليوم؟'),
       station_completed: Boolean(isEvaluationSession) && Boolean(data.station_completed),
       strengths: data.strengths || [],
       challenges: data.challenges || [],
+      suggestedReplies: dynamicSuggestedReplies,
       source: 'local-fallback' as const,
     };
   };
@@ -547,24 +627,37 @@ export function generateLocalAgentResponse(
 
     if (agentKey === 'financial') {
       const finCtxConfig = getDomainContextConfig('financial', parsedCtx);
+      const combinedFinHistory = `${(historyTexts || []).join(' ')} ${msg}`;
+      const queryMentionsDebt = /(دين|ديون|قرض|قروض|أقساط|اقساط|بطاقة|فيزا|التزامات)/i.test(combinedFinHistory) && !/(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*ديون)/i.test(combinedFinHistory);
+      const queryConfirmsNoDebt = /(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون)/i.test(combinedFinHistory);
       return formatAgentOutput({
-        reasoning: `تحليل استفسار المستفيد المالي ("${message}") بسياق (${status}): تفكيك العلاقة النفسية والسلوكية بالمال وتقديم مبدأ عملي مباشر يناسب حالته.`,
+        reasoning: `تحليل استفسار المستفيد المالي ("${message}") بسياق (${status}): تفكيك الواقع المالي دون افتراض خلو السجل من الديون أو وجود فائض جاهز.`,
         summary: `إجابة استشارية مالية مباشرة حول: "${message}".`,
         advice: isStudent
           ? `القاعدة الذهبية للطالب: راقب مصروفاتك الدراسية واليومية وابدأ بصمام أمان رمزي ولو بـ 50 ريالاً شهرياً.`
           : isVariableIncome
-            ? `مع الدخل المتغير: افصل أموال العمل عن مصروفك الشخصي واقتطع نسبة احتياطي في أشهر الوفرة.`
-            : `القاعدة الذهبية: افصل بين الاحتياج الحقيقي والرغبة العابرة، وباشر بتأسيس صندوق الطوارئ${hasDep ? ' لحماية أسرتك' : ''}.`,
+            ? `مع الدخل المتغير: افصل أموال العمل عن مصروفك الشخصي واحصر التزاماتك ثم اقتطع نسبة احتياطي في أشهر الوفرة.`
+            : queryMentionsDebt
+              ? `عند وجود أقساط أو ديون: الأولوية لحصرها وترتيب خطة سداد متوازنة مع صمام أمان نقدي مصغر قبل أي استثمار.`
+              : queryConfirmsNoDebt
+                ? `بعد تأكد خلوك من الديون: افصل بين الاحتياج والرغبة، وباشر بتأسيس صندوق الطوارئ${hasDep ? ' لحماية أسرتك' : ''} ثم الادخار التلقائي.`
+                : `قبل الحديث عن أتمتة الادخار أو الاستثمار، الخطوة الأولى هي حصر أي ديون أو أقساط شهرية والتأكد من صافي التدفق النقدي الفعلي.`,
         reply: isStudent
           ? `أهلاً بك يا ${userName}. للإجابة مباشرة على استفسارك المالي كطالب جامعي: التوازن المالي في هذه المرحلة يقوم على ضبط مصاريف الدراسة واليوميات ضمن ${incomeSrc}، واقتطاع مبلغ رمزي صغير لحمايتك من طوارئ نهاية الشهر.`
           : isVariableIncome
-            ? `أهلاً بك يا ${userName}. للإجابة مباشرة على استفسارك المالي مع طبيعة الدخل المتغير: النجاح يكمن في تحديد مصروف شهري ثابت لنفسك، وتجنيب فائض الأشهر الجيدة لتأمين احتياطي يغطي الأشهر الأهدأ.`
+            ? `أهلاً بك يا ${userName}. للإجابة مباشرة على استفسارك المالي مع طبيعة الدخل المتغير: النجاح يكمن في تحديد مصروف شهري ثابت لنفسك وحصر التزاماتك الدورية، مع تجنيب فائض الأشهر الجيدة لتأمين احتياطي يغطي الأشهر الأهدأ.`
             : isJobSeeker
               ? `أهلاً بك يا ${userName}. للإجابة مباشرة على استفسارك المالي في مرحلة البحث عن عمل: الأولوية الآن لحماية مدخراتك وتوجيهها للأساسيات فقط حتى تطيل فترة أمانك بأريحية دون ديون.`
-              : `أهلاً بك يا ${userName}. للإجابة مباشرة على استفسارك المالي: النجاح المالي لا يكمن في مقدار ما تكسبه فقط، بل في كيفية إدارة وتوجيه راتبك بحكمة، وبناء صمام أمان${hasDep ? ' لأسرتك' : ''} يغطي 3 إلى 6 أشهر مع أتمتة الادخار في بداية كل شهر.`,
+              : queryMentionsDebt
+                ? `أهلاً بك يا ${userName}. قبل الحديث عن أتمتة الادخار أو الاستثمار مع وجود التزامات: الأولوية هي حصر كافة الأقساط والديون الشهرية، ترتيب خطة سداد واقعية دون إرباك لمعيشتك، وتأمين صمام أمان مصغر يمنع اللجوء لاقتراض جديد.`
+                : queryConfirmsNoDebt
+                  ? `أهلاً بك يا ${userName}. مع خلو سجلك من الديون: النجاح المالي يبدأ بتوجيه راتبك بحكمة عبر بناء صمام أمان${hasDep ? ' لأسرتك' : ''} يغطي 3 إلى 6 أشهر، ثم أتمتة الادخار والاستثمار المنتظم وفق فائضك الفعلي.`
+                  : `أهلاً بك يا ${userName}. قبل أن نتحدث عن أتمتة الادخار أو الاستثمار، لا نفترض وجود فائض جاهز لمجرد ثبات الدخل؛ الخطوة العملية الأولى هي التحقق مما إذا كانت توجد أي أقساط أو ديون أو التزامات شهرية تقتطع من راتبك، لنبني بعدها خطة الادخار والسيولة على أرض صلبة.`,
         actionSteps: isStudent
           ? [`تتبع نفقاتك اليومية لمدة أسبوع`, `تخصيص مبلغ رمزي (30-50 ريالاً) من ${incomeSrc} للادخار`]
-          : ['مراجعة كشف حساب الشهر الماضي ورصد النفقات غير الضرورية', 'تحديد مبلغ ثابت شهري للادخار التلقائي'],
+          : queryConfirmsNoDebt
+            ? ['مراجعة كشف حساب الشهر الماضي ورصد النفقات غير الضرورية', 'تحديد مبلغ ثابت شهري للادخار التلقائي']
+            : ['حصر جميع الأقساط والديون والالتزامات الشهرية الثابتة ونسبتها من الدخل', 'تحديد صافي الفائض النقدي الحقيقي قبل التزام أي نسبة ادخار'],
         reflectionQuestion: finCtxConfig.exploratoryQuestions[0]
       });
     }
@@ -759,7 +852,7 @@ export function generateLocalAgentResponse(
     }
 
     const sessionId = userProfile?.email || userName || 'default';
-    const spiritualFallback = pickNonRepeatingFallbackReply('spiritual', stationTurnCount, sessionId, userProfile, userName);
+    const spiritualFallback = pickNonRepeatingFallbackReply('spiritual', stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
     return formatAgentOutput({
       reasoning: `استكشاف روحي محايد ومتدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${spiritualFallback.index + 1}) دون تكرار حرفي.`,
       summary: `استكشاف واقع السكينة والحضور القلبي مع المستفيد بأسلوب محايد ومتدرج.`,
@@ -807,14 +900,14 @@ export function generateLocalAgentResponse(
           'تجنب أي التزامات أو أقساط استهلاكية جديدة أثناء البحث عن عمل'
         ];
       } else {
-        welcomeIntro = `مرحباً بك يا ${userName}! أنا ${advName} المستشار المالي لمنصة وزان.\n\nبصفتك موظفاً بدخل ${incomeStab || 'شهري ثابت'}${hasDep ? ' ولديك معالون وأسرة ترعاها' : ' وبدون معالين حالياً'}، هدفنا بناء ميزانية متزنة تحمي راتبك وتعزز الادخار وصندوق الطوارئ. ما الذي يشغل تفكيرك مالياً أو تود مراجعته معي اليوم؟`;
-        welcomeAdvice = `تطبيق قاعدة 50/30/20 وأتمتة ادخار جزء من الراتب فور استلامه.`;
+        welcomeIntro = `مرحباً بك يا ${userName}! أنا ${advName} المستشار المالي لمنصة وزان.\n\nبصفتك موظفاً بدخل ${incomeStab || 'شهري ثابت'}${hasDep ? ' ولديك معالون وأسرة ترعاها' : ' وبدون معالين حالياً'}، لا نفترض مسبقاً وجود فائض أو خلو السجل من الديون؛ لذا نبدأ دائماً بفحص التزاماتك الفعلية أولاً قبل اقتراح أتمتة الادخار أو الاستثمار. هل توجد عليك حالياً أي ديون أو أقساط تمويلية أو التزامات شهرية تقتطع من راتبك؟`;
+        welcomeAdvice = `التحقق أولاً من الأقساط والالتزامات الشهرية الثابتة قبل تخطيط أتمتة الادخار أو الاستثمار.`;
         welcomeQuestion = hasDep
-          ? `كيف توازن راتبك شهرياً بين التزامات الأسرة والمعالين والادخار وصندوق الطوارئ؟`
-          : `كيف توزع راتبك شهرياً، وما نسبة ما تدخره وتبني به صندوق طوارئك؟`;
+          ? `قبل التخطيط للادخار: هل تقتطع أي أقساط أو ديون جزءاً من راتبك بجانب نفقات الأسرة والمعالين، وكيف تصف تدفقك النقدي؟`
+          : `قبل التخطيط لأتمتة الادخار: هل توجد عليك حالياً أي ديون أو أقساط شهرية تقتطع من راتبك، وما حجم السيولة المتبقية فعلياً بعد الالتزامات؟`;
         welcomeSteps = [
-          'تدوين كافة المصروفات اليومية لمدة أسبوع لرصد الهدر',
-          'تحويل مبلغ تلقائي ثابت (حتى لو بسيط) لصندوق الادخار فور استلام الراتب'
+          'حصر الأقساط والديون والالتزامات الشهرية الثابتة ونسبتها من الراتب',
+          'تحديد صافي الفائض أو العجز الشهري الفعلي قبل اتخاذ قرارات الادخار'
         ];
       }
 
@@ -871,22 +964,41 @@ export function generateLocalAgentResponse(
     const isAdoptionIntent = isFinancialAdoption;
     if (isAdoptionIntent) {
       const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 5.8 : 5.5);
+      const fullFinContext = `${(historyTexts || []).join(' ')} ${message}`;
+      const hasExplicitNoDebt = /(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون|خلو\s*سجلي\s*من\s*الديون)/i.test(fullFinContext);
+      const hasUserMentionedDebt = !hasExplicitNoDebt && /(قرض|قروض|دين|ديون|أقساط|اقساط|بطاقة|فيزا|التزامات)/i.test(fullFinContext);
+      const debtAdoptionPhrase = hasUserMentionedDebt
+        ? 'وحصر التزاماتك والأقساط الشهرية لمعالجتها بواقعية'
+        : (isStudent && hasExplicitNoDebt
+          ? 'وخلو سجلك من الديون'
+          : (hasExplicitNoDebt ? 'وخلو سجلك من الديون وتنظيم ميزانيتك' : 'وضبط تدفقك النقدي ومراجعة التزاماتك الشهرية'));
       return formatAgentOutput({
-        reasoning: `المستفيد (${userName}) يطلب صراحة اعتماد التقييم المالي وإنهاء المحطة للانتقال للتالية. تم اعتماد الدرجة المستحقة (${finalScore.toFixed(1)}/10) وتثبيت صمام الأمان المالي دون طرح أي سؤال.`,
-        summary: `اعتماد تشخيص المحطة المالية وتثبيت صمام الأمان وخطة ترشيد المصاريف.`,
+        reasoning: `المستفيد (${userName}) يطلب صراحة اعتماد التقييم المالي وإنهاء المحطة للانتقال للتالية. تم اعتماد الدرجة المستحقة (${finalScore.toFixed(1)}/10) وتثبيت خطة واقعية متسقة مع حالة الالتزامات دون طرح أي سؤال.`,
+        summary: hasUserMentionedDebt
+          ? `اعتماد تشخيص المحطة المالية بأولوية إدارة الديون والأقساط وضبط التدفق النقدي.`
+          : `اعتماد تشخيص المحطة المالية وتحديد خطوة عملية متدرجة لحماية التدفق النقدي.`,
         advice: isStudent
           ? `اقتطاع مبلغ رمزي (30 إلى 50 ريالاً شهرياً) فور استلام ${studentIncomeTerm} كصمام أمان جامعي.`
-          : `تخصيص جزء ثابت من الدخل لحساب الطوارئ وتتبع المصروفات الاستهلاكية.`,
-        reply: `تم اعتماد تقييمك المالي بنجاح يا ${userName}! 💎\n\nأثبتّ وعياً كبيراً بصراحتك حول إدارة نفقاتك وخلو سجلك من أي ديون. خطتك بسيطة وفعالة: اقتطاع مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} كصمام أمان، وترشيد المصاريف غير الأساسية لإنهاء الشهر بأريحية ودون عجز.\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
+          : (hasUserMentionedDebt
+            ? `ترتيب أولويات سداد الأقساط والديون أولاً مع بناء صمام أمان مصغر وضبط التدفق النقدي.`
+            : (hasExplicitNoDebt
+              ? `تخصيص جزء ثابت من الدخل لحساب الطوارئ وتتبع المصروفات الاستهلاكية.`
+              : `حصر كافة الالتزامات الشهرية الثابتة وأي أقساط قائمة لتحديد الهامش الفعلي لصمام الأمان.`)),
+        reply: `تم اعتماد تقييمك المالي بنجاح يا ${userName}! 💎\n\nأثبتّ وعياً كبيراً بصراحتك حول إدارة نفقاتك ${debtAdoptionPhrase}. خطتك بسيطة وفعالة: ${isStudent ? `اقتطاع مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} كصمام أمان` : (hasUserMentionedDebt ? 'التركيز على إدارة الأقساط الشهرية وتدفق النقد وحماية صمام أمان مصغر' : (hasExplicitNoDebt ? 'تخصيص جزء ثابت لحساب الطوارئ وترشيد المصاريف' : 'جرد الالتزامات الشهرية وضبط التدفق النقدي لبناء صمام أمان تدريجي'))}، لإنهاء الشهر بأريحية.\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
         actionSteps: isStudent
           ? [
             `اقتطاع 30 إلى 50 ريالاً شهرياً في حصالة أو حساب ادخار فرعي فور استلام ${studentIncomeTerm}`,
             `تحديد سقف أسبوعي للمصاريف الشخصية والكمالية لحماية ميزانيتك`
           ]
-          : [
-            'تحويل مبلغ ثابت لصندوق الطوارئ فور استلام الراتب',
-            'تدوين المصروفات اليومية لمدة أسبوع لرصد مواضع الهدر'
-          ],
+          : hasUserMentionedDebt
+            ? [
+              'إعداد جدول واضح لحصر الأقساط والديون الشهرية وترتيب أولويات السداد',
+              'حماية صمام أمان نقدي مصغر يمنع الاستدانة عند أي طارئ'
+            ]
+            : [
+              'جرد الالتزامات الشهرية ومراقبة المصروفات اليومية لمدة أسبوع لتحديد الفائض الفعلي',
+              'تخصيص المبلغ المناسب لصمام الأمان في حساب منفصل وفق واقع الدخل'
+            ],
         score: finalScore,
         station_completed: true,
         reflectionQuestion: ''
@@ -914,12 +1026,14 @@ export function generateLocalAgentResponse(
           reflectionQuestion: 'كيف تخطط لحماية صمام الأمان من الصرف العفوي؟'
         });
       } else {
-        // ابتداءً من الجولة الرابعة (stationTurnCount >= 3): عرض التقييم وخيار الاعتماد
+        // ابتداءً من الجولة الرابعة (stationTurnCount >= 3): عرض التقييم وخيار الاعتماد بدون افتراض خلو الديون
+        const fullContextText = `${(historyTexts || []).join(' ')} ${msg}`;
+        const confirmedNoDebt = /(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون)/i.test(fullContextText);
         return formatAgentOutput({
           reasoning: `المستفيد وافق على تجربة الخطوة المالية الميكروية في الجولة (${stationTurnCount + 1}). بعد 4 جولات، نقدم تقييماً مرحلياً معتدلاً وخيار الاعتماد.`,
-          summary: `الاتفاق على البدء بصمام أمان مالي رمزي وضبط النفقات الشخصية.`,
-          advice: `البدء باقتطاع رمزي صغير فور استلام ${studentIncomeTerm} لكسر حاجز البداية.`,
-          reply: `خطوة ممتازة وموفقة يا ${userName}! 💎\n\nالبداية بمبلغ رمزي بسيط كصمام أمان والوعي بنفقاتك يضعك على الطريق الصحيح دون حرمان أو تعقيد.\n\nبعد ما شاركتني به عبر حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10) كطالب جامعي يتمتع بميزة جوهرية وهي خلو سجله من الديون، مع رغبته في بناء أول خط دفاع مالي ضد عجز نهاية الشهر.\n\nهل ترغب في اعتماد هذا التقييم وإنهاء الاستشارة والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`,
+          summary: `الاتفاق على خطوة عملية مبدئية لضبط التدفق النقدي وبناء الأمان المالي.`,
+          advice: `البدء بخطوة عملية محددة تتناسب مع التزاماتك الحقيقية لكسر حاجز البداية.`,
+          reply: `خطوة ممتازة وموفقة يا ${userName}! 💎\n\nالتزامك بخطوة عملية واضحة ومتابعة نفقاتك يضعك على الطريق الصحيح دون تعقيد.\n\nبعد ما شاركتني به عبر حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10)${isStudent && confirmedNoDebt ? ' مع الحفاظ على ميزة خلو سجلك من الديون وتأسيس أول خط دفاع مالي' : ' بناءً على واقع تدفقك النقدي والتزاماتك الحالية ورغبتك في التحسين'}.\n\nهل ترغب في اعتماد هذا التقييم وإنهاء الاستشارة والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`,
           actionSteps: [
             `اقتطاع 30 إلى 50 ريالاً في حصالة أو حساب فرعي فور استلام ${studentIncomeTerm} القادم`,
             `استبدال بند إنفاق غير ضروري واحد أسبوعياً ببديل اقتصادي`
@@ -951,9 +1065,9 @@ export function generateLocalAgentResponse(
       } else {
         return formatAgentOutput({
           reasoning: `المستفيد يؤكد عدم امتلاكه لصمام أمان حالياً وأنه ذكر ذلك سابقاً في الجولة (${stationTurnCount + 1}). عرض التقييم المرحلي وخيار الاعتماد.`,
-          summary: `تأكيد واقع عدم وجود صمام أمان مع خلو السجل من الديون، وعرض التقييم المرحلي.`,
-          advice: `التركيز على بناء صمام أمان رمزي ولو بـ 30 إلى 50 ريالاً شهرياً لحمايتك من عجز نهاية الشهر.`,
-          reply: `أسمعك بوضوح تام وأقدّر صراحتك يا ${userName}. عدم امتلاك صمام أمان حالياً أمر مفهوم جداً في هذه المرحلة، والهدف من وجودنا معاً هو تدارك هذا العجز بخطوات ميسرة دون الوقوع في أي ديون.\n\nبناءً على واقعك الصريح عبر حوارنا، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد هذا التقييم وإنهاء الاستشارة والانتقال للمحطة التالية، أم تفضل استكشاف تفصيل آخر؟`,
+          summary: `تأكيد واقع عدم وجود صمام أمان والحاجة لترتيب الأولويات النقدية، وعرض التقييم المرحلي.`,
+          advice: `التركيز على مراجعة الالتزامات وبناء صمام أمان تدريجي ميسر يحمي استقرارك الشهري.`,
+          reply: `أسمعك بوضوح تام وأقدّر صراحتك يا ${userName}. عدم امتلاك صمام أمان حالياً أمر مفهوم جداً في هذه المرحلة، والهدف من وجودنا معاً هو تدارك هذا الوضع بخطوات ميسرة دون الوقوع في ضغط أو ديون إضافية.\n\nبناءً على واقعك الصريح عبر حوارنا، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد هذا التقييم وإنهاء الاستشارة والانتقال للمحطة التالية، أم تفضل استكشاف تفصيل آخر؟`,
           actionSteps: [
             `تخصيص 30 إلى 50 ريالاً فقط من ${studentIncomeTerm} القادم كبداية لصمام الأمان`,
             'حصر المصاريف الشخصية للأيام السبعة القادمة لرصد الأولويات'
@@ -965,17 +1079,55 @@ export function generateLocalAgentResponse(
       }
     }
 
+    if (isRequestingAdvisorSuggestions(message)) {
+      const finSemantic = calculateSemanticScore(message, historyTexts || [], explicitRatingScore ?? undefined);
+      const balancedFinScore =
+        explicitRatingScore !== null
+          ? explicitRatingScore
+          : Math.max(finSemantic, score > 0 ? (score > 10 ? score / 10 : score) : 5.5);
+      const concreteFin = generateConcreteDomainSuggestions(
+        'financial',
+        [...(historyTexts || []), message],
+        userProfile,
+        balancedFinScore
+      );
+      const formattedFinList = concreteFin.map((s, idx) => `${idx + 1}. ${s}`).join('\n');
+      const sugReply =
+        stationTurnCount >= 3
+          ? `إليك 3 اقتراحات مالية عملية تناسب واقعك:\n\n${formattedFinList}\n\nبناءً على حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${balancedFinScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد هذا التقييم والبدء بإحدى هذه الخطوات، أم تفضل تعديلها؟`
+          : `إليك 3 اقتراحات مالية عملية تناسب واقعك:\n\n${formattedFinList}\n\nأيّ من هذه الخطوات تشعر أنها الأنسب لتجربتها أولاً؟`;
+
+      return formatAgentOutput({
+        reasoning: `تلبية طلب الاقتراحات المباشر في الجانب المالي ("${message}") عبر 3 خطوات عملية مبنية على الحوار.`,
+        summary: `تقديم 3 اقتراحات مالية عملية مخصصة لوضع المستفيد.`,
+        advice: synthesizeGoldenRecommendation({
+          areaId: 'financial',
+          userTexts: [...(historyTexts || []), message],
+          userProfile,
+          score: balancedFinScore,
+        }),
+        reply: sugReply,
+        actionSteps: concreteFin,
+        score: balancedFinScore,
+        station_completed: false,
+        reflectionQuestion:
+          stationTurnCount >= 3
+            ? 'هل ترغب في اعتماد التقييم الحالي أم تعديل أحد الاقتراحات؟'
+            : 'أيّ من هذه الخطوات الثلاث تشعر أنها الأنسب للبدء بها؟',
+      });
+    }
+
     if (msg.includes('وضح') || msg.includes('توضح') || msg.includes('لا ادري') || msg.includes('لا أدري') || msg.includes('كيف')) {
       return formatAgentOutput({
-        reasoning: `تحليل سيكولوجيا المال: المستفيد يحتاج توضيحاً عملياً. التحليل يفكك السلوك المالي إلى 3 ركائز: الفصل النفسي بين الرغبة والاحتياج، بناء صمام الأمان (صندوق الطوارئ)، وأتمتة الادخار قبل الاستهلاك.`,
-        summary: `توضيح استراتيجية المال الحكيم: فصل الاحتياج عن الرغبة، صندوق الطوارئ، والأتمتة الذكية.`,
-        advice: `خفض بند واحد من المصاريف الاستهلاكية بنسبة 20% هذا الشهر وتوجيهه للادخار.`,
-        reply: `يسعدني جداً أن أفسر لك الفكرة ببساطة وعمق يا ${userName}.\n\nالمال ليس مجرد لغة حسابية جافة، بل هو انعكاس لقراراتنا النفسية اليومية. التوضيح العملي الذي أقصده يتلخص في ثلاث ركائز رئيسية:\n\n1. **فصل الاحتياج عن الرغبة**: الاحتياج هو ما لا تستقيم حياتك بدونه (مسكن، طعام، فواتير أساسية). أما الرغبة فهي ما يمنحك متعة لحظية لكن تأجيله لا يضرك.\n2. **صمام الأمان (صندوق الطوارئ)**: أن تملك مبلغاً يكفيك لـ 3 إلى 6 أشهر في حساب منفصل يمنحك حرية نفسية هائلة ولا يجعلك رهينة لأي ضغط وظيفي أو طارئ مفاجئ.\n3. **الأتمتة الذكية**: ادخر واستثمر فور نزول الدخل تلقائياً، ثم عِش بما تبقى، بدلاً من أن تنفق وتنتظر ما يفيض.`,
+        reasoning: `تحليل سيكولوجيا المال: المستفيد يحتاج توضيحاً عملياً. التحليل يفكك الواقع المالي إلى حصر الالتزامات والأقساط أولاً، الفصل بين الرغبة والاحتياج، ثم بناء صمام الأمان وتوجيه الفائض المتبقي للادخار.`,
+        summary: `توضيح استراتيجية المال الحكيم: حصر الديون والالتزامات أولاً، فصل الاحتياج عن الرغبة، ثم بناء صمام الأمان.`,
+        advice: `ابدأ بحصر أقساطك والتزاماتك الشهرية أولاً لمعرفة الفائض الحقيقي قبل أي خطة ادخار.`,
+        reply: `يسعدني جداً أن أفسر لك الفكرة ببساطة وعمق يا ${userName}.\n\nالمال ليس مجرد لغة حسابية جافة، بل قرارات متزنة تبدأ بالواقع لا بالتخمين. التوضيح العملي الذي أقصده يتلخص في ثلاث خطوات متتابعة:\n\n1. **حصر الالتزامات والأقساط أولاً**: التأكد من قيمة أي ديون أو أقساط شهرية ثابتة تقتطع من الدخل لمعرفة التدفق النقدي المتاح فعلياً.\n2. **فصل الاحتياج عن الرغبة**: الاحتياج هو ما لا تستقيم حياتك بدونه (مسكن، طعام، فواتير والتزامات). أما الرغبة فهي ما يمكن تأجيله لحماية السيولة.\n3. **صمام الأمان وتوجيه الفائض**: بعد ترتيب الالتزامات وضبط الصرف، نخصص صمام أمان مصغراً أو ممتداً ثم نوجّه ما يتوفر فعلياً للادخار التلقائي دون إثقال ميزانيتك.`,
         actionSteps: [
-          'تحديد بند واحد من المصاريف الاستهلاكية وتخفيضه بنسبة 20% هذا الشهر',
-          'فتح حساب ادخار فرعي منفصل تماماً عن بطاقة الشراء اليومية'
+          'جرد الأقساط والالتزامات الشهرية الثابتة ونسبتها من الدخل الصافي',
+          'تحديد صافي الفائض المتاح فعلياً قبل اقتطاع أي نسبة ادخار تلقائي'
         ],
-        reflectionQuestion: 'إذا راجعت مشترياتك في الشهر الماضي، ما هو الشيء الذي اشتريته واكتشفت أنك لم تكن بحاجته حقاً؟'
+        reflectionQuestion: 'هل تقتطع أي أقساط أو التزامات دورية جزءاً من دخلك حالياً، أم يخلو سجلك منها؟'
       });
     }
 
@@ -993,17 +1145,36 @@ export function generateLocalAgentResponse(
     );
 
     if (hasActualDebtIntent) {
-      return formatAgentOutput({
-        reasoning: `إدارة الالتزامات المالية: التعامل مع الديون والبطاقات يتطلب استراتيجية باردة ومحكمة لتقليل التوتر النفسي. الحل يبدأ بحصر الأرقام بدقة وتطبيق طريقة كرة الثلج لسداد الأصغر أولاً لمنح دفعة معنوية.`,
-        summary: `خطة التخلص من الديون عبر استراتيجية كرة الثلج وإيقاف الاقتراض الاستهلاكي.`,
-        advice: `حصر الديون من الأصغر للأكبر وسداد أصغر التزام أولاً لتحقيق انتصار نفسي.`,
-        reply: `التعامل مع الالتزامات والديون يا ${userName} يتطلب خطة منهجية باردة وهادئة:\n1. حصر المبالغ الإجمالية وسعر الفائدة لكل بطاقة أو دين.\n2. تطبيق استراتيجية 'كرة الثلج': سداد أصغر دين أولاً لتحقيق انتصار نفسي سريع.\n3. إيقاف استخدام البطاقات الائتمانية في الشراء اليومي فوراً.\nكل دين يمكن التخلص منه إذا التزمت بمسار محكم دون هلع.`,
-        actionSteps: [
-          'إعداد جدول بسيط لحصر الديون مرتبة من الأصغر إلى الأكبر',
-          'تجميد البطاقة الائتمانية والاعتماد على بطاقة مسبقة الدفع بميزانية محددة'
-        ],
-        reflectionQuestion: 'ما هي المصاريف غير الضرورية التي لو أوقفتها شهرياً ستعجل بسداد ديونك؟'
-      });
+      const interimScore = 4.8;
+      if (stationTurnCount < 3) {
+        return formatAgentOutput({
+          reasoning: `إدارة الالتزامات المالية: التعامل مع الديون والأقساط يتطلب خطة منهجية باردة تبدأ بحصر الالتزامات وترتيب الأولويات بدلاً من افتراض مرونة نقدية كاملة.`,
+          summary: `إعطاء الأولوية لإدارة الأقساط والديون وضبط التدفق النقدي بدلاً من الاستهلاك أو الاستثمار المتسرع.`,
+          advice: `حصر الأقساط والديون وسداد الأكثر تكلفة أو الأصغر أولاً (طريقة كرة الثلج) مع تأمين صمام أمان مصغر.`,
+          reply: `التعامل مع الالتزامات والأقساط يا ${userName} يتطلب خطة منهجية باردة وهادئة تسبق أي تفكير في أتمتة الادخار أو بناء الأصول:\n1. حصر المبالغ الإجمالية والأقساط الشهرية ونسبتها من راتبك.\n2. ترتيب خطة السداد (سداد أصغر دين أولاً لمنح دفعة معنوية، أو الأعلى كلفة).\n3. تأمين صمام أمان نقدي مصغر لحمايتك من الاستدانة مجدداً عند أي طارئ.\nكل التزام يمكن تفكيكه إذا وضعنا له مساراً واقعياً محكماً.`,
+          actionSteps: [
+            'إعداد جدول بسيط لحصر الأقساط والديون الشهرية ونسبتها من الدخل',
+            'تجميد أي تسهيلات ائتمانية إضافية والاعتماد على ميزانية نقدية محددة'
+          ],
+          score: interimScore,
+          station_completed: false,
+          reflectionQuestion: 'ما هو القسط أو الالتزام الذي تشعر أنه يضغط على راتبك أكثر وتتمنى الانتهاء منه أولاً؟'
+        });
+      } else {
+        return formatAgentOutput({
+          reasoning: `المستفيد أشار إلى وجود التزامات وأقساط في الجولة (${stationTurnCount + 1}). تطبيق قاعدة الجولة الرابعة وتقديم تقييم مرحلي وخيار الاعتماد مع التركيز على خطة سداد الديون.`,
+          summary: `تشخيص واقع الأقساط والديون وتحديد خطة سداد هادئة مع عرض التقييم المرحلي.`,
+          advice: `حصر الديون من الأصغر للأكبر وسداد أصغر التزام أولاً لتحقيق انتصار نفسي وتخفيف عبء الميزانية.`,
+          reply: `أحييك على صراحتك وشجاعتك يا ${userName}. الاعتراف بواقع الأقساط والالتزامات هو الخطوة الحقيقية الأولى لبناء استقرارك المالي واستعادة حريتك.\n\nبعد ما شاركتني به حتى الآن، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10). هذا تقييم مبدئي مبني على وجود التزامات شهرية تتطلب خطة سداد واضحة قبل التوسع في الادخار.\n\nهل ترغب في اعتماد هذا التقييم وإنهاء الاستشارة والانتقال للمحطة التالية، أم تفضل مواصلة الحوار لضبط تفاصيل خطة السداد؟`,
+          actionSteps: [
+            'إعداد جدول بسيط لحصر الأقساط والديون الشهرية ونسبتها من الدخل',
+            'تحديد بند إنفاق غير ضروري واحد لتوجيهه كدفعة إضافية معجلة لسداد أصغر قسط'
+          ],
+          score: interimScore,
+          station_completed: false,
+          reflectionQuestion: 'هل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية؟'
+        });
+      }
     }
 
     const fallbackScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 5.5 : 5.0);
@@ -1012,6 +1183,49 @@ export function generateLocalAgentResponse(
     const incomeIsSmall = /(قليل|بسيط|محدود|كونه قليل)/i.test(msg);
     const doesNotWork = /(لا اعمل|لا أعمل|ما اشتغل|ما أشتغل|طالب لا اعمل)/i.test(msg);
     const userMentionsRestaurants = /(مطاعم|مطعم|كافيهات|مقاهي|اكل برا|أكل برا|طلبات|هنقرستيشن|جاهز)/i.test(msg);
+    const detectedExpenseCategory = extractExpenseCategoryFromAnswer(message);
+    const debtStatusAlreadyClarified = hasDebtStatusAnswered(historyTexts || [], message);
+
+    // اعتراف مباشر ببند إنفاق ذكره المستفيد (مثل: "ممكن الاكل في المطاعم") لكل من الموظف والطالب دون تحية مكررة أو إعادة سؤال
+    if (detectedExpenseCategory) {
+      const debtCheckQ =
+        'وقبل أن نضع خطة لضبط هذا البند أو تحديد مبلغ للادخار: هل توجد عليك حالياً أي ديون أو أقساط شهرية ثابتة تقتطع من دخلك؟';
+      const canAskDebtCheck =
+        !isStudent &&
+        !debtStatusAlreadyClarified &&
+        !isQuestionAlreadyAsked(debtCheckQ, historyTexts || []);
+
+      const finPool = getDomainContextConfig('financial', parsedCtx).exploratoryQuestions;
+      const nextUnaskedFin = pickNextUnaskedQuestion(finPool, historyTexts || [], stationTurnCount);
+      const nextFollowupQ = canAskDebtCheck
+        ? debtCheckQ
+        : stationTurnCount >= 3
+          ? `أقيّم وضعك الحالي مبدئياً بدرجة (${fallbackScore.toFixed(1)}/10). هل ترغب في اعتماد هذا التقييم والبدء بخطة ضبط بند ${detectedExpenseCategory}، أم نواصل الحوار؟`
+          : (nextUnaskedFin.question ||
+            `ما السقف الأسبوعي المرن الذي تراه مناسباً لبند ${detectedExpenseCategory} حتى لا يضغط على آخر الشهر؟`);
+
+      const directAckReply = isStudent
+        ? `وضحت الصورة${isEditedOrResent ? ' بعد تعديل إجابتك' : ''}؛ الإنفاق المتكرر على **${detectedExpenseCategory}** قد يلتهم جانباً كبيراً من ${studentIncomeTerm} دون ملاحظة.\n\nالخطوة العملية الأذكى هنا هي تخصيص سقف أسبوعي واضح لهذا البند وحماية مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm}.\n\n${nextFollowupQ}`
+        : `وضحت الصورة${isEditedOrResent ? ' بعد تعديل إجابتك' : ''}؛ تسرب جزء من السيولة نحو **${detectedExpenseCategory}** يعد من البنود القابلة للضبط السريع دون التأثير على احتياجاتك الأساسية.\n\n${nextFollowupQ}`;
+
+      return formatAgentOutput({
+        reasoning: `اعتراف مباشر بإجابة المستفيد ("${message}") وتصنيفها كبند إنفاق فعلي (${detectedExpenseCategory}) مع الانتقال للخطوة المنطقية التالية دون تكرار التحية أو السؤال السابق.`,
+        summary: `رصد تسرب الإنفاق في ${detectedExpenseCategory} والانتقال للخطوة المالية التالية.`,
+        advice: canAskDebtCheck
+          ? `حصر أي أقساط أو ديون شهرية أولاً بالتوازي مع وضع سقف أسبوعي لبند ${detectedExpenseCategory}.`
+          : `وضع سقف أسبوعي واضح لبند ${detectedExpenseCategory} وحماية الفائض في صمام الأمان.`,
+        reply: directAckReply,
+        actionSteps: [
+          `تحديد سقف أسبوعي واضح لبند ${detectedExpenseCategory}`,
+          canAskDebtCheck
+            ? 'حصر الأقساط والالتزامات الشهرية الثابتة لمعرفة صافي التدفق النقدي'
+            : 'توجيه الفارق الأسبوعي لحساب صمام الأمان',
+        ],
+        score: fallbackScore,
+        station_completed: false,
+        reflectionQuestion: nextFollowupQ,
+      });
+    }
 
     let studentReply = '';
     let studentActionSteps: string[] = [];
@@ -1027,7 +1241,7 @@ export function generateLocalAgentResponse(
         ? `هل ترغب في اعتماد هذا التقييم وخطة البداية برمزية بسيطة (30-50 ريالاً) والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`
         : `ما رأيك في تجربة اقتطاع هذا المبلغ الرمزي البسيط (30-50 ريالاً) من ${studentIncomeTerm} القادم كأول حصالة أمان جامعي؟ هل تراه مناسباً لواقعك؟`;
     } else if (userMentionsRestaurants) {
-      studentReply = `أسمعك باهتمام يا ${userName}.\n\nالواقع المالي في المرحلة الجامعية لا يتطلب تعقيداً بل خطوة بسيطة ومستدامة: اقتطاع مبلغ رمزي كصمام أمان أول، وترشيد مصاريف المطاعم لحماية ${studentIncomeTerm} حتى نهاية الشهر.`;
+      studentReply = `وضحت الصورة يا ${userName}.\n\nالواقع المالي في المرحلة الجامعية لا يتطلب تعقيداً بل خطوة بسيطة ومستدامة: اقتطاع مبلغ رمزي كصمام أمان أول، وترشيد مصاريف المطاعم لحماية ${studentIncomeTerm} حتى نهاية الشهر.`;
       studentActionSteps = [
         `تخصيص مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} القادم`,
         `تحديد سقف لمصاريف المطاعم والمقاهي لحماية ميزانيتك`
@@ -1037,9 +1251,9 @@ export function generateLocalAgentResponse(
         : `ما الخطوة البسيطة التي ترى أنها ستساعدك في ضبط هذا البند حتى نهاية الشهر؟`;
     } else {
       const finSessionId = userProfile?.email || userName || 'default';
-      const finFallback = pickNonRepeatingFallbackReply('financial', stationTurnCount, finSessionId, userProfile, userName);
-      studentReply = stationTurnCount === 0
-        ? `أسمعك باهتمام يا ${userName}.\n\nفي المرحلة الجامعية لا يتطلب الأمر تعقيداً، بل خطوة ميسرة تناسب واقعك كطالب لتأسيس أول صمام أمان جامعي من ${studentIncomeTerm}.\n\n${finFallback.reply}`
+      const finFallback = pickNonRepeatingFallbackReply('financial', stationTurnCount, finSessionId, userProfile, userName, historyTexts || []);
+      studentReply = stationTurnCount === 0 && !hasPriorHistory
+        ? `في المرحلة الجامعية لا يتطلب الأمر تعقيداً، بل خطوة ميسرة تناسب واقعك كطالب لتأسيس أول صمام أمان جامعي من ${studentIncomeTerm}.\n\n${finFallback.reply}`
         : finFallback.reply;
       studentActionSteps = [
         `تخصيص مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} القادم كصمام أمان`,
@@ -1052,23 +1266,25 @@ export function generateLocalAgentResponse(
 
     const finGeneralSessionId = userProfile?.email || userName || 'default';
     const nonStudentFallback = !isStudent
-      ? pickNonRepeatingFallbackReply('financial', stationTurnCount, finGeneralSessionId, userProfile, userName)
+      ? pickNonRepeatingFallbackReply('financial', stationTurnCount, finGeneralSessionId, userProfile, userName, historyTexts || [])
       : null;
 
     return formatAgentOutput({
-      reasoning: `تحليل مالي متكيف (${status}): فحص مدخلات المستفيد ("${message}") وتوجيهه نحو الخطوة المالية الميسرة وصمام الأمان دون تكرار حرفي.`,
-      summary: `التركيز على العادات المالية البسيطة المنتظمة كأقوى رافعة للأمان والاستقرار المالي.`,
+      reasoning: `تحليل مالي متكيف (${status}): فحص مدخلات المستفيد ("${message}") والتحقق من التزاماته وأقساطه وتدفقه النقدي الفعلي دون افتراض خلوه من الديون أو تكرار حرفي.`,
+      summary: isStudent
+        ? `التركيز على العادات المالية البسيطة المنتظمة كأقوى رافعة للأمان والاستقرار المالي.`
+        : `التحقق من الالتزامات والأقساط الشهرية وفحص التدفق النقدي الفعلي قبل تخطيط الادخار.`,
       advice: isStudent
         ? `البدء باقتطاع رمزي بسيط (30-50 ريالاً) من ${studentIncomeTerm} في حصالة لكسر حاجز البداية.`
-        : `تطبيق قاعدة التريث لمدة 24 ساعة قبل شراء أي سلعة غير ضرورية.`,
+        : `ابدأ بحصر أي أقساط أو التزامات شهرية ثابتة لمعرفة صافي التدفق النقدي المتاح فعلياً قبل تخطيط الادخار.`,
       reply: isStudent
         ? studentReply
-        : (nonStudentFallback?.reply || `أفهم مقصدك تماماً يا ${userName}. كيف تدير عادة التوفيق بين التزاماتك اليومية والادخار الاحتياطي؟`),
+        : (nonStudentFallback?.reply || `لو نظرنا للأسبوع القادم، ما الخطوة المالية العملية الأهم لضبط تدفقك النقدي بين حصر الالتزامات أو وضع سقف لبند متكرر؟`),
       actionSteps: isStudent
         ? studentActionSteps
         : [
-          'تطبيق قاعدة الـ 24 ساعة قبل شراء أي سلعة غير ضرورية',
-          'مراجعة الاشتراكات المتكررة وإلغاء ما لا يُستخدم'
+          'حصر جميع الأقساط والالتزامات الشهرية الثابتة ونسبتها من الراتب',
+          'تحديد صافي الفائض أو العجز النقدي قبل اتخاذ أي التزام ادخاري'
         ],
       score: fallbackScore,
       station_completed: false,
@@ -1125,7 +1341,7 @@ export function generateLocalAgentResponse(
     }
 
     const sessionId = userProfile?.email || userName || 'default';
-    const healthFallback = pickNonRepeatingFallbackReply('health', stationTurnCount, sessionId, userProfile, userName);
+    const healthFallback = pickNonRepeatingFallbackReply('health', stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
     return formatAgentOutput({
       reasoning: `استكشاف صحي متدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${healthFallback.index + 1}) دون تكرار حرفي.`,
       summary: `متابعة استكشاف العادات الصحية والطاقة البدنية اليومية بتدرج محايد.`,
@@ -1152,7 +1368,7 @@ export function generateLocalAgentResponse(
         reasoning: `تحليل مهني استباقي متكيف (${status}): توجيه المستفيد لبناء إنتاجيته وفق واقعه الفعلي.`,
         summary: `الترحيب واستكشاف بوصلة الإنتاجية والتطور في مسار (${status}).`,
         advice: isStudent
-          ? 'تخصيص ساعة عمل عميق (Deep Work) للمشاريع الأكاديمية وصقل المهارات بعيداً عن المشتتات.'
+          ? 'تخصيص ساعة عمل عميق للمشاريع الأكاديمية وصقل المهارات بعيداً عن المشتتات.'
           : isJobSeeker
             ? 'تنظيم جدول يومي متوازن للتقديم على الفرص وتطوير المهارات المطلوبة.'
             : 'حجز أول 90 دقيقة من يوم العمل للمهمة الأكثر تأثيراً في المربع الثاني.',
@@ -1212,7 +1428,7 @@ export function generateLocalAgentResponse(
     }
 
     const sessionId = userProfile?.email || userName || 'default';
-    const careerFallback = pickNonRepeatingFallbackReply('career', stationTurnCount, sessionId, userProfile, userName);
+    const careerFallback = pickNonRepeatingFallbackReply('career', stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
     return formatAgentOutput({
       reasoning: `استكشاف مهني متدرج (المحرك المحلي الاحتياطي - جولة ${stationTurnCount + 1}، رد #${careerFallback.index + 1}) دون تكرار حرفي.`,
       summary: `توجيه المستفيد لاستكشاف أولوياته وحماية ساعات التركيز دون تكرار.`,
@@ -1229,18 +1445,62 @@ export function generateLocalAgentResponse(
   if (agentKey === 'personal') {
     const isPersonalAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(msg);
     const isPersonalCommitment = /(عادة|أجرب|اجرب|سأجرب|سوف\s*احاول|سأحاول|تفريغ|كتابة|تدوين|انتصار|10\s*دقائق|15\s*دقيقة)/i.test(msg);
+    const isPersonalAcuteIsolation = hasAcuteIsolationOrRejection([...(historyTexts || []), message]);
+    const personalExplicitRating = extractExplicitRating(message);
+    const personalFairScore =
+      personalExplicitRating !== null
+        ? personalExplicitRating
+        : calculateSemanticScore(message, historyTexts || [], undefined);
 
     if (isPersonalAdoption) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8;
+      const finalScore = isPersonalAcuteIsolation
+        ? personalFairScore
+        : (score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8);
       return formatAgentOutput({
         reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
-        summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة الرأفة بالذات والانتصار الصغير.`,
-        advice: 'الرفق بالذات والتركيز على العادات الصغيرة يبني ثقة داخلية راسخة.',
-        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🌸\n\nوعيك بمشاعرك وصراحتك مع ذاتك هو أولى خطوات القوة والاتزان. خطتك ترتكز على إيقاف المقارنات وتحقيق انتصار يومي هادئ، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
-        actionSteps: ['تدوين انتصار يومي صغير قبل النوم', 'التوقف عن جلد الذات واستبداله بالحوار الداخلي المشجع'],
+        summary: isPersonalAcuteIsolation
+          ? `اعتماد تقييم ${stationTitle} بواقعية (${finalScore.toFixed(1)}/10) مع احترام حدود العزلة والتركيز على حماية الاتزان الفردي.`
+          : `اعتماد تقييم ${stationTitle} وتثبيت عادة الرأفة بالذات والانتصار الصغير.`,
+        advice: isPersonalAcuteIsolation
+          ? 'حماية مساحتك الفردية الهادئة خطوة مشروعة، مع أهمية بناء مرساة نفسية تحميك من أثر التوتر والعزلة.'
+          : 'الرفق بالذات والتركيز على العادات الصغيرة يبني ثقة داخلية راسخة.',
+        reply: isPersonalAcuteIsolation
+          ? `تم اعتماد تقييمك في ${stationTitle} بواقعية وموضوعية (${finalScore.toFixed(1)}/10) يا ${userName}. 🌸\n\nأحترم حدودك وصراحتك في حماية مساحتك الشخصية، وستركز خطتك في هذه المرحلة على تهدئة الضغط النفسي والحفاظ على توازنك الفردي دون إجبار أو لوم.`
+          : `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🌸\n\nوعيك بمشاعرك وصراحتك مع ذاتك هو أولى خطوات القوة والاتزان. خطتك ترتكز على إيقاف المقارنات وتحقيق انتصار يومي هادئ، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
+        actionSteps: isPersonalAcuteIsolation
+          ? ['تخصيص وقت فردي هادئ يومياً لتفريغ التوتر وحماية سلامك النفسي', 'تدوين مشاعرك وحدودك بوضوح دون جلد للذات']
+          : ['تدوين انتصار يومي صغير قبل النوم', 'التوقف عن جلد الذات واستبداله بالحوار الداخلي المشجع'],
         score: finalScore,
         station_completed: true,
         reflectionQuestion: ''
+      });
+    }
+
+    if (isPersonalAcuteIsolation) {
+      if (stationTurnCount < 3) {
+        return formatAgentOutput({
+          reasoning: `رصد سلبية صريحة وعزلة حادة أو رفض للجلوس مع الآخرين في ${stationTitle} (${personalFairScore.toFixed(1)}/10). احترام حدود المستفيد دون افتراض تقصير أو إلزام بمخالطة.`,
+          summary: `احترام حدود المستفيد وتقييم أثر العزلة والتوتر المحيط على توازنه الشخصي (${personalFairScore.toFixed(1)}/10).`,
+          advice: 'الهدوء النفسي يبدأ باحترام حدودك وحماية مساحتك الفردية من استنزاف التوتر.',
+          reply: `أقدر صراحتك التامة يا ${userName} 🌸، وأحترم حقك في حماية مساحتك والابتعاد عن الأجواء التي تسبب لك الأذى أو الاستنزاف.\n\nوجود هذا القدر من التوتر والانفصال المستمر يترك أثراً ثقيلاً على توازنك النفسي اليومي؛ كيف ينعكس هذا الوضع على راحتك الذهنية ومستوى طاقتك في بقية يومك؟`,
+          actionSteps: ['الحفاظ على مساحة هادئة منفردة لاستعادة الاتزان الذهني دون شعور بالذنب'],
+          score: personalFairScore,
+          station_completed: false,
+          reflectionQuestion: 'كيف ينعكس هذا الوضع على راحتك الذهنية ومستوى طاقتك في بقية يومك؟'
+        });
+      }
+      return formatAgentOutput({
+        reasoning: `استمرار العزلة الحادة أو سوء المعاملة في ${stationTitle} بالجولة (${stationTurnCount + 1}). منح درجة واقعية منخفضة (${personalFairScore.toFixed(1)}/10) دون تضخيم أو افتراض تقصير.`,
+        summary: `تقييم واقعي لأثر العزلة الحادة والتوتر على الجانب الشخصي (${personalFairScore.toFixed(1)}/10).`,
+        advice: 'ثبّت روتيناً فردياً هادئاً يحمي استقرارك الداخلي بعيداً عن مصادر الأذى والتوتر.',
+        reply: `أفهم موقفك وأحترم حدودك يا ${userName} 🌸، فالصراحة مع النفس أفضل من المجاملة على حساب راحتك.\n\nومع وجود هذا الضغط والانقطاع المستمر عن المحيط، فإن الجانب الشخصي يتأثر بوضوح في هذه المرحلة؛ لذا أقيّم وضعك الحالي بموضوعية بدرجة (${personalFairScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل إضافة ما يساعدنا في دعم توازنك الفردي؟`,
+        actionSteps: [
+          'تخصيص وقت فردي منتظم للهدوء واستعادة الصفاء النفسي',
+          'الاستعانة بتدوين المشاعر أو بمختص نفسي/أسري موثوق إذا استمر الضغط المحيط'
+        ],
+        score: personalFairScore,
+        station_completed: false,
+        reflectionQuestion: 'هل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل إضافة ما يساعدنا في دعم توازنك الفردي؟'
       });
     }
 
@@ -1452,7 +1712,7 @@ export function generateLocalAgentResponse(
       reasoning: `تحليل تكاملي عام لمنظومة الحياة: النظر في رسالة المستفيد (${message}) واستخلاص العادة المحورية التآزرية التي تحرك أكثر من جانب في وقت واحد.`,
       summary: `تطبيق مبدأ العادات التآزرية المركبة لتحقيق أعلى أثر بأقل مجهود في عجلة الحياة.`,
       advice: `اختر عادة واحدة تخدم جانبين معاً (كالرياضة مع بودكاست معرفي، أو جلسة عائلية بحديث هادف).`,
-      reply: `أهلاً بك يا ${userName}. تأملت في رسالتك: "${message}".\nفي هندسة توازن الحياة، لا نحاول إصلاح كل شيء دفعة واحدة؛ بل نبحث عن 'الرافعة الكبرى' (Leverage Point). عندما نحدد العادة الصحيحة، فإنها تطلق أثراً إيجابياً متعدياً يضيء أكثر من ركن في عجلة حياتك.`,
+      reply: `أهلاً بك يا ${userName}. تأملت في رسالتك: "${message}".\nفي هندسة توازن الحياة، لا نحاول إصلاح كل شيء دفعة واحدة؛ بل نبحث عن 'الرافعة الكبرى' (نقطة التأثير الأعلى). عندما نحدد العادة الصحيحة، فإنها تطلق أثراً إيجابياً متعدياً يضيء أكثر من ركن في عجلة حياتك.`,
       actionSteps: [
         'تحديد عادة محورية تخدم مجالين في آن واحد',
         'مراجعة شاشات الداشبورد لتحديد مواضع التباين بين الجوانب'
@@ -1495,10 +1755,18 @@ export function generateLocalAgentResponse(
   // 6. مسار جلسات التقييم الحواري التكيفي (Doctor-Like Clinical Evaluation Session)
   if (isEvaluationSession) {
     const explicitEvalRating = extractExplicitRating(message);
-    const parsedScore = explicitEvalRating !== null ? explicitEvalRating : (score > 0 ? (score > 10 ? score / 10 : score) : 6.0);
-    const isGreeting = /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(message) && message.length < 25;
-    const isShortVague = (message.length < 25 || isGreeting) && explicitEvalRating === null;
-    const isUserAsking = /[؟?]/.test(message) || /^(?:كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|ممكن|تنصحني|رايك|رأيك)(?:\s|$)/i.test(coreMsg);
+    const semanticEvalScore = calculateSemanticScore(message, historyTexts || [], explicitEvalRating ?? undefined);
+    const isEvalAcuteIsolation = hasAcuteIsolationOrRejection([...(historyTexts || []), message]);
+    const normalizedCallerScore = score > 0 ? (score > 10 ? score / 10 : score) : 0;
+    const parsedScore =
+      explicitEvalRating !== null
+        ? explicitEvalRating
+        : isEvalAcuteIsolation
+          ? semanticEvalScore
+          : Math.max(semanticEvalScore, normalizedCallerScore >= 6.5 ? semanticEvalScore : normalizedCallerScore || semanticEvalScore);
+    const isGreeting = !isEditedOrResent && !hasPriorHistory && /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(message) && message.length < 25;
+    const isShortVague = (message.length < 25 || isGreeting) && explicitEvalRating === null && !extractExpenseCategoryFromAnswer(message);
+    const isUserAsking = isGenuineUserQuestion(message);
 
     // إذا طرح المستفيد سؤالاً أو استفساراً، نجيب عليه فوراً كطبيب خبير
     let directAnswer = '';
@@ -1543,6 +1811,12 @@ export function generateLocalAgentResponse(
     const isUserWantingToContinue = /(تعمق|التعمق|أكمل|اكمل|مواصلة|نواصل|استمر|المتابعة|زاوية أخرى)/i.test(msg);
 
     if (isUserConfirmingCompletion) {
+      const goldenAdv = synthesizeGoldenRecommendation({
+        areaId: agentKey,
+        userTexts: [...(historyTexts || []), message].filter(Boolean),
+        userProfile,
+        score: parsedScore,
+      });
       return formatAgentOutput({
         agent_name: advName,
         score: parsedScore,
@@ -1557,10 +1831,46 @@ export function generateLocalAgentResponse(
         ],
         reasoning: `المستفيد (${userName}) اختار صراحة اعتماد التقييم وإنهاء المحطة ("${message}").`,
         summary: `تم اعتماد تقييم محطة ${stationTitle} بنجاح.`,
-        advice: `التوازن يبدأ بخطوة واضحة ومستمرة.`,
+        advice: goldenAdv,
         reply: `تم اعتماد تقييمك في محطة ${stationTitle} بنجاح بدرجة (${parsedScore}/10) يا ${userName}! 🎯\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
-        actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
+        actionSteps: [goldenAdv, ...(advisor?.defaultGoals?.slice(0, 1) || [])],
         reflectionQuestion: ''
+      });
+    }
+
+    if (isRequestingAdvisorSuggestions(message) && !isUserConfirmingCompletion) {
+      const concreteSuggestions = generateConcreteDomainSuggestions(
+        agentKey,
+        [...(historyTexts || []), message].filter(Boolean),
+        userProfile,
+        parsedScore
+      );
+      const formattedList = concreteSuggestions.map((s, idx) => `${idx + 1}. ${s}`).join('\n');
+      const directSugReply =
+        stationTurnCount >= 3
+          ? `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${stationTitle}:\n\n${formattedList}\n\nبناءً على حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${parsedScore}/10).\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل تعديل أحد هذه الاقتراحات؟`
+          : `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${stationTitle}:\n\n${formattedList}\n\nأيّ من هذه الخطوات الثلاث تشعر أنها الأقرب لتجربتها هذا الأسبوع؟`;
+
+      return formatAgentOutput({
+        agent_name: advName,
+        score: parsedScore,
+        station_completed: false,
+        strengths: [`الوضوح في توصيف واقع ${stationTitle} والرغبة في حل عملي`],
+        challenges: [concreteSuggestions[0] || `تطبيق خطوة عملية واضحة في ${stationTitle}`],
+        reasoning: `تلبية طلب الاقتراحات المباشر للمستفيد ("${message}") عبر 3 خطوات متسقة مع الحوار${stationTurnCount >= 3 ? ' وعرض التقييم المبدئي' : ''}.`,
+        summary: `تقديم 3 اقتراحات عملية مخصصة في ${stationTitle}.`,
+        advice: synthesizeGoldenRecommendation({
+          areaId: agentKey,
+          userTexts: [...(historyTexts || []), message].filter(Boolean),
+          userProfile,
+          score: parsedScore,
+        }),
+        reply: directSugReply,
+        actionSteps: concreteSuggestions,
+        reflectionQuestion:
+          stationTurnCount >= 3
+            ? 'هل ترغب في اعتماد التقييم الحالي أم تعديل أحد الاقتراحات؟'
+            : 'أيّ من هذه الخطوات الثلاث تشعر أنها الأنسب للبدء بها؟',
       });
     }
 
@@ -1582,7 +1892,12 @@ export function generateLocalAgentResponse(
         challenges: dynamicChallenges,
         reasoning: `قاعدة الجولات الأربع والتقييم المرحلي (المحطة ${evaluationStep || 1} من 8: ${stationTitle} - الجولة ${stationTurnCount + 1}): عرض الدرجة المبدئية (${parsedScore}/10) وتخيير المستشير بين الاعتماد أو مواصلة الحوار.`,
         summary: `عرض التقييم المرحلي المبدئي (${parsedScore}/10) لمحطة ${stationTitle} والتخيير بين الاعتماد أو التعمق.`,
-        advice: `التوازن يبدأ بخطوة واضحة ومستمرة.`,
+        advice: synthesizeGoldenRecommendation({
+          areaId: agentKey,
+          userTexts: [...(historyTexts || []), message].filter(Boolean),
+          userProfile,
+          score: parsedScore,
+        }),
         reply: `بعد ما شاركتني به عبر حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${parsedScore}/10). هذا تقييم مبدئي مبني على المعلومات التي ذكرتها، وقد يتغير إذا واصلنا الاستكشاف.\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة؟`,
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
         reflectionQuestion: 'هل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار؟'
@@ -1607,7 +1922,7 @@ export function generateLocalAgentResponse(
       }
 
       const sessionId = userProfile?.email || userName || 'default';
-      const rotatedFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId, userProfile, userName);
+      const rotatedFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
 
       let dynamicReply = rotatedFallback.reply;
       if (directAnswer) {
@@ -1630,7 +1945,13 @@ export function generateLocalAgentResponse(
     }
 
     // إذا اختار المستفيد اعتماد التقييم
-    const goldenHabit = advisor?.defaultGoals?.[0] || 'المحافظة على وتيرتك الطيبة خلال الأسبوع القادم';
+    const goldenHabit = synthesizeGoldenRecommendation({
+      areaId: agentKey,
+      userTexts: [...(historyTexts || []), message].filter(Boolean),
+      userProfile,
+      score: parsedScore,
+      advisorCandidate: advisor?.defaultGoals?.[0],
+    });
     const dynamicStrengths = [
       `وعي صريح وشفافية في تشخيص واقع ${stationTitle}`,
       `الرغبة الصادقة في بناء نمط متزن واستعادة السيطرة`
@@ -1668,7 +1989,7 @@ export function generateLocalAgentResponse(
 
   const advInfo = fallbackAdvisors[agentKey] || { role: advisor?.role || 'مستشار توازن الحياة', name: advName };
   const sessionId = userProfile?.email || userName || 'default';
-  const domainFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId, userProfile, userName);
+  const domainFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
 
   return formatAgentOutput({
     agent_name: advInfo.name,

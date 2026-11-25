@@ -46,7 +46,7 @@ export const StationCelebrationModal: React.FC<StationCelebrationModalProps> = (
           <div className="inline-flex items-center gap-1.5 text-xs font-bold px-3.5 py-1.5 rounded-full mb-2 bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 shadow-2xs">
             <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
             <span className="font-extrabold">
-              اكتمل تقييم المحطة {stationNumber} من 8 بنجاح
+              اكتمل تقييم المحطة <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{stationNumber} / 8</span> بنجاح
             </span>
           </div>
           <h3 className="text-2xl font-black text-[#0F172A] dark:text-[#F1F5F9]">
@@ -62,8 +62,8 @@ export const StationCelebrationModal: React.FC<StationCelebrationModalProps> = (
           <div>
             <span className="text-[11px] text-[#334155] dark:text-[#CBD5E1] block">درجة الجانب</span>
             <span
-              className="text-3xl font-black font-mono"
-              style={{ color: currentAdvisor.themeColor }}
+              className="text-3xl font-black font-mono inline-block [unicode-bidi:isolate]"
+              style={{ color: currentAdvisor.themeColor, unicodeBidi: 'isolate' }}
               dir="ltr"
             >
               {Number(currentActiveInsights.score > 0 ? currentActiveInsights.score : 7.5).toFixed(1)}{' '}

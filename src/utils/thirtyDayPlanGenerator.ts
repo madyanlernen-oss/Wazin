@@ -12,7 +12,7 @@ export const DOMAIN_META: Record<LifeAreaId, { title: string; icon: string; colo
   personal: { title: 'تطوير الذات', icon: '🧠', color: 'purple' },
   family: { title: 'الأسري', icon: '🏡', color: 'rose' },
   social: { title: 'الاجتماعي', icon: '🤝', color: 'cyan' },
-  learning: { title: 'المعرفي', icon: '📚', color: 'indigo' },
+  learning: { title: 'التعليمي والمعرفي', icon: '📚', color: 'indigo' },
 };
 
 export const WEEK_INFO: Record<number, { title: string; subtitle: string }> = {
@@ -258,37 +258,47 @@ const DOMAIN_WEEKLY_SUGGESTIONS: Record<LifeAreaId, Record<number, [string, stri
   },
 };
 
+export const ALL_CANONICAL_DOMAINS: LifeAreaId[] = [
+  'spiritual',
+  'financial',
+  'career',
+  'personal',
+  'learning',
+  'family',
+  'social',
+  'health',
+];
+
+export interface PrioritizedDomainItem {
+  id: LifeAreaId;
+  score: number;
+  title: string;
+  icon: string;
+}
+
 /**
  * استخراج المجالات الثلاثة الأكثر حاجة للتركيز بناءً على تقييمات عجلة الحياة
+ * (الترتيب تصاعدياً من أدنى درجة معتمدة > 0 إلى الأعلى، دون أي تجاوز لمجال أعلى درجة)
  */
 export function extractPriorityDomains(scores: Record<string, number>): LifeAreaId[] {
-  const allDomains: LifeAreaId[] = [
-    'health',
-    'financial',
-    'career',
-    'spiritual',
-    'personal',
-    'learning',
-    'family',
-    'social',
-  ];
-
-  // فرز المجالات حسب الدرجة من الأقل للأعلى
-  const scored = allDomains
-    .map((id) => ({
-      id,
-      score: typeof scores[id] === 'number' ? scores[id] : 0,
-    }))
-    .filter((item) => item.score > 0) // تفضيل المجالات المقيمة
+  const scored = ALL_CANONICAL_DOMAINS
+    .map((id) => {
+      const num = Number(scores?.[id]);
+      return {
+        id,
+        score: Number.isFinite(num) ? num : 0,
+      };
+    })
+    .filter((item) => item.score > 0) // استبعاد المجالات غير المقيّمة (صفر)
     .sort((a, b) => a.score - b.score);
 
   if (scored.length >= 3) {
     return [scored[0].id, scored[1].id, scored[2].id];
   }
 
-  // إذا كانت التقييمات المسجلة أقل من 3، نختار المجالات الحيوية الأساسية تلقائياً
+  // إذا كانت التقييمات المسجلة أقل من 3، نُبقي المقيّمة مرتبة تصاعدياً أولاً ثم نُكمل من الأساسيات
   const chosen: LifeAreaId[] = scored.map((s) => s.id);
-  const fallbacks: LifeAreaId[] = ['health', 'financial', 'spiritual', 'career', 'social'];
+  const fallbacks: LifeAreaId[] = ['health', 'financial', 'spiritual', 'learning', 'career', 'personal', 'family', 'social'];
   for (const f of fallbacks) {
     if (chosen.length >= 3) break;
     if (!chosen.includes(f)) chosen.push(f);
@@ -298,20 +308,33 @@ export function extractPriorityDomains(scores: Record<string, number>): LifeArea
 }
 
 /**
- * توليد خطة ذكية متكاملة لـ 30 يوماً
+ * إرجاع قائمة موحدة للمجالات الثلاثة المختارة مع درجاتها الحقيقية،
+ * لضمان تطابق بطاقة "مجالات التركيز" وخطة الـ 30 يوماً وقسم "لماذا هذه المجالات؟"
  */
-export function generateThirtyDayPlan(scores: Record<string, number>): ThirtyDayPlanState {
-  const focusDomains = extractPriorityDomains(scores);
+export function getPrioritizedScoredDomains(
+  scores: Record<string, number>
+): PrioritizedDomainItem[] {
+  const priorityIds = extractPriorityDomains(scores);
+  return priorityIds.map((id) => {
+    const rawScore = Number(scores?.[id]);
+    const validScore = Number.isFinite(rawScore) ? rawScore : 0;
+    const meta = DOMAIN_META[id] || { title: id, icon: '🎯', color: 'teal' };
+    return {
+      id,
+      score: validScore,
+      title: meta.title,
+      icon: meta.icon,
+    };
+  });
+}
 
+function buildDaysForFocusDomains(
+  focusDomains: LifeAreaId[],
+  existingDays?: DayPlanTask[]
+): DayPlanTask[] {
   const days: DayPlanTask[] = [];
 
-  // تاريخ اليوم بتنسيق عربي جميل
-  const now = new Date();
-  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' };
-  const startDateStr = new Intl.DateTimeFormat('ar-EG', options).format(now);
-
   for (let dayNum = 1; dayNum <= 30; dayNum++) {
-    // تحديد الأسبوع
     let weekNumber = 1;
     if (dayNum <= 7) weekNumber = 1;
     else if (dayNum <= 14) weekNumber = 2;
@@ -320,18 +343,18 @@ export function generateThirtyDayPlan(scores: Record<string, number>): ThirtyDay
     else weekNumber = 5;
 
     const weekTitle = WEEK_INFO[weekNumber]?.title || 'خطوة جديدة';
-
-    // التناوب بين المجالات الثلاثة المركّز عليها
     const domainIdx = (dayNum - 1) % focusDomains.length;
     const domainId = focusDomains[domainIdx];
     const meta = DOMAIN_META[domainId] || { title: 'توازن الحياة', icon: '🎯', color: 'teal' };
 
-    // جلب الاقتراحات الثلاثة الذكية لهذا المجال في هذا الأسبوع
     const suggestionsPool = DOMAIN_WEEKLY_SUGGESTIONS[domainId]?.[weekNumber] || [
       'خطوة يومية بسيطة تركز على هذا الجانب.',
       'ممارسة واعية لمدة 10 دقائق لتعزيز التوازن.',
       'تدوين ملاحظة سريعة حول ما يمكن تحسينه اليوم.',
     ];
+
+    const prevDay = existingDays?.find((d) => d.dayNumber === dayNum);
+    const sameDomain = prevDay && prevDay.domainId === domainId;
 
     days.push({
       dayNumber: dayNum,
@@ -341,13 +364,29 @@ export function generateThirtyDayPlan(scores: Record<string, number>): ThirtyDay
       weekNumber,
       weekTitle,
       defaultSuggestions: [suggestionsPool[0], suggestionsPool[1], suggestionsPool[2]],
-      selectedTask: suggestionsPool[0],
-      customTask: '',
-      isCustomSelected: false,
-      isCompleted: false,
+      selectedTask: sameDomain ? prevDay.selectedTask : suggestionsPool[0],
+      customTask: sameDomain ? (prevDay.customTask || '') : '',
+      isCustomSelected: sameDomain ? Boolean(prevDay.isCustomSelected) : false,
+      isCompleted: sameDomain ? Boolean(prevDay.isCompleted) : false,
+      completedAt: sameDomain ? prevDay.completedAt : undefined,
       estimatedMinutes: 10,
     });
   }
+
+  return days;
+}
+
+/**
+ * توليد خطة ذكية متكاملة لـ 30 يوماً
+ */
+export function generateThirtyDayPlan(scores: Record<string, number>): ThirtyDayPlanState {
+  const focusDomains = extractPriorityDomains(scores);
+  const days = buildDaysForFocusDomains(focusDomains);
+
+  // تاريخ اليوم بتنسيق عربي جميل
+  const now = new Date();
+  const options: Intl.DateTimeFormatOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+  const startDateStr = new Intl.DateTimeFormat('ar-EG', options).format(now);
 
   const newPlan: ThirtyDayPlanState = {
     createdAt: Date.now(),
@@ -359,6 +398,89 @@ export function generateThirtyDayPlan(scores: Record<string, number>): ThirtyDay
 
   saveThirtyDayPlanToStorage(newPlan);
   return newPlan;
+}
+
+/**
+ * تحديد اليوم النشط الفعلي والأسبوع الموافق له بناءً على حالة الإنجاز:
+ * يختار أول يوم غير مكتمل (أو اليوم الأخير عند اكتمال الخطة بالكامل)،
+ * لمنع عرض "اليوم 1" كأنه اليوم النشط عندما تكون الأيام أو الأسابيع السابقة منجزة.
+ */
+export function resolveActivePlanDayAndWeek(
+  plan: ThirtyDayPlanState | null | undefined
+): { dayNumber: number; weekNumber: number } {
+  if (!plan || !Array.isArray(plan.days) || plan.days.length === 0) {
+    return { dayNumber: 1, weekNumber: 1 };
+  }
+
+  const firstIncomplete = plan.days.find((d) => !d.isCompleted);
+  if (firstIncomplete) {
+    return {
+      dayNumber: firstIncomplete.dayNumber,
+      weekNumber: firstIncomplete.weekNumber,
+    };
+  }
+
+  const lastDay = plan.days[plan.days.length - 1];
+  return {
+    dayNumber: lastDay.dayNumber,
+    weekNumber: lastDay.weekNumber,
+  };
+}
+
+/**
+ * مزامنة خطة الـ 30 يوماً مع أحدث درجات عجلة الحياة لمنع أي بيانات قديمة (Stale State)
+ */
+export function syncThirtyDayPlanWithScores(
+  existingPlan: ThirtyDayPlanState,
+  scores: Record<string, number>
+): { plan: ThirtyDayPlanState; didUpdate: boolean } {
+  const hasAnyEvaluatedScore = ALL_CANONICAL_DOMAINS.some((id) => {
+    const num = Number(scores?.[id]);
+    return Number.isFinite(num) && num > 0;
+  });
+  if (!hasAnyEvaluatedScore) {
+    return { plan: existingPlan, didUpdate: false };
+  }
+
+  const liveFocusDomains = extractPriorityDomains(scores);
+  const currentFocus = Array.isArray(existingPlan.focusDomains) ? existingPlan.focusDomains : [];
+
+  const isFocusSame =
+    currentFocus.length === liveFocusDomains.length &&
+    currentFocus.every((id, idx) => id === liveFocusDomains[idx]);
+
+  const areDaysSynced =
+    Array.isArray(existingPlan.days) &&
+    existingPlan.days.length === 30 &&
+    existingPlan.days.every((d) => {
+      const expectedDomain = liveFocusDomains[(d.dayNumber - 1) % liveFocusDomains.length];
+      return d.domainId === expectedDomain;
+    });
+
+  if (isFocusSame && areDaysSynced) {
+    return { plan: existingPlan, didUpdate: false };
+  }
+
+  const updatedDays = buildDaysForFocusDomains(liveFocusDomains, existingPlan.days);
+  const syncedPlan: ThirtyDayPlanState = {
+    ...existingPlan,
+    focusDomains: liveFocusDomains,
+    days: updatedDays,
+  };
+
+  saveThirtyDayPlanToStorage(syncedPlan);
+  return { plan: syncedPlan, didUpdate: true };
+}
+
+/**
+ * مسح الخطة المخزنة من localStorage عند بدء دورة تقييم أسبوعي جديدة
+ */
+export function clearThirtyDayPlanFromStorage(): void {
+  try {
+    localStorage.removeItem(PLAN_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
 }
 
 /**
@@ -389,16 +511,21 @@ export function getStoredThirtyDayPlan(): ThirtyDayPlanState | null {
  */
 export function exportPlanAsText(plan: ThirtyDayPlanState): string {
   const completedCount = plan.days.filter((d) => d.isCompleted).length;
-  let text = `🌟 خطتي الذكية لـ 30 يوماً من منصة وزان\n`;
-  text += `📅 موعد البدء: ${plan.startDateStr}\n`;
+  const pct = Math.round((completedCount / 30) * 100);
+  let text = `🌟 خطتي الذكية لـ \u206630\u2069 يوماً من منصة وزان\n`;
+  text += `📅 موعد البدء: \u2066${plan.startDateStr}\u2069\n`;
   text += `🎯 مجالات التركيز: ${plan.focusDomains.map((id) => DOMAIN_META[id]?.title || id).join('، ')}\n`;
-  text += `📊 نسبة الإنجاز: ${completedCount}/30 (${Math.round((completedCount / 30) * 100)}%)\n`;
+  text += `📊 نسبة الإنجاز: \u2066${completedCount} / 30\u2069 (\u2066${pct}%\u2069)\n`;
   text += `=====================================\n\n`;
 
   plan.days.forEach((day) => {
     const status = day.isCompleted ? '✅ منجز' : '⏳ قيد الانتظار';
-    text += `[اليوم ${day.dayNumber}] (${day.domainTitle}) - ${status}\n`;
-    text += `📌 المهمة: ${day.selectedTask}\n\n`;
+    const taskWithBidi = day.selectedTask.replace(
+      /(\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?%|\d+(?:\.\d+)?)/g,
+      (m) => `\u2066${m}\u2069`
+    );
+    text += `[اليوم \u2066${day.dayNumber} / 30\u2069] (${day.domainTitle}) - ${status}\n`;
+    text += `📌 المهمة: ${taskWithBidi}\n\n`;
   });
 
   return text;

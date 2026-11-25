@@ -9,6 +9,9 @@ import {
 } from '../types/lifeBalance';
 import { isCrisisMessage } from '../components/CrisisSupportCard';
 import { parseUserContext, getDomainContextConfig } from '../utils/contextPersonalization';
+import { generateDynamicQuickSuggestions } from '../utils/dynamicSuggestions';
+import { getClientAdvisorResponse } from '../components/onboarding/clientIntelligence';
+import { stripRepeatedOpeningGreeting } from '../utils/dialogueDeduplication';
 import {
   AiModelMode,
   AI_MODES,
@@ -69,8 +72,14 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     }
     return {};
   });
-  const [inputMessage, setInputMessage] = useState('');
+  const [draftsByAdvisor, setDraftsByAdvisor] = useState<Record<string, string>>({});
+  const inputMessage = draftsByAdvisor[currentAdvisor.id] || '';
+  const setInputMessage = (val: string) => {
+    const advisorId = currentAdvisor.id;
+    setDraftsByAdvisor((prev) => ({ ...prev, [advisorId]: val }));
+  };
   const [isLoading, setIsLoading] = useState(false);
+  const [isEditResendByAdvisor, setIsEditResendByAdvisor] = useState<Record<string, boolean>>({});
   const [addedGoals, setAddedGoals] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem('wazan_added_goals');
@@ -105,6 +114,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   const currentRequestIdRef = useRef<string>('');
   const lastSentUserTextRef = useRef<string>('');
   const lastSentMsgIdRef = useRef<string>('');
+  const lastSentAdvisorIdRef = useRef<string>('');
 
   useEffect(() => {
     return () => {
@@ -112,6 +122,24 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
       if (abortControllerRef.current) abortControllerRef.current.abort();
     };
   }, []);
+
+  // Isolate transient request state and abort in-flight messages whenever switching advisors
+  useEffect(() => {
+    currentRequestIdRef.current = `switched_${currentAdvisor.id}_${Date.now()}`;
+    if (abortControllerRef.current) {
+      try {
+        abortControllerRef.current.abort();
+      } catch {
+        // ignore
+      }
+      abortControllerRef.current = null;
+    }
+    setIsLoading(false);
+    lastSentUserTextRef.current = '';
+    lastSentMsgIdRef.current = '';
+    lastSentAdvisorIdRef.current = '';
+    setToastMessage(null);
+  }, [currentAdvisor.id]);
 
   const handleSelectAiMode = (mode: AiModelMode) => {
     setAiMode(mode);
@@ -140,30 +168,67 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     }
   }, [addedGoals]);
 
-  // Initialize welcoming message for this advisor if empty (adapted to user context)
+  // Initialize or refresh welcoming message when empty OR when profile/score updates before conversation begins
   useEffect(() => {
-    if (!messagesByAdvisor[currentAdvisor.id] || messagesByAdvisor[currentAdvisor.id].length === 0) {
-      const parsedCtx = parseUserContext(userProfile);
-      const domainCtx = getDomainContextConfig(currentAdvisor.id, parsedCtx);
-      const welcomeMsg: ChatMessage = {
-        id: `welcome_${currentAdvisor.id}`,
-        sender: 'advisor',
-        content: `أهلاً بك يا ${parsedCtx.name} في منصة وزان. أنا ${currentAdvisor.name}، ${currentAdvisor.role}.
-رصدت تقييمك الحالي في "${currentAdvisor.title}" بدرجة (${currentScore.toFixed(1)} من 10).
+    const existingMsgs = messagesByAdvisor[currentAdvisor.id] || [];
+    const isUntouchedWelcome =
+      existingMsgs.length === 0 ||
+      (existingMsgs.length === 1 && existingMsgs[0].id.startsWith('welcome_'));
+    if (!isUntouchedWelcome) return;
+
+    const parsedCtx = parseUserContext(userProfile);
+    const domainCtx = getDomainContextConfig(currentAdvisor.id, parsedCtx);
+    const initialChips = generateDynamicQuickSuggestions({
+      domainId: currentAdvisor.id,
+      roundNumber: 1,
+      userProfile,
+    });
+    const scoreLine =
+      currentScore > 0
+        ? `رصدت تقييمك الحالي في "${currentAdvisor.title}" بدرجة (${currentScore.toFixed(1)} من 10).`
+        : `لم يُرصد تقييم معتمد بعد في "${currentAdvisor.title}"، ويسعدني استكشاف واقعك الآن.`;
+    const welcomeContent = `أهلاً بك يا ${parsedCtx.name} في منصة وزان. أنا ${currentAdvisor.name}، ${currentAdvisor.role}.
+${scoreLine}
 ${domainCtx.contextIntro}
 
-${domainCtx.openingQuestion}`,
-        timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-        actionSteps: currentAdvisor.defaultGoals.slice(0, 2),
-        reflectionQuestion: domainCtx.exploratoryQuestions[0],
-      };
+${domainCtx.openingQuestion}`;
 
-      setMessagesByAdvisor((prev) => ({
-        ...prev,
-        [currentAdvisor.id]: [welcomeMsg],
-      }));
+    if (
+      existingMsgs.length === 1 &&
+      existingMsgs[0].content === welcomeContent &&
+      existingMsgs[0].reflectionQuestion === domainCtx.exploratoryQuestions[0]
+    ) {
+      return;
     }
-  }, [currentAdvisor.id, currentScore, userProfile]);
+
+    const welcomeMsg: ChatMessage = {
+      id: `welcome_${currentAdvisor.id}`,
+      sender: 'advisor',
+      content: welcomeContent,
+      timestamp:
+        existingMsgs[0]?.timestamp ||
+        new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
+      actionSteps: currentAdvisor.defaultGoals.slice(0, 2),
+      reflectionQuestion: domainCtx.exploratoryQuestions[0],
+      suggestedReplies: initialChips,
+    };
+
+    setMessagesByAdvisor((prev) => ({
+      ...prev,
+      [currentAdvisor.id]: [welcomeMsg],
+    }));
+  }, [
+    currentAdvisor.id,
+    currentScore,
+    userProfile?.name,
+    userProfile?.employmentStatus,
+    userProfile?.workStatus,
+    userProfile?.hasDependents,
+    userProfile?.incomeSource,
+    userProfile?.incomeStability,
+    userProfile?.ageGroup,
+    userProfile?.currentFocus,
+  ]);
 
   // Scroll to bottom on new message
   useEffect(() => {
@@ -176,17 +241,22 @@ ${domainCtx.openingQuestion}`,
     const text = (textToSend || inputMessage).trim();
     if (!text || isLoading) return;
 
+    const targetAdvisor = currentAdvisor;
+    const targetScore = currentScore;
+    const targetGoals = currentGoals;
+
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    const reqId = Date.now().toString();
+    const reqId = `${targetAdvisor.id}_${Date.now()}`;
     currentRequestIdRef.current = reqId;
     lastSentUserTextRef.current = text;
-    console.log('[AdvisorChat] handleSendMessage initiated, reqId:', reqId, 'text:', text);
+    lastSentAdvisorIdRef.current = targetAdvisor.id;
+    console.log('[AdvisorChat] handleSendMessage initiated, reqId:', reqId, 'advisor:', targetAdvisor.id, 'text:', text);
 
-    setInputMessage('');
+    setDraftsByAdvisor((prev) => ({ ...prev, [targetAdvisor.id]: '' }));
 
     const userMsg: ChatMessage = {
       id: `user_${Date.now()}`,
@@ -198,14 +268,26 @@ ${domainCtx.openingQuestion}`,
 
     setMessagesByAdvisor((prev) => ({
       ...prev,
-      [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), userMsg],
+      [targetAdvisor.id]: [...(prev[targetAdvisor.id] || []), userMsg],
     }));
 
     setIsLoading(true);
 
+    const currentConv = messagesByAdvisor[targetAdvisor.id] || [];
+    const currentTurnCount = currentConv.filter((m) => m.sender === 'user').length;
+    const isEditedOrResent = Boolean(isEditResendByAdvisor[targetAdvisor.id]);
+    if (isEditedOrResent) {
+      setIsEditResendByAdvisor((prev) => ({ ...prev, [targetAdvisor.id]: false }));
+    }
+    const previousSuggestions = currentConv
+      .filter((m) => m.sender === 'advisor')
+      .slice(-3)
+      .flatMap((m) => m.suggestedReplies || []);
+    const userMsgHistory = currentConv.filter((m) => m.sender === 'user').map((m) => m.content);
+
     try {
       // Call server-side proxy route for Gemini API (up to last 12 messages for richer context)
-      const conversationHistory = (messagesByAdvisor[currentAdvisor.id] || [])
+      const conversationHistory = currentConv
         .slice(-12)
         .map((m) => ({
           role: m.sender === 'user' ? 'user' : 'model',
@@ -232,16 +314,19 @@ ${domainCtx.openingQuestion}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          advisor: currentAdvisor,
-          userScore: currentScore,
+          advisor: targetAdvisor,
+          userScore: targetScore,
           userName: userProfile?.name?.trim() || 'عزيزي',
           userProfile: cleanUserProfile,
-          userGoals: currentGoals,
+          userGoals: targetGoals,
           userAnswers: answers,
           message: text,
           history: conversationHistory,
           aiMode,
           isEvaluationSession: false,
+          stationTurnCount: currentTurnCount,
+          previousSuggestions,
+          isEditedOrResent,
         }),
       });
 
@@ -263,6 +348,7 @@ ${domainCtx.openingQuestion}`,
       let parsedSummary = data.summary || '';
       let parsedAdvice = data.advice || '';
       let parsedReply = data.reply || '';
+      let aiSuggestedReplies: string[] = Array.isArray(data.suggestedReplies) ? data.suggestedReplies : [];
 
       // Defensive parsing if reply or body is a raw agent JSON string
       if (typeof parsedReply === 'string' && (parsedReply.startsWith('{') || parsedReply.includes('"reasoning"'))) {
@@ -274,6 +360,9 @@ ${domainCtx.openingQuestion}`,
             parsedSummary = inner.summary || parsedSummary;
             parsedAdvice = inner.advice || parsedAdvice;
             parsedReply = inner.advice || inner.summary || inner.reply || '';
+            if (Array.isArray(inner.suggestedReplies)) {
+              aiSuggestedReplies = inner.suggestedReplies;
+            }
           }
         } catch {
           // ignore
@@ -281,6 +370,16 @@ ${domainCtx.openingQuestion}`,
       }
 
       const cleanContent = parsedReply || parsedAdvice || parsedSummary || 'أنا معك، فلنحدد خطوة إجرائية واضحة تناسب واقعك الحالي.';
+      const nextDynamicReplies = generateDynamicQuickSuggestions({
+        domainId: targetAdvisor.id,
+        roundNumber: Math.max(1, currentTurnCount + 2),
+        lastUserMessage: text,
+        advisorReply: cleanContent,
+        userProfile,
+        previousChips: previousSuggestions,
+        userHistory: userMsgHistory,
+        aiSuggestedReplies,
+      });
 
       const advisorReply: ChatMessage = {
         id: `advisor_${Date.now()}`,
@@ -292,13 +391,14 @@ ${domainCtx.openingQuestion}`,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         actionSteps: data.actionSteps || (parsedAdvice ? [parsedAdvice] : []),
         reflectionQuestion: data.reflectionQuestion,
+        suggestedReplies: nextDynamicReplies,
         isCrisis: isCrisisMessage(cleanContent) || isCrisisMessage(text),
         source: data.source || 'gemini',
       };
 
       setMessagesByAdvisor((prev) => ({
         ...prev,
-        [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), advisorReply],
+        [targetAdvisor.id]: [...(prev[targetAdvisor.id] || []), advisorReply],
       }));
     } catch (err: any) {
       console.log('[AdvisorChat] catch in handleSendMessage:', err?.name, err?.message, 'aborted:', controller.signal.aborted, 'currentReqId:', currentRequestIdRef.current, 'reqId:', reqId);
@@ -313,8 +413,8 @@ ${domainCtx.openingQuestion}`,
         return;
       }
       console.error('Advisor chat error:', err);
-      let fallbackText = `نصيحتي لك في مجال ${currentAdvisor.title}: التركيز على عادة واحدة صغيرة يومياً تصنع مع الوقت فارقاً هائلاً. استمر في تدوين تقدمك في عجلة الحياة.`;
-      let fallbackReasoning = `تحليل استشاري معمق لواقع المستفيد في ${currentAdvisor.title}: استخلاص العادة المحورية الأكثر ملاءمة لقدراته وطاقته الحالية دون إجهاد.`;
+      let fallbackText = `نصيحتي لك في مجال ${targetAdvisor.title}: التركيز على عادة واحدة صغيرة يومياً تصنع مع الوقت فارقاً هائلاً. استمر في تدوين تقدمك في عجلة الحياة.`;
+      let fallbackReasoning = `تحليل استشاري معمق لواقع المستفيد في ${targetAdvisor.title}: استخلاص العادة المحورية الأكثر ملاءمة لقدراته وطاقته الحالية دون إجهاد.`;
       let fallbackAdvice = `ركز على خطوة واحدة إجرائية واضحة ومستمرة هذا الأسبوع.`;
 
       const lowerText = text.toLowerCase();
@@ -327,9 +427,9 @@ ${domainCtx.openingQuestion}`,
       const isGriefOrExhaustion = !isCrisisOrDeath && !isMedicalPrescriptionOrDiagnosis && !isStockOrCryptoSpeculation && !isFatwaOrReligiousRuling && !isClinicalPsychology && !isLegalMaritalDispute && /(?<![\u0600-\u06FF])(?:[وفبلك]|ال|وال|فال|بال|كال|لل)?(متعب|تعبان|تعبت|تعب|حزين|حزن|مكتئب|اكتئاب|ضايق|مخنوق|طفشان|محتار|تائه|ضياع|خائف|خوف|قلق|توتر|غضب|أبكي|ابكي|يائس|يأس|الحياة صعبة|الحياة قاسية|مرهق|إرهاق|ارهاق|ثقل|موجوع|وجع|ألم|الم|منهار|محبط|إحباط)(?![\u0600-\u06FF])/i.test(lowerText);
       const isCurseOrAnger = !isCrisisOrDeath && !isGriefOrExhaustion && /(?:^|\s)(?:اسب|أسب|العن|اللعن|ألعن|السب|اللعنة|الشتيمة|اشتم|أشتم)(?:\s|[.,!؟]|$)/i.test(lowerText);
       const isAskingHowAdvisorIs = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(lowerText);
-      const isSimpleGreeting = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && !isAskingHowAdvisorIs && /(^|\s)(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)(\s|$)/i.test(lowerText);
+      const isSimpleGreeting = !isEditedOrResent && currentConv.length === 0 && !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && !isAskingHowAdvisorIs && /(^|\s)(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)(\s|$)/i.test(lowerText);
 
-      let fallbackActionSteps: string[] = currentAdvisor.defaultGoals.slice(0, 1);
+      let fallbackActionSteps: string[] = targetAdvisor.defaultGoals.slice(0, 1);
       let fallbackReflectionQuestion: string | undefined = undefined;
 
       if (isCrisisOrDeath) {
@@ -397,30 +497,60 @@ ${domainCtx.openingQuestion}`,
       } else if (isAskingHowAdvisorIs) {
         fallbackReasoning = `تجاوب حواري إنساني مباشر وكسر الجمود لتقديم التحية والاطمئنان الدافئ كمرشد ورفيق درب.`;
         fallbackAdvice = `أنا بخير وبأحسن حال وسعيد وممتن جداً بسؤالك الطيب!`;
-        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${currentAdvisor.name} (${currentAdvisor.role})، أنا معك هنا بكامل حضوري وطاقتي لنفكر معاً خطوة بخطوة في رحلتك نحو التوازن. كيف تشعر اليوم وما الذي يشغل تفكيرك؟`;
+        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${targetAdvisor.name} (${targetAdvisor.role})، أنا معك هنا بكامل حضوري وطاقتي لنفكر معاً خطوة بخطوة في رحلتك نحو التوازن. كيف تشعر اليوم وما الذي يشغل تفكيرك؟`;
       } else if (isSimpleGreeting) {
         fallbackReasoning = `تحية إنسانية عفوية من المستفيد: الترحيب الدافئ كمرشد ورفيق درب وفتح باب الحوار بأريحية تامة دون أي قوالب جامدة.`;
         fallbackAdvice = `أهلاً بك دائماً؛ كامل الحضور والإصغاء معك لنبدأ بأي جانب تود التركيز عليه.`;
-        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${currentAdvisor.name} (${currentAdvisor.role}). أنا هنا معك ومستعد للإصغاء والتفكير معك في كل ما يشغل بالك في ${currentAdvisor.title}.\n\nكيف تسير أمورك اليوم؟ وما الذي تود أن نتناوله معاً؟`;
+        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${targetAdvisor.name} (${targetAdvisor.role}). أنا هنا معك ومستعد للإصغاء والتفكير معك في كل ما يشغل بالك في ${targetAdvisor.title}.\n\nكيف تسير أمورك اليوم؟ وما الذي تود أن نتناوله معاً؟`;
+      } else {
+        const localRoomResponse = getClientAdvisorResponse(
+          targetAdvisor,
+          text,
+          1,
+          targetScore,
+          currentTurnCount,
+          currentConv.map((m) => m.content),
+          userProfile,
+          previousSuggestions,
+          isEditedOrResent
+        );
+        fallbackReasoning = localRoomResponse.reasoning;
+        fallbackAdvice = localRoomResponse.advice;
+        fallbackText = stripRepeatedOpeningGreeting(
+          localRoomResponse.reply,
+          isEditedOrResent || currentConv.length > 0
+        );
+        fallbackActionSteps = [localRoomResponse.advice || targetAdvisor.defaultGoals[0]];
       }
+
+      const nextFallbackChips = generateDynamicQuickSuggestions({
+        domainId: targetAdvisor.id,
+        roundNumber: Math.max(1, currentTurnCount + 2),
+        lastUserMessage: text,
+        advisorReply: fallbackText,
+        userProfile,
+        previousChips: previousSuggestions,
+        userHistory: userMsgHistory,
+      });
 
       const fallbackReply: ChatMessage = {
         id: `fallback_${Date.now()}`,
         sender: 'advisor',
         content: fallbackText,
         reasoning: fallbackReasoning,
-        summary: `تفاعل واستشارة مباشرة في ${currentAdvisor.title}`,
+        summary: `تفاعل واستشارة مباشرة في ${targetAdvisor.title}`,
         advice: fallbackAdvice,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         actionSteps: fallbackActionSteps,
         reflectionQuestion: fallbackReflectionQuestion,
+        suggestedReplies: nextFallbackChips,
         isCrisis: isCrisisMessage(fallbackText) || isCrisisMessage(text),
         source: 'local-fallback',
       };
 
       setMessagesByAdvisor((prev) => ({
         ...prev,
-        [currentAdvisor.id]: [...(prev[currentAdvisor.id] || []), fallbackReply],
+        [targetAdvisor.id]: [...(prev[targetAdvisor.id] || []), fallbackReply],
       }));
     } finally {
       if (currentRequestIdRef.current === reqId) {
@@ -464,17 +594,21 @@ ${domainCtx.openingQuestion}`,
     // 4) Immediately turn off loading indicator
     setIsLoading(false);
 
-    // 5) Restore text to input field
+    // 5) Restore text ONLY to originating advisor's input field
+    const originAdvisorId = lastSentAdvisorIdRef.current || currentAdvisor.id;
     if (lastSentUserTextRef.current) {
-      setInputMessage(lastSentUserTextRef.current);
+      setDraftsByAdvisor((prev) => ({
+        ...prev,
+        [originAdvisorId]: lastSentUserTextRef.current,
+      }));
     }
 
-    // 6) Remove user message from chat list
+    // 6) Remove user message from originating advisor's chat list
     const sentId = lastSentMsgIdRef.current;
     if (sentId) {
       setMessagesByAdvisor((prev) => ({
         ...prev,
-        [currentAdvisor.id]: (prev[currentAdvisor.id] || []).filter((m) => m.id !== sentId),
+        [originAdvisorId]: (prev[originAdvisorId] || []).filter((m) => m.id !== sentId),
       }));
     }
   };
@@ -493,6 +627,10 @@ ${domainCtx.openingQuestion}`,
 
     const userMsgToUndo = currentList[lastUserIdx];
     setInputMessage(userMsgToUndo.content);
+    setIsEditResendByAdvisor((prev) => ({
+      ...prev,
+      [currentAdvisor.id]: true,
+    }));
 
     setMessagesByAdvisor((prev) => {
       const list = prev[currentAdvisor.id] || [];
@@ -516,6 +654,25 @@ ${domainCtx.openingQuestion}`,
       setToastMessage(null);
     }, 4000);
   };
+
+  const lastAdvisorChatMessage = [...activeMessages].reverse().find((m) => m.sender === 'advisor');
+  const userMessagesInRoom = activeMessages.filter((m) => m.sender === 'user').map((m) => m.content);
+  const roomPreviousChips = activeMessages
+    .filter((m) => m.sender === 'advisor')
+    .slice(-4, -1)
+    .flatMap((m) => m.suggestedReplies || []);
+  const activeQuickSuggestions =
+    lastAdvisorChatMessage?.suggestedReplies && lastAdvisorChatMessage.suggestedReplies.length > 0
+      ? lastAdvisorChatMessage.suggestedReplies
+      : generateDynamicQuickSuggestions({
+          domainId: currentAdvisor.id,
+          roundNumber: Math.max(1, userMessagesInRoom.length + 1),
+          lastUserMessage: userMessagesInRoom[userMessagesInRoom.length - 1] || '',
+          advisorReply: lastAdvisorChatMessage?.content || '',
+          userProfile,
+          previousChips: roomPreviousChips,
+          userHistory: userMessagesInRoom,
+        });
 
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 pb-20 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
@@ -571,6 +728,7 @@ ${domainCtx.openingQuestion}`,
 
           {/* Chat Messages Area */}
           <ChatMessageList
+            key={`list_${currentAdvisor.id}`}
             messages={activeMessages}
             currentAdvisor={currentAdvisor}
             isLoading={isLoading}
@@ -583,6 +741,7 @@ ${domainCtx.openingQuestion}`,
 
           {/* Input Bar with quick questions chips & send/stop */}
           <ChatPromptInputBar
+            key={`input_${currentAdvisor.id}`}
             currentAdvisor={currentAdvisor}
             inputMessage={inputMessage}
             onChangeInputMessage={setInputMessage}
@@ -591,6 +750,7 @@ ${domainCtx.openingQuestion}`,
             onSelectAiMode={handleSelectAiMode}
             onSendMessage={handleSendMessage}
             onStopMessage={handleStopMessage}
+            quickSuggestions={activeQuickSuggestions}
           />
         </div>
       </div>

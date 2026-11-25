@@ -9,6 +9,7 @@ import {
   Lightbulb,
 } from 'lucide-react';
 import { VoiceInput } from '../VoiceInput';
+import { isolateNumbersInText } from '../FormattedChatMessage';
 import { AdvisorConfig, LifeAreaId } from '../../types/lifeBalance';
 import { StationAssessmentConfig } from '../../data/assessmentQuestions';
 import { StationDynamicInsights } from './clientIntelligence';
@@ -23,6 +24,7 @@ interface AssessmentInputBarProps {
   currentActiveInsights: StationDynamicInsights;
   currentStationConfig: StationAssessmentConfig;
   currentAdvisorIndex: number;
+  quickSuggestions?: string[];
   offeredScore?: number | null;
   isChoiceDismissed?: boolean;
   onAdoptScoreAndComplete?: (score: number) => void;
@@ -45,6 +47,7 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
   currentActiveInsights,
   currentStationConfig,
   currentAdvisorIndex,
+  quickSuggestions,
   offeredScore,
   isChoiceDismissed,
   onAdoptScoreAndComplete,
@@ -64,9 +67,9 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
           <div className="flex items-center gap-2">
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 dark:bg-emerald-400 animate-pulse" />
             <span className="text-xs font-black text-emerald-950 dark:text-emerald-300 flex items-center gap-1.5">
-              <span>تم رصد تقييم المحطة {stationNumber} من 8 بنجاح</span>
-              <span className="font-mono font-bold text-emerald-800 dark:text-emerald-200">
-                ({Number(currentActiveInsights.score > 0 ? currentActiveInsights.score : 7).toFixed(1)} من 10)
+              <span>تم رصد تقييم المحطة <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{stationNumber} / 8</span> بنجاح</span>
+              <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-bold text-emerald-800 dark:text-emerald-200">
+                ({Number(currentActiveInsights.score > 0 ? currentActiveInsights.score : 7).toFixed(1)} / 10)
               </span>
             </span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/80 dark:bg-emerald-900/70 text-emerald-900 dark:text-emerald-200">
@@ -118,7 +121,7 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
             </span>
             <span className="text-xs sm:text-sm font-black text-emerald-950 dark:text-emerald-100 flex items-center gap-1.5 flex-wrap">
               <span>التقييم المقترح من المستشار:</span>
-              <span dir="ltr" className="font-mono text-sm px-2.5 py-0.5 rounded-lg bg-emerald-200/90 dark:bg-emerald-900/90 text-emerald-950 dark:text-emerald-100 font-black shadow-xs">
+              <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-sm px-2.5 py-0.5 rounded-lg bg-emerald-200/90 dark:bg-emerald-900/90 text-emerald-950 dark:text-emerald-100 font-black shadow-xs">
                 {offeredScore.toFixed(1)} / 10
               </span>
             </span>
@@ -206,79 +209,23 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
               </button>
             )}
 
-            {/* Domain-specific rapid input shortcuts */}
-            {currentAdvisor.id === 'financial' && (
-              <>
-                <button
-                  type="button"
-                  disabled={isAdvisorReplying}
-                  onClick={() => onSendAnswer('أنا طالب وأعتمد على المكافأة وبدون ديون لكن أواجه عجزاً نهاية الشهر')}
-                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
-                >
-                  🎓 طالب جامعي بدون ديون
-                </button>
-                <button
-                  type="button"
-                  disabled={isAdvisorReplying}
-                  onClick={() => onSendAnswer('سأجرب اقتطاع 30 ريالاً كصمام أمان شهري')}
-                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
-                >
-                  💡 ادخار 30 ريال كصمام أمان
-                </button>
-              </>
-            )}
-
-            {currentAdvisor.id === 'spiritual' && (
-              <>
-                <button
-                  type="button"
-                  disabled={isAdvisorReplying}
-                  onClick={() => onSendAnswer('أشعر بالتشتت بسبب الهاتف ومواقع التواصل ولا أجد خلوة هادئة')}
-                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
-                >
-                  🌿 تشتت بالهاتف وضيق بالوقت
-                </button>
-                <button
-                  type="button"
-                  disabled={isAdvisorReplying}
-                  onClick={() => onSendAnswer('ممكن نصف ساعة يومياً مشي هادئ وتأمل بعيداً عن الهاتف')}
-                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
-                >
-                  ⏱️ نصف ساعة يومياً مشي وتأمل
-                </button>
-              </>
-            )}
-
-            {currentAdvisor.id === 'health' && (
-              <>
-                <button
-                  type="button"
-                  disabled={isAdvisorReplying}
-                  onClick={() => onSendAnswer('أعاني من قلة النوم وإجهاد الشاشات وأنام ساعات متقطعة')}
-                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
-                >
-                  😴 تذبذب النوم وإجهاد الشاشات
-                </button>
-                <button
-                  type="button"
-                  disabled={isAdvisorReplying}
-                  onClick={() => onSendAnswer('سألتزم بـ 20 دقيقة مشي يومي وشرب لترين ماء')}
-                  className="flex-shrink-0 px-3 py-1 rounded-full bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all shadow-xs cursor-pointer disabled:opacity-40"
-                >
-                  🏃 20 دقيقة مشي وشرب الماء
-                </button>
-              </>
-            )}
-
-            {(currentStationConfig.consultation?.suggestedResponses || currentStationConfig.initialDiagnostic?.suggestedResponses || []).map((chip, idx) => (
+            {/* Dynamic Round- and Context-Aware Quick Suggestions (تتجدد كل جولة حسب إجابة المستخدم) */}
+            {(quickSuggestions && quickSuggestions.length > 0
+              ? quickSuggestions
+              : (currentStationConfig.consultation?.suggestedResponses || currentStationConfig.initialDiagnostic?.suggestedResponses || [])
+            ).map((chip, idx) => (
               <button
-                key={idx}
+                key={`${stationTurnCount}_${idx}_${chip.slice(0, 12)}`}
                 type="button"
                 disabled={isAdvisorReplying}
                 onClick={() => onSendAnswer(chip)}
-                className="flex-shrink-0 px-3 py-1 rounded-full bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-[11px] font-semibold transition-all shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] cursor-pointer disabled:opacity-40 disabled:pointer-events-none"
+                className={`flex-shrink-0 px-3 py-1 rounded-full border text-[11px] font-semibold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:pointer-events-none ${
+                  idx === 0 && stationTurnCount === 0
+                    ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 font-bold hover:bg-teal-100/70 dark:hover:bg-teal-900/60'
+                    : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
+                }`}
               >
-                {chip}
+                {isolateNumbersInText(chip)}
               </button>
             ))}
         </div>

@@ -16,6 +16,7 @@ import {
   EisenhowerSuggestionItem,
   mapDomainNameToAreaId,
 } from '../utils/eisenhowerAgent';
+import { localizeDomainText } from '../utils/arabicDomainLabels';
 import {
   INITIAL_EISENHOWER_GOALS,
   EisenhowerHeader,
@@ -98,6 +99,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
 
   // Drag and drop state
   const [draggedGoalId, setDraggedGoalId] = useState<string | null>(null);
+  const [dragOverQuadrant, setDragOverQuadrant] = useState<EisenhowerQuadrant | null>(null);
 
   // New goal form modal / state
   const [showAddModal, setShowAddModal] = useState(false);
@@ -158,7 +160,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
     const updated = [newGoal, ...goals];
     updateAllGoals(updated);
     setSuggestions((prev) => prev.filter((item) => item.id !== sug.id));
-    showToast(`تمت إضافة الهدف إلى (${sug.quadrantLabel}) بنجاح!`, 'success');
+    showToast(`تمت إضافة الهدف إلى ${localizeDomainText(sug.quadrantLabel)} بنجاح!`, 'success');
   };
 
   // Manual customization of a suggestion before adding
@@ -200,16 +202,16 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             const domainObj = ADVISORS_LIST.find((a) => a.id === areaId);
             return {
               id: item.id || `sug_remote_${Date.now()}_${idx}`,
-              title: item.title,
+              title: localizeDomainText(item.title || ''),
               quadrant: (item.quadrant || 'q2_important_not_urgent') as EisenhowerQuadrant,
-              quadrantLabel: item.quadrant_label || 'المربع 2 (جدول له)',
+              quadrantLabel: localizeDomainText(item.quadrant_label || 'المربع 2 (جدوله)'),
               timeframe: (item.timeframe || 'weekly') as GoalTimeframe,
               areaId,
-              domainName: domainObj?.title || item.domain || 'الجانب الشخصي',
+              domainName: domainObj?.title || localizeDomainText(item.domain || '') || 'الجانب الشخصي والوعي بالذات',
               sourceAgent: item.sourceAgent || 'agent_9_aggregator',
               sourceAgentName: item.sourceAgentName || 'م. معتز التكاملي (وكيل 9)',
-              sourceTypeLabel: item.sourceTypeLabel || 'اقتراح ذكي',
-              rationale: item.rationale || 'مستخلص من التحليل التكاملي لمجالات الحياة.',
+              sourceTypeLabel: localizeDomainText(item.sourceTypeLabel || 'اقتراح ذكي'),
+              rationale: localizeDomainText(item.rationale || 'مستخلص من التحليل التكاملي لمجالات الحياة.'),
             };
           });
           setSuggestions(mapped);
@@ -306,7 +308,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
     setQuickManualIsFocus(false);
     const quadrantLabel = {
       q1_urgent_important: 'المربع 1 (نفّذ الآن)',
-      q2_important_not_urgent: 'المربع 2 (جدولـه)',
+      q2_important_not_urgent: 'المربع 2 (جدوله)',
       q3_urgent_not_important: 'المربع 3 (فوّضه)',
       q4_not_urgent_not_important: 'المربع 4 (احذفه)',
     }[quickManualQuadrant];
@@ -348,28 +350,55 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
     setShowResetGoalsConfirm(false);
   };
 
+  const QUADRANT_TOAST_LABELS: Record<EisenhowerQuadrant, string> = {
+    q1_urgent_important: 'المربع 1: نفّذ الآن',
+    q2_important_not_urgent: 'المربع 2: جدوله',
+    q3_urgent_not_important: 'المربع 3: فوّضه',
+    q4_not_urgent_not_important: 'المربع 4: احذفه',
+  };
+
   // Move goal to another quadrant
   const handleMoveQuadrant = (id: string, targetQuadrant: EisenhowerQuadrant) => {
+    const existing = goals.find((g) => g.id === id);
+    if (!existing || existing.quadrant === targetQuadrant) return;
     const updated = goals.map((g) => (g.id === id ? { ...g, quadrant: targetQuadrant } : g));
     updateAllGoals(updated);
+    showToast(`تم نقل المهمة إلى ${QUADRANT_TOAST_LABELS[targetQuadrant]} بنجاح!`, 'success');
   };
 
   // Drag and drop handlers
   const handleDragStart = (e: React.DragEvent, id: string) => {
     setDraggedGoalId(id);
+    e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', id);
   };
 
-  const handleDragOver = (e: React.DragEvent) => {
+  const handleDragEnd = () => {
+    setDraggedGoalId(null);
+    setDragOverQuadrant(null);
+  };
+
+  const handleDragOverQuadrant = (e: React.DragEvent, quadrant: EisenhowerQuadrant) => {
     e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (dragOverQuadrant !== quadrant) {
+      setDragOverQuadrant(quadrant);
+    }
+  };
+
+  const handleDragLeaveQuadrant = (e: React.DragEvent, quadrant: EisenhowerQuadrant) => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      setDragOverQuadrant((prev) => (prev === quadrant ? null : prev));
+    }
   };
 
   const handleDrop = (e: React.DragEvent, quadrant: EisenhowerQuadrant) => {
     e.preventDefault();
     const id = draggedGoalId || e.dataTransfer.getData('text/plain');
+    setDragOverQuadrant(null);
+    setDraggedGoalId(null);
     if (id) {
       handleMoveQuadrant(id, quadrant);
-      setDraggedGoalId(null);
     }
   };
 
@@ -492,7 +521,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 text-[11px] font-black uppercase mb-1 border border-rose-200 dark:border-rose-800/60">
               <span>1️⃣ المربع 1</span>
               <span>•</span>
-              <span>نفّذ الآن (Do First)</span>
+              <span>نفّذ الآن</span>
             </div>
           }
           themeColor="rose"
@@ -502,7 +531,12 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           emptyText="اسحب أي مهمة عاجلة ومهمة إلى هنا"
           onChangeInlineInput={(val) => setInlineInputs((prev) => ({ ...prev, q1_urgent_important: val }))}
           onSubmitInlineInput={() => handleInlineAddGoal('q1_urgent_important')}
-          onDragOver={handleDragOver}
+          isDropTarget={dragOverQuadrant === 'q1_urgent_important'}
+          isAnyDragging={Boolean(draggedGoalId)}
+          draggedGoalId={draggedGoalId}
+          onDragOver={(e) => handleDragOverQuadrant(e, 'q1_urgent_important')}
+          onDragLeave={(e) => handleDragLeaveQuadrant(e, 'q1_urgent_important')}
+          onDragEnd={handleDragEnd}
           onDrop={handleDrop}
           onToggleGoal={handleToggleGoal}
           onToggleFocus={handleToggleFocusGoal}
@@ -516,13 +550,13 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
         <EisenhowerQuadrantCard
           quadrant="q2_important_not_urgent"
           title="مهم وغير عاجل"
-          subtitle="تطوير الذات، بناء العادات، الصحة، التخطيط الاستراتيجي، والعلاقات العميقة."
+          subtitle="تطوير الذات، بناء العادات الصحية، التخطيط الاستراتيجي، والعلاقات العميقة."
           badge={
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[11px] font-black uppercase mb-1 border border-emerald-200 dark:border-emerald-800/60">
               <Sparkles className="w-3 h-3 text-amber-500 dark:text-amber-400" />
               <span>2️⃣ المربع 2</span>
               <span>•</span>
-              <span>جدوله (Schedule • مربع التوازن)</span>
+              <span>جدوله • مربع التوازن</span>
             </div>
           }
           themeColor="emerald"
@@ -532,7 +566,12 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           emptyText="اسحب أهداف التطوير والعادات الاستراتيجية إلى هنا"
           onChangeInlineInput={(val) => setInlineInputs((prev) => ({ ...prev, q2_important_not_urgent: val }))}
           onSubmitInlineInput={() => handleInlineAddGoal('q2_important_not_urgent')}
-          onDragOver={handleDragOver}
+          isDropTarget={dragOverQuadrant === 'q2_important_not_urgent'}
+          isAnyDragging={Boolean(draggedGoalId)}
+          draggedGoalId={draggedGoalId}
+          onDragOver={(e) => handleDragOverQuadrant(e, 'q2_important_not_urgent')}
+          onDragLeave={(e) => handleDragLeaveQuadrant(e, 'q2_important_not_urgent')}
+          onDragEnd={handleDragEnd}
           onDrop={handleDrop}
           onToggleGoal={handleToggleGoal}
           onToggleFocus={handleToggleFocusGoal}
@@ -551,7 +590,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 text-[11px] font-black uppercase mb-1 border border-amber-200 dark:border-amber-800/60">
               <span>3️⃣ المربع 3</span>
               <span>•</span>
-              <span>فوّضه (Delegate)</span>
+              <span>فوّضه</span>
             </div>
           }
           themeColor="amber"
@@ -561,7 +600,12 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           emptyText="اسحب مهام التفويض أو الأتمتة إلى هنا"
           onChangeInlineInput={(val) => setInlineInputs((prev) => ({ ...prev, q3_urgent_not_important: val }))}
           onSubmitInlineInput={() => handleInlineAddGoal('q3_urgent_not_important')}
-          onDragOver={handleDragOver}
+          isDropTarget={dragOverQuadrant === 'q3_urgent_not_important'}
+          isAnyDragging={Boolean(draggedGoalId)}
+          draggedGoalId={draggedGoalId}
+          onDragOver={(e) => handleDragOverQuadrant(e, 'q3_urgent_not_important')}
+          onDragLeave={(e) => handleDragLeaveQuadrant(e, 'q3_urgent_not_important')}
+          onDragEnd={handleDragEnd}
           onDrop={handleDrop}
           onToggleGoal={handleToggleGoal}
           onToggleFocus={handleToggleFocusGoal}
@@ -580,7 +624,7 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
             <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-900/80 text-slate-700 dark:text-slate-300 text-[11px] font-black uppercase mb-1 border border-slate-200 dark:border-slate-800">
               <span>4️⃣ المربع 4</span>
               <span>•</span>
-              <span>احذفه أو قلّله (Eliminate)</span>
+              <span>احذفه أو قلّله</span>
             </div>
           }
           themeColor="slate"
@@ -590,7 +634,12 @@ export const EisenhowerMatrixScreen: React.FC<EisenhowerMatrixScreenProps> = ({
           emptyText="اسحب المشتتات والمهام المستنزفة إلى هنا لحذفها"
           onChangeInlineInput={(val) => setInlineInputs((prev) => ({ ...prev, q4_not_urgent_not_important: val }))}
           onSubmitInlineInput={() => handleInlineAddGoal('q4_not_urgent_not_important')}
-          onDragOver={handleDragOver}
+          isDropTarget={dragOverQuadrant === 'q4_not_urgent_not_important'}
+          isAnyDragging={Boolean(draggedGoalId)}
+          draggedGoalId={draggedGoalId}
+          onDragOver={(e) => handleDragOverQuadrant(e, 'q4_not_urgent_not_important')}
+          onDragLeave={(e) => handleDragLeaveQuadrant(e, 'q4_not_urgent_not_important')}
+          onDragEnd={handleDragEnd}
           onDrop={handleDrop}
           onToggleGoal={handleToggleGoal}
           onToggleFocus={handleToggleFocusGoal}

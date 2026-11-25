@@ -1,3 +1,8 @@
+import {
+  extractAnchorSelfRatingFromHistory,
+  hasAcuteIsolationOrRejection,
+} from '../../src/utils/dialogueDeduplication';
+
 /**
  * يستخرج درجة التقييم الصريحة (1-10) فقط عند وجود صيغة تقييم واضحة،
  * ويمنع تماماً التقاط أي رقم عادي داخل الكلام مثل "25 دقيقة" أو "ساعتين" أو "30 ريال".
@@ -43,31 +48,33 @@ export function calculateSemanticScore(
     return Number(explicitScore.toFixed(1));
   }
 
+  const anchorRating = extractAnchorSelfRatingFromHistory(historyTexts);
   const allText = [text, ...historyTexts].join(' ').toLowerCase();
+  const hasAcuteIsolation = hasAcuteIsolationOrRejection([text, ...historyTexts]);
 
   // 1. Severe breakdown & collapse (1.5 - 3.0)
   const severeNegativePatterns = [
     /(مدمر|محطم|كارثي|كارثة|صفر|ضياع تام|ضائع كليا|لا املك شيء|مفلس تماما|غارق ديون|غرقان ديون|لا اصلي ابدا|تارك الصلاة|ما اصلي نهائيا|انعدام|طاقتي صفر|نومي مدمر|ما انام ابدا|فاشل جدا|اكره حياتي|مكتئب جدا|منهار|مخنوق تماما|مفيش امل|منعدم|مديونية خانقة|صفر ريال)/i
   ];
 
-  // 2. Strong negative & high struggle (3.1 - 4.4)
+  // 2. Strong negative & high struggle (2.5 - 3.8 for isolation/mistreatment, 2.8 - 3.8 overall)
   const strongNegativePatterns = [
-    /(سيء جدا|سلبي جدا|غير راض ابدا|ضياع|يضيع بسرعة|الوقت يضيع|ما في فايدة|ما اقدر|عاجز|مستنزف|قلق دائم|خوف مستمر|توتر شديد|سهر مستمر|ارق شديد|خمول مستمر|كسل شديد|تراكم|تسويف دائم|ديون كثيرة|راتب لا يكفي|ما اقدر اوفر|عزلة تامة|وحيد تماما|فجوة كبيرة|مشاكل مستمرة|نزاع دائم|تعبت من الوضع|مخنوق|تعبان كثير|فاقد السيطرة|بدون هدف|ما اصلي|اقصر بالصلاة|سلبي تماما|سلبي جدا)/i
+    /(سيء جدا|سلبي جدا|غير راض ابدا|ضياع|يضيع بسرعة|الوقت يضيع|ما في فايدة|ما اقدر|عاجز|مستنزف|قلق دائم|خوف مستمر|توتر شديد|سهر مستمر|ارق شديد|خمول مستمر|كسل شديد|تراكم|تسويف دائم|ديون كثيرة|راتب لا يكفي|ما اقدر اوفر|عزلة تامة|وحيد تماما|فجوة كبيرة|مشاكل مستمرة|نزاع دائم|تعبت من الوضع|مخنوق|تعبان كثير|فاقد السيطرة|بدون هدف|ما اصلي|اقصر بالصلاة|سلبي تماما|سلبي جدا|لا أجلس مع|لا اجلس مع|لا أريد الجلوس|لا اريد الجلوس|سوء معاملة|سوء المعاملة|لا أشعر بأي فائدة|لا فائدة من وجودهم)/i
   ];
 
-  // 3. Moderate negative & inconsistency (4.5 - 5.6)
+  // 3. Moderate negative & sub-challenges (4.5 - 5.6 alone, or 6.5-7.4 if paired with high anchor/positive baseline)
   const moderateNegativePatterns = [
-    /(تشتت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|صعوبة|ضغط|مرهق|تعبان|متعب|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت)/i
+    /(تشتت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|صعوبة|ضغط|مرهق|تعبان|متعب|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت|خجل)/i
   ];
 
   // 4. Moderate positive & improving (6.1 - 7.3)
   const moderatePositivePatterns = [
-    /(مقبول|جيد نوعا ما|احاول|أحاول|اتحسن|أتحسن|خطوة طيبة|وعي|راض نسبيا|ماشي الحال|استقرار متوسط|احيانا ملتزم|بديت اتعلم|علاقة طيبة|احسن من قبل|تطور بسيط|في تحسن)/i
+    /(مقبول|جيد نوعا ما|احاول|أحاول|اتحسن|أتحسن|خطوة طيبة|وعي|راض نسبيا|ماشي الحال|استقرار متوسط|احيانا ملتزم|بديت اتعلم|علاقة طيبة|احسن من قبل|تطور بسيط|في تحسن|جيدة|مرتاح|قريب|نتفاهم)/i
   ];
 
   // 5. Strong positive & balanced (7.6 - 8.8)
   const strongPositivePatterns = [
-    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|نوم عميق|نشاط وحيوية|رياضة مستمرة|راحة بال)/i
+    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|نوم عميق|نشاط وحيوية|رياضة مستمرة|راحة بال|كثير من الوقت|الكثير من الوقت|وقت كبير|أمنحهم|أعطيهم وقت|دائماً معهم|نجلس معاً كثيراً|تواصل دافئ)/i
   ];
 
   // 6. Outstanding (8.9 - 9.7)
@@ -78,19 +85,38 @@ export function calculateSemanticScore(
   const charHash = allText.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const variance = (charHash % 9) * 0.1;
 
+  const hasSevere = severeNegativePatterns.some((p) => p.test(allText));
+  const hasStrongNeg = strongNegativePatterns.some((p) => p.test(allText));
+  const hasModerateNeg = moderateNegativePatterns.some((p) => p.test(allText));
+  const hasStrongPos = strongPositivePatterns.some((p) => p.test(allText));
+  const hasOutstandingPos = outstandingPositivePatterns.some((p) => p.test(allText));
+  const hasModeratePos = moderatePositivePatterns.some((p) => p.test(allText));
+
   let calculated = 5.2;
 
-  if (severeNegativePatterns.some((p) => p.test(allText))) {
+  if (hasAcuteIsolation) {
+    // Acute isolation, ongoing mistreatment, or explicit rejection of others -> fair low range (2.6 - 3.6)
+    // Never inflate toward ~4.8 due to a minor solo coping activity (e.g. walking alone).
+    calculated = 2.6 + (charHash % 10) * 0.1;
+  } else if (anchorRating !== null && anchorRating >= 6.8 && !hasSevere && !hasStrongNeg) {
+    // Preserve high starting anchor with only gentle moderation (6.5 - 7.8) for minor sub-challenges
+    calculated = hasModerateNeg
+      ? Math.max(6.5, Math.min(7.5, anchorRating - 0.8))
+      : Math.max(6.8, Math.min(8.8, anchorRating));
+  } else if (hasSevere) {
     calculated = 1.8 + variance * 0.8;
-  } else if (strongNegativePatterns.some((p) => p.test(allText))) {
-    calculated = 2.8 + variance * 0.9;
-  } else if (moderateNegativePatterns.some((p) => p.test(allText))) {
+  } else if (hasStrongNeg) {
+    calculated = 2.7 + variance * 0.9;
+  } else if ((hasStrongPos || hasOutstandingPos) && hasModerateNeg) {
+    // Positive foundation + minor sub-challenge (e.g. ample family time + phone distraction) -> balanced 6.5 - 7.5
+    calculated = 6.7 + (variance % 7) * 0.1;
+  } else if (hasModerateNeg) {
     calculated = 4.3 + variance * 0.9;
-  } else if (outstandingPositivePatterns.some((p) => p.test(allText))) {
+  } else if (hasOutstandingPos) {
     calculated = 9.0 + (variance % 6) * 0.12;
-  } else if (strongPositivePatterns.some((p) => p.test(allText))) {
+  } else if (hasStrongPos) {
     calculated = 7.7 + variance * 0.9;
-  } else if (moderatePositivePatterns.some((p) => p.test(allText))) {
+  } else if (hasModeratePos) {
     calculated = 6.2 + variance * 0.9;
   }
 
@@ -115,7 +141,10 @@ export function processAndReconcileScore(
     const hasClearPracticeEvidence = /(يومياً|كل يوم|أمارس بانتظام|ملتزم تماماً|أوفر شهرياً|أستثمر شهرياً|رياضة يومية|أقرأ يومياً|منجز باستمرار|أحافظ دائماً)/i.test(allText);
 
     // فحص أدلة على مشكلة خطيرة واقعية (تبرر خفضاً أكبر من -1.0)
-    const hasSevereIssueEvidence = /(ديون متراكمة|إفلاس|لا أنام مطلقاً|أزمة صحية حادة|قطيعة تامة|اكتئاب حاد|انهيار|فقدت وظيفتي|مديونية خانقة)/i.test(allText);
+    const hasAcuteIsolation = hasAcuteIsolationOrRejection([message, ...historyTexts]);
+    const hasSevereIssueEvidence =
+      hasAcuteIsolation ||
+      /(ديون متراكمة|إفلاس|لا أنام مطلقاً|أزمة صحية حادة|قطيعة تامة|اكتئاب حاد|انهيار|فقدت وظيفتي|مديونية خانقة|سوء معاملة|عزلة تامة)/i.test(allText);
 
     // التحقق من النوايا المستقبلية التي لا ينبغي رفع الدرجة بسببها ("سأفعل"، "لن أجلد نفسي")
     const isFutureIntentionOnly = /(سوف|سأبدأ|سأقوم|سأحاول|ناوي|أخطط أن|لن أكرر|لن أجلد نفسي|أتمنى أن|إن شاء الله سـ|ناوي أغير)/i.test(message) && !hasClearPracticeEvidence;
@@ -124,9 +153,15 @@ export function processAndReconcileScore(
     const isAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي|كافي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(message);
     if (isAdoption) {
       finalScore = userSelfScore;
+    } else if (hasAcuteIsolation && extractExplicitRating(message) === null) {
+      // في حالة العزلة الحادة أو سوء المعاملة دون تقييم رقمي صريح، امنع تضخيم الدرجة نحو ~4.8 وحافظ على مدى عادل (2.5 - 3.8)
+      finalScore = Math.max(2.5, Math.min(3.8, modelScore > 0 ? Math.min(modelScore, 3.8) : fallbackScore));
     } else if (!hasClearPracticeEvidence && !hasSevereIssueEvidence) {
-      // اجعل الدرجة النهائية قريبة من تقييم المستخدم الذاتي (فرق أقصاه ±1.0) إلا إذا ذكر أدلة واضحة على ممارسة فعلية أو مشكلة خطيرة
-      const minAllowed = Math.max(1.0, userSelfScore - 1.0);
+      // اجعل الدرجة النهائية قريبة من تقييم المستخدم الذاتي، ولا تسمح بهبوط حاد تحت 6.5 إذا كان تقييمه الأول مرتفعاً (>= 7)
+      const minAllowed =
+        userSelfScore >= 7.0
+          ? Math.max(6.5, userSelfScore - 1.5)
+          : Math.max(1.0, userSelfScore - 1.0);
       const maxAllowed = Math.min(10.0, userSelfScore + 1.0);
       if (finalScore < minAllowed) {
         finalScore = minAllowed;

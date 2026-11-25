@@ -405,7 +405,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
               className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 active:from-amber-700 active:to-amber-800 text-white text-xs sm:text-sm font-black shadow-md shadow-amber-500/20 hover:shadow-lg hover:shadow-amber-500/30 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Sparkles className="w-4 h-4 text-amber-100" />
-              <span>تجربة فورية بحساب تجريبي (Demo Mode)</span>
+              <span>تجربة فورية بحساب تجريبي (وضع المحكّمين)</span>
             </button>
           </div>
 

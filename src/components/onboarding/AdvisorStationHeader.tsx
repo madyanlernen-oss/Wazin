@@ -275,10 +275,10 @@ export const AdvisorStationHeader: React.FC<AdvisorStationHeaderProps> = ({
         <div className="flex items-center gap-2 min-w-0">
           <span className="font-black text-[#0F6E6E] dark:text-[#22D3EE] text-xs flex-shrink-0 flex items-center gap-1">
             <Stethoscope className="w-3.5 h-3.5" />
-            <span>المحطة</span>
-            <span dir="ltr" className="font-mono">
-              ({stationNumber} / 8)
-            </span>
+            <span>المحطة</span>{' '}
+            (<span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">
+              {stationNumber} / 8
+            </span>)
             :<span>{currentAdvisor.title}</span>
           </span>
           <span className="text-[11px] text-[#334155] dark:text-[#CBD5E1] hidden sm:inline truncate">
@@ -292,7 +292,7 @@ export const AdvisorStationHeader: React.FC<AdvisorStationHeaderProps> = ({
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-xs font-black text-[#0F172A] dark:text-[#F1F5F9] font-mono" dir="ltr">
+          <span className="text-xs font-black text-[#0F172A] dark:text-[#F1F5F9] font-mono" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
             {progressPercent}%
           </span>
         </div>

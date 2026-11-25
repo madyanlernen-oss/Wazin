@@ -17,6 +17,12 @@ import {
   LifeAreaId,
   UserProfile,
 } from '../types/lifeBalance';
+import { isolateNumbersInText, isolateNumbersForPlainText } from '../components/FormattedChatMessage';
+import {
+  reconcileDirectorReportWithScores,
+  prefixLamArabic,
+  getDomainArabicName,
+} from '../utils/arabicDomainLabels';
 
 interface DirectorSummaryScreenProps {
   userProfile: UserProfile | null;
@@ -28,29 +34,6 @@ interface DirectorSummaryScreenProps {
   onBackToDashboard: () => void;
   onNavigateToThirtyDayPlan?: () => void;
   theme?: 'light' | 'dark';
-}
-
-// Helper to isolate numbers, percentages, and ratios like "4.8/10", "85%", "+15%", "8/10" in LTR so Arabic text flow remains natural
-function renderWithIsolatedNumbers(text: string): React.ReactNode {
-  if (!text) return null;
-  const regex = /(\b[+-]?\d+(?:\.\d+)?%|\(?\d+(?:\.\d+)?\s*\/\s*\d+(?:\.\d+)?\)?|[+-]\d+(?:\.\d+)?)/g;
-  const parts = text.split(regex);
-
-  return parts.map((part, idx) => {
-    if (regex.test(part)) {
-      return (
-        <span
-          key={idx}
-          dir="ltr"
-          className="inline-block font-sans font-bold mx-0.5 text-inherit"
-          style={{ unicodeBidi: 'isolate' }}
-        >
-          {part}
-        </span>
-      );
-    }
-    return part;
-  });
 }
 
 export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
@@ -73,14 +56,17 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
     setError(null);
 
     try {
-      // Build summary of answers and goals for each advisor
+      // Build summary of answers and goals for each advisor using Arabic titles (never raw English keys)
       const advisorSummaries: Record<string, any> = {};
       ADVISORS_LIST.forEach((adv) => {
-        advisorSummaries[adv.id] = {
-          title: adv.title,
-          score: scores[adv.id] || 0,
-          goals: goals[adv.id] || [],
-        };
+        const sc = Number(scores[adv.id] || 0);
+        if (sc > 0 || (goals[adv.id] && goals[adv.id].length > 0)) {
+          advisorSummaries[adv.title] = {
+            title: adv.title,
+            score: sc,
+            goals: goals[adv.id] || [],
+          };
+        }
       });
 
       const res = await fetch('/api/gemini/director-summary', {
@@ -100,45 +86,64 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
       }
 
       const data = await res.json();
-      const generatedReport: DirectorSummaryReport = {
-        ...data,
-        generatedAt: new Date().toISOString(),
-      };
+      const generatedReport: DirectorSummaryReport = reconcileDirectorReportWithScores(
+        {
+          ...data,
+          generatedAt: new Date().toISOString(),
+        },
+        scores
+      );
 
       onSaveReport(generatedReport);
     } catch (err: any) {
       console.warn('Director summary API unreachable, generating intelligent fallback report:', err);
 
-      // Intelligent Local Synthesis based on user's actual scores
-      const sortedAreas = [...ADVISORS_LIST].sort(
+      // Intelligent Local Synthesis based on user's actual evaluated scores (> 0)
+      const evaluatedAreas = ADVISORS_LIST.filter((a) => Number(scores[a.id] || 0) > 0);
+      const poolAreas = evaluatedAreas.length > 0 ? evaluatedAreas : ADVISORS_LIST;
+      const sortedAreas = [...poolAreas].sort(
         (a, b) => (scores[b.id] || 0) - (scores[a.id] || 0)
       );
       const strongest = sortedAreas[0];
       const bottleneck = sortedAreas[sortedAreas.length - 1];
+      const strongestScore = Number(scores[strongest.id] || 0);
+      const bottleneckScore = Number(scores[bottleneck.id] || 0);
 
-      const scoreVals = Object.values(scores) as number[];
-      const avg = scoreVals.length > 0 ? (scoreVals.reduce((a, b) => a + b, 0) / scoreVals.length).toFixed(1) : '7.0';
+      const evaluatedVals = poolAreas.map((a) => Number(scores[a.id] || 0)).filter((v) => v > 0);
+      const avg = evaluatedVals.length > 0 ? (evaluatedVals.reduce((a, b) => a + b, 0) / evaluatedVals.length).toFixed(1) : '7.0';
       const avgNum = parseFloat(avg);
 
       const balanceLabel = avgNum >= 8.0 ? 'تناغم قيادي متقدم' : avgNum >= 6.5 ? 'توازن واعد ومستقر' : 'مرحلة إعادة التوازن والتأسيس';
+      const strongestLabel = getDomainArabicName(strongest.id);
+      const bottleneckLabel = getDomainArabicName(bottleneck.id);
+      const diagnosisStrengthText =
+        strongestScore >= 7.8
+          ? `يتبين وجود ركيزة قوية في ${strongestLabel} (${strongestScore.toFixed(1)}/10) تمنحك استقراراً وطاقة إيجابية`
+          : `يمثل ${strongestLabel} أعلى جوانبك الحالية نسبياً في عجلة الحياة (${strongestScore.toFixed(1)}/10) ويمكن البناء عليه بهدوء`;
 
-      const fallbackReport: DirectorSummaryReport = {
-        overallDiagnosis: `بناءً على قراءة عجلة حياتك الحالية (بمعدل عام ${avg}/10)، يتبين أن لديك ركيزة قوية جداً في جانب "${strongest.title}" تمنحك استقراراً وطاقة إيجابية. في المقابل، يمثل جانب "${bottleneck.title}" عنق الزجاجة الرئيسي الذي يستنزف جزءاً من تركيزك ويستوجب حماية المربع الثاني في مصفوفة الأولويات.`,
+      const fallbackReport: DirectorSummaryReport = reconcileDirectorReportWithScores({
+        overallDiagnosis: `بناءً على قراءة عجلة حياتك الحالية (بمعدل عام ${avg}/10)، ${diagnosisStrengthText}. في المقابل، يمثل ${bottleneckLabel} عنق الزجاجة الأبرز (${bottleneckScore.toFixed(1)}/10) الذي يستوجب حماية المربع 2 في مصفوفة الأولويات.`,
         balanceIndexLabel: balanceLabel,
         strongestSynergy: {
-          title: `قوة ${strongest.title} كرافعة للتوازن`,
-          description: `ارتفاع أدائك في ${strongest.title} (بدرجة ${scores[strongest.id] || 8}/10) يوفر لك أرضية صلبة ودافعاً حيوياً يمكن استثماره لتحفيز الجوانب الأقل استقراراً.`,
-          domainsInvolved: [strongest.title, 'التطوير الشخصي', 'إدارة الطاقة'],
+          title:
+            strongestScore >= 7.8
+              ? `قوة ${strongestLabel} كرافعة للتوازن`
+              : `استقرار ${strongestLabel} كنقطة انطلاق`,
+          description:
+            strongestScore >= 7.8
+              ? `ارتفاع أدائك في ${strongestLabel} (بدرجة ${strongestScore.toFixed(1)}/10) يوفر لك أرضية صلبة ودافعاً حيوياً يمكن استثماره لدعم الجوانب الأقل استقراراً.`
+              : `تحقيقك درجة ${strongestScore.toFixed(1)}/10 في ${strongestLabel} يجعله الجانب الأعلى نسبياً في منظومتك حالياً، ويمكن توظيف عاداته المستقرة لتحسين بقية الجوانب تدريجياً.`,
+          domainsInvolved: [strongestLabel, 'التطوير الشخصي', 'إدارة الطاقة'],
         },
         criticalBottleneck: {
-          title: `فجوة ${bottleneck.title} وتأثيرها التراكمي`,
-          impact: `تراجع هذا الجانب إلى (${scores[bottleneck.id] || 5}/10) يخلق ضغطاً غير مرئي يؤثر على صفاء ذهنك وقدرتك على استدامة الإنجاز.`,
-          recommendation: `ابدأ بعادة صغرى واحدة يومياً (Micro-habit) لا تتجاوز 15 دقيقة مخصصة لـ ${bottleneck.title}، وضعها في المربع 2 في مصفوفة أيزنهاور.`,
-          domain: bottleneck.title,
+          title: `فجوة ${bottleneckLabel} وتأثيرها التراكمي`,
+          impact: `تراجع هذا الجانب إلى (${bottleneckScore.toFixed(1)}/10) يخلق ضغطاً غير مرئي يؤثر على صفاء ذهنك وقدرتك على استدامة الإنجاز.`,
+          recommendation: `ابدأ بعادة صغرى واحدة يومياً لا تتجاوز 15 دقيقة مخصصة ${prefixLamArabic(bottleneckLabel)}، وأدرجها في المربع 2 بمصفوفة أيزنهاور.`,
+          domain: bottleneckLabel,
         },
         keystoneHabits: [
           {
-            name: `طقس التوازن الصباحي (المربع 2)`,
+            name: 'طقس التوازن الصباحي في المربع الثاني',
             triggerTime: 'يومياً بعد صلاة الفجر لمدة 15 دقيقة',
             targetDomains: ['الصحي', 'الروحي', 'الشخصي'],
             expectedImpact: 'شحن الطاقة البدنية والصفاء الذهني ليوم متزن ومنتج.',
@@ -200,7 +205,7 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
         ],
         directorGoldenRule: '«التوازن ليس أن تعطي كل جانب نفس القدر من الساعات، بل أن تكون حاضراً بوعيك الكامل في الجانب المناسب في الوقت المناسب.»',
         generatedAt: new Date().toISOString(),
-      };
+      }, scores);
 
       onSaveReport(fallbackReport);
     } finally {
@@ -208,25 +213,27 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
     }
   };
 
+  const localizedReport = report ? reconcileDirectorReportWithScores(report, scores) : null;
+
   const handleCopy = () => {
-    if (!report) return;
+    if (!localizedReport) return;
     const text = `
 === تقرير المنسق العام للتوازن الذكي - منصة وزان ===
 المستفيد: ${userProfile?.name || ''}
 التشخيص العام:
-${report.overallDiagnosis}
+${localizedReport.overallDiagnosis}
 
 أقوى نقطة تناغم:
-${report.strongestSynergy.title}: ${report.strongestSynergy.description}
+${localizedReport.strongestSynergy.title}: ${localizedReport.strongestSynergy.description}
 
 عنق الزجاجة الأبرز:
-${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
+${localizedReport.criticalBottleneck.title}: ${localizedReport.criticalBottleneck.recommendation}
 
 الوصية الذهبية:
-"${report.directorGoldenRule}"
+"${localizedReport.directorGoldenRule}"
     `.trim();
 
-    navigator.clipboard.writeText(text);
+    navigator.clipboard.writeText(isolateNumbersForPlainText(text));
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };
@@ -275,15 +282,15 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
                 <span>{copied ? 'تم النسخ' : 'نسخ التقرير'}</span>
               </button>
 
-              {/* Secondary Utility: Print */}
+              {/* Secondary Utility: Print / PDF */}
               <button
                 type="button"
                 onClick={handlePrint}
                 className="px-3 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-slate-50 dark:hover:bg-[#162734] text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9] text-xs font-semibold flex items-center gap-1.5 transition-all shadow-2xs cursor-pointer"
-                title="طباعة التقرير"
+                title="طباعة أو تصدير التقرير بصيغة PDF"
               >
                 <Printer className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
-                <span>طباعة</span>
+                <span>تصدير PDF / طباعة</span>
               </button>
             </>
           )}
@@ -329,11 +336,11 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
           </div>
 
-          {report && (
+          {localizedReport && (
             <div className="bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-4 text-left self-start md:self-auto shadow-xs transition-colors">
               <span className="text-[10px] text-[#475569] dark:text-[#94A3B8] block font-semibold">تشخيص الحالة العامة</span>
               <span className="text-sm font-black text-[#0F6E6E] dark:text-[#22D3EE]">
-                {report.balanceIndexLabel}
+                {isolateNumbersInText(localizedReport.balanceIndexLabel)}
               </span>
             </div>
           )}
@@ -341,7 +348,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
       </div>
 
       {/* Main Report Body */}
-      {report ? (
+      {localizedReport ? (
         <div className="space-y-8">
           {/* Section 1: Strategic Diagnosis */}
           <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-4 transition-colors">
@@ -350,7 +357,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
               <span>التشخيص الاستراتيجي العام لمنظومة حياتك</span>
             </h2>
             <div className="text-sm text-[#0F172A] dark:text-[#F1F5F9] leading-relaxed whitespace-pre-wrap bg-[#F7F6F2] dark:bg-[#071318] p-5 rounded-2xl border border-[#E2E8F0] dark:border-[#1E343F] transition-colors">
-              {renderWithIsolatedNumbers(report.overallDiagnosis)}
+              {isolateNumbersInText(localizedReport.overallDiagnosis)}
             </div>
           </div>
 
@@ -364,14 +371,14 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
                   <span>أقوى نقطة تناغم وترابط إيجابي</span>
                 </div>
                 <h3 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">
-                  {report.strongestSynergy.title}
+                  {isolateNumbersInText(localizedReport.strongestSynergy.title)}
                 </h3>
                 <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
-                  {renderWithIsolatedNumbers(report.strongestSynergy.description)}
+                  {isolateNumbersInText(localizedReport.strongestSynergy.description)}
                 </p>
               </div>
               <div className="pt-2 flex flex-wrap gap-1.5 mt-auto">
-                {(report.strongestSynergy?.domainsInvolved || []).map((dom, i) => (
+                {(localizedReport.strongestSynergy?.domainsInvolved || []).map((dom, i) => (
                   <span
                     key={i}
                     className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
@@ -390,15 +397,15 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
                   <span>عنق الزجاجة الأبرز (يحتاج معالجة فورية)</span>
                 </div>
                 <h3 className="text-base font-black text-[#0F172A] dark:text-[#F1F5F9]">
-                  {report.criticalBottleneck.title}
+                  {isolateNumbersInText(localizedReport.criticalBottleneck.title)}
                 </h3>
                 <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
-                  {renderWithIsolatedNumbers(report.criticalBottleneck.impact)}
+                  {isolateNumbersInText(localizedReport.criticalBottleneck.impact)}
                 </p>
               </div>
               <div className="bg-[#F7F6F2] dark:bg-[#071318] p-3.5 rounded-xl border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9] mt-auto transition-colors">
                 <span className="font-bold text-amber-800 dark:text-[#FBBF24] block mb-0.5">الحل العاجل:</span>
-                {renderWithIsolatedNumbers(report.criticalBottleneck.recommendation)}
+                {isolateNumbersInText(localizedReport.criticalBottleneck.recommendation)}
               </div>
             </div>
           </div>
@@ -408,7 +415,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             <div>
               <h2 className="text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-2">
                 <Zap className="w-5 h-5 text-[#bd9240]" />
-                <span>العادات المحورية (Keystone Habits)</span>
+                <span>العادات المحورية</span>
               </h2>
               <p className="text-xs text-[#475569] dark:text-[#94A3B8] mt-1">
                 عادات ذكية واحدة تؤثر تلقائياً على عدة جوانب من حياتك دفعة واحدة
@@ -416,21 +423,25 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
-              {(report.keystoneHabits || []).map((habit, idx) => (
+              {(localizedReport.keystoneHabits || []).map((habit, idx) => (
                 <div
                   key={idx}
                   className="bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-5 flex flex-col justify-between space-y-3 shadow-xs h-full transition-colors"
                 >
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-[10px] text-[#475569] dark:text-[#94A3B8]">
-                      <span className="font-bold text-[#0F6E6E] dark:text-[#22D3EE]">عادة رقم {idx + 1}</span>
-                      <span className="bg-white dark:bg-[#0E1D24] px-2 py-0.5 rounded-full border border-[#E2E8F0] dark:border-[#1E343F]">{habit.triggerTime}</span>
+                      <span className="font-bold text-[#0F6E6E] dark:text-[#22D3EE]">
+                        عادة رقم <span dir="ltr" className="font-mono [unicode-bidi:isolate]">{idx + 1}</span>
+                      </span>
+                      <span className="bg-white dark:bg-[#0E1D24] px-2 py-0.5 rounded-full border border-[#E2E8F0] dark:border-[#1E343F]">
+                        {isolateNumbersInText(habit.triggerTime)}
+                      </span>
                     </div>
                     <h4 className="font-black text-sm text-[#0F172A] dark:text-[#F1F5F9] leading-snug">
-                      {habit.name}
+                      {isolateNumbersInText(habit.name)}
                     </h4>
                     <p className="text-xs text-[#334155] dark:text-slate-300 leading-relaxed">
-                      {renderWithIsolatedNumbers(habit.expectedImpact)}
+                      {isolateNumbersInText(habit.expectedImpact)}
                     </p>
                   </div>
 
@@ -485,7 +496,7 @@ ${report.criticalBottleneck.title}: ${report.criticalBottleneck.recommendation}
             </div>
 
             <blockquote className="text-base sm:text-lg md:text-xl font-black text-[#0F172A] dark:text-[#F1F5F9] max-w-2xl mx-auto leading-relaxed">
-              «{renderWithIsolatedNumbers(report.directorGoldenRule.replace(/^[«"'\s]+|[»"'\s]+$/g, ''))}»
+              «{isolateNumbersInText(localizedReport.directorGoldenRule.replace(/^[«"'\s]+|[»"'\s]+$/g, ''))}»
             </blockquote>
 
             <p className="text-[11px] text-[#475569] dark:text-[#94A3B8] font-medium pt-3 border-t border-[#E2E8F0]/70 dark:border-[#1E343F]/70 max-w-xs mx-auto">

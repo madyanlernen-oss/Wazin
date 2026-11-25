@@ -1,5 +1,9 @@
 import { ADVISORS_LIST, SAMPLE_GOALS, SAMPLE_SCORES, SAMPLE_USER_PROFILE } from '../data/advisorsData';
 import {
+  extractUserDialogueTextsForArea,
+  parseDialogueConstraints,
+} from './realisticGoalsGenerator';
+import {
   AdvisorConfig,
   DirectorSummaryReport,
   EisenhowerGoalItem,
@@ -782,19 +786,24 @@ const DOMAIN_DEFAULT_INSIGHTS: Record<
   },
 };
 
-// Quick synthesis of strengths and challenges based on questions answered & station dialogue
+// Quick synthesis of strengths and challenges grounded strictly in answers, dialogue texts, and user constraints
 export const extractInsightsFromAnswers = (
   advisor: AdvisorConfig,
   score: number,
   answers: Record<string, any>,
-  conversationTexts: string[] = []
+  conversationTexts: string[] = [],
+  userProfile?: UserProfile | null
 ): { strengths: string[]; challenges: string[] } => {
   const strengths: string[] = [];
   const challenges: string[] = [];
-  const allDialogueText = conversationTexts.join(' ').toLowerCase();
-  const hasNegativeDialogue = /(فتور|انعزال|عزلة|وحدة|وحيد|تشتت|ضغط|إرهاق|أرق|ديون|عجز|لا أدخر|لا ادخر|تقصير|تسويف)/i.test(allDialogueText);
 
-  // Check specific answers
+  const storedDialogue = extractUserDialogueTextsForArea(advisor.id, answers);
+  const combinedTexts = Array.from(new Set([...(conversationTexts || []), ...storedDialogue].filter(Boolean)));
+  const allDialogueText = combinedTexts.join(' ').toLowerCase();
+  const hasNegativeDialogue = /(فتور|انعزال|عزلة|وحدة|وحيد|تشتت|ضغط|إرهاق|ارهاق|أرق|ارق|ديون|عجز|لا أدخر|لا ادخر|تقصير|تسويف|أنام\s*4|ساعات\s*قليلة)/i.test(allDialogueText);
+  const constraints = parseDialogueConstraints(combinedTexts, userProfile);
+
+  // Check explicit rating / open_text answers
   advisor.questions?.forEach((q) => {
     const val = answers[`${advisor.id}_${q.id}`];
     const cleanTitle = q.title
@@ -813,6 +822,30 @@ export const extractInsightsFromAnswers = (
       challenges.push(`التحدي المذكور: "${cleanVal.slice(0, 70)}${cleanVal.length > 70 ? '...' : ''}"`);
     }
   });
+
+  // Extract constraint-aware domain insights from actual user dialogue
+  if (advisor.id === 'health' && (constraints.hasLongWorkShift || constraints.hasShortSleep || constraints.compensatesOnWeekend)) {
+    strengths.push('الوعي الصريح بضغط ساعات العمل وتأثير قلة النوم على الطاقة اليومية');
+    challenges.push(
+      constraints.sleepHours !== null
+        ? `محدودية ساعات النوم الحالية (${constraints.sleepHours} ساعات) مع ضغط العمل الطويل`
+        : 'محدودية ساعات النوم والراحة اليومية تحت ضغط جدول العمل'
+    );
+    challenges.push('بناء تحسن تدريجي وواقعي في الراحة والنوم دون أهداف تتعارض مع الدوام');
+  } else if (advisor.id === 'financial' && combinedTexts.length > 0) {
+    if (constraints.mentionsDebt) {
+      strengths.push('الصراحة في تحديد الالتزامات والأقساط الحالية كخطوة أولى للإدارة المالية');
+      challenges.push('تنظيم أولويات سداد الأقساط وحماية التدفق النقدي الشهري');
+    } else if (constraints.mentionsIncomeLeak) {
+      strengths.push('الوعي بمواضع تسرب الدخل والرغبة في ضبط المصروفات');
+      challenges.push('مراقبة النفقات المتكررة وبناء صمام أمان مالي تدريجي');
+    } else if (constraints.mentionsNoDebt) {
+      strengths.push('خلو السجل المالي من الديون مما يتيح مرونة أعلى للادخار المنظم');
+    }
+  } else if ((advisor.id === 'social' || advisor.id === 'family') && constraints.mentionsIsolationOrFatigue) {
+    strengths.push('إدراك أهمية التواصل القريب رغم ضغوط الانشغال والتعب اليومي');
+    challenges.push('تخفيف الفتور عبر خطوات تواصل خفيفة ومريحة تلائم الطاقة والوقت المتاحين');
+  }
 
   const domainDefaults = DOMAIN_DEFAULT_INSIGHTS[advisor.id] || {
     highStrengths: [
@@ -842,7 +875,7 @@ export const extractInsightsFromAnswers = (
   }
 
   if (challenges.length === 0) {
-    if (score >= 8) {
+    if (score >= 8 && !hasNegativeDialogue) {
       challenges.push(...domainDefaults.highChallenges);
     } else {
       challenges.push(...domainDefaults.lowChallenges);
@@ -850,8 +883,8 @@ export const extractInsightsFromAnswers = (
   }
 
   return {
-    strengths: strengths.slice(0, 3),
-    challenges: challenges.slice(0, 3),
+    strengths: Array.from(new Set(strengths)).slice(0, 3),
+    challenges: Array.from(new Set(challenges)).slice(0, 3),
   };
 };
 

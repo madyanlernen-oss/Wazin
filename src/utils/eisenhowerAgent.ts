@@ -1,4 +1,5 @@
 import { ADVISORS_LIST } from '../data/advisorsData';
+import { localizeDomainText, getDomainArabicName } from './arabicDomainLabels';
 import {
   DirectorSummaryReport,
   EisenhowerGoalItem,
@@ -246,6 +247,13 @@ export function generateAgent11Suggestions(
     return fallbackDefaults.filter((f) => !existingNormalized.has(normalizeGoalText(f.title)));
   }
 
-  // الحد الأقصى 3 إلى 5 اقتراحات وفق قاعدة وكيل 11
-  return suggestions.slice(0, 5);
+  // الحد الأقصى 3 إلى 5 اقتراحات وفق قاعدة وكيل 11 مع تعريب كامل وضبط الصياغة
+  return suggestions.slice(0, 5).map((item) => ({
+    ...item,
+    title: localizeDomainText(item.title),
+    quadrantLabel: localizeDomainText(item.quadrantLabel),
+    domainName: getDomainArabicName(item.domainName),
+    sourceTypeLabel: localizeDomainText(item.sourceTypeLabel),
+    rationale: localizeDomainText(item.rationale),
+  }));
 }

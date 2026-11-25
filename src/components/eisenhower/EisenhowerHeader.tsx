@@ -73,11 +73,10 @@ export const EisenhowerHeader: React.FC<EisenhowerHeaderProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'daily'}
               onClick={() => onSelectTimeframe('daily')}
-              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
-                activeTimeframe === 'daily'
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${activeTimeframe === 'daily'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
-              }`}
+                }`}
             >
               <Clock className="w-3.5 h-3.5" />
               <span>يومية</span>
@@ -87,11 +86,10 @@ export const EisenhowerHeader: React.FC<EisenhowerHeaderProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'weekly'}
               onClick={() => onSelectTimeframe('weekly')}
-              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
-                activeTimeframe === 'weekly'
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${activeTimeframe === 'weekly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
-              }`}
+                }`}
             >
               <CalendarDays className="w-3.5 h-3.5" />
               <span>أسبوعية</span>
@@ -101,11 +99,10 @@ export const EisenhowerHeader: React.FC<EisenhowerHeaderProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'monthly'}
               onClick={() => onSelectTimeframe('monthly')}
-              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
-                activeTimeframe === 'monthly'
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${activeTimeframe === 'monthly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
-              }`}
+                }`}
             >
               <Calendar className="w-3.5 h-3.5" />
               <span>شهرية</span>
@@ -115,11 +112,10 @@ export const EisenhowerHeader: React.FC<EisenhowerHeaderProps> = ({
               role="tab"
               aria-selected={activeTimeframe === 'yearly'}
               onClick={() => onSelectTimeframe('yearly')}
-              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
-                activeTimeframe === 'yearly'
+              className={`px-3.5 py-2 min-h-[44px] rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${activeTimeframe === 'yearly'
                   ? 'bg-[#0B6E72] dark:bg-[#0E7490] text-white shadow-xs'
                   : 'text-[#64748B] dark:text-slate-400 hover:text-[#0F172A] dark:hover:text-white'
-              }`}
+                }`}
             >
               <Layers className="w-3.5 h-3.5" />
               <span>سنوية</span>
@@ -163,18 +159,19 @@ export const EisenhowerHeader: React.FC<EisenhowerHeaderProps> = ({
           <div
             className="w-12 h-12 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 flex items-center justify-center font-black text-sm sm:text-base tabular-nums flex-shrink-0"
             dir="ltr"
+            style={{ unicodeBidi: 'isolate' }}
           >
             {completionPercent}%
           </div>
           <div>
             <h4 className="text-xs sm:text-sm font-bold text-[#0F172A] dark:text-white">
               معدل إنجاز أهداف النطاق الزمني{' '}
-              <span dir="ltr" className="font-extrabold tabular-nums text-[#0B6E72] dark:text-cyan-400">
-                ({completedCount} / {totalCount})
-              </span>
+              (<span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-extrabold tabular-nums text-[#0B6E72] dark:text-cyan-400">
+                {completedCount} / {totalCount}
+              </span>)
             </h4>
             <span className="text-[11px] text-[#64748B] dark:text-slate-400 mt-0.5 block">
-              اسحب أي مهمة وأسقطها لتغيير مربعها، أو استخدم القائمة المنسدلة السريعة داخل البطاقة.
+              اسحب أي مهمة وأفلتها في المربع المطلوب، أو استخدم أزرار النقل السريع بين المربعات داخل البطاقة.
             </span>
           </div>
         </div>

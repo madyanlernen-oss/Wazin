@@ -5,33 +5,77 @@ import {
   Star,
   Edit3,
   Trash2,
+  GripVertical,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../../data/advisorsData';
+import { isolateNumbersInText } from '../FormattedChatMessage';
+import { localizeDomainText } from '../../utils/arabicDomainLabels';
 import {
   EisenhowerGoalItem,
   EisenhowerQuadrant,
 } from '../../types/lifeBalance';
 
+const QUICK_QUADRANT_OPTIONS: Array<{
+  id: EisenhowerQuadrant;
+  shortNum: string;
+  shortLabel: string;
+  fullLabel: string;
+  activeClass: string;
+}> = [
+    {
+      id: 'q1_urgent_important',
+      shortNum: '1',
+      shortLabel: 'نفّذ',
+      fullLabel: 'نقل إلى المربع 1: نفّذ الآن',
+      activeClass: 'bg-rose-600 text-white border-rose-600 shadow-2xs',
+    },
+    {
+      id: 'q2_important_not_urgent',
+      shortNum: '2',
+      shortLabel: 'جدول',
+      fullLabel: 'نقل إلى المربع 2: جدوله',
+      activeClass: 'bg-emerald-600 text-white border-emerald-600 shadow-2xs',
+    },
+    {
+      id: 'q3_urgent_not_important',
+      shortNum: '3',
+      shortLabel: 'فوّض',
+      fullLabel: 'نقل إلى المربع 3: فوّضه',
+      activeClass: 'bg-amber-600 text-white border-amber-600 shadow-2xs',
+    },
+    {
+      id: 'q4_not_urgent_not_important',
+      shortNum: '4',
+      shortLabel: 'احذف',
+      fullLabel: 'نقل إلى المربع 4: احذفه أو قلّله',
+      activeClass: 'bg-slate-600 text-white border-slate-600 shadow-2xs',
+    },
+  ];
+
 interface EisenhowerGoalCardProps {
   goal: EisenhowerGoalItem;
   quadrantColor: 'rose' | 'emerald' | 'amber' | 'slate';
+  isDragging?: boolean;
   onToggleGoal: (id: string) => void;
   onToggleFocus: (id: string) => void;
   onMoveQuadrant: (id: string, q: EisenhowerQuadrant) => void;
   onStartEditGoal: (g: EisenhowerGoalItem) => void;
   onRequestDeleteGoal: (g: EisenhowerGoalItem) => void;
   onDragStart: (e: React.DragEvent, id: string) => void;
+  onDragEnd?: () => void;
 }
 
 export const EisenhowerGoalCard: React.FC<EisenhowerGoalCardProps> = ({
   goal: g,
   quadrantColor,
+  isDragging = false,
   onToggleGoal,
   onToggleFocus,
   onMoveQuadrant,
   onStartEditGoal,
   onRequestDeleteGoal,
   onDragStart,
+  onDragEnd,
 }) => {
   const adv = ADVISORS_LIST.find((a) => a.id === g.areaId);
 
@@ -61,12 +105,20 @@ export const EisenhowerGoalCard: React.FC<EisenhowerGoalCardProps> = ({
     <div
       draggable
       onDragStart={(e) => onDragStart(e, g.id)}
-      className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col gap-2.5 cursor-grab active:cursor-grabbing group min-w-0 select-none shadow-2xs ${colorClasses} ${
-        g.isFocus ? 'ring-2 ring-amber-400 dark:ring-amber-400/80 shadow-xs border-amber-300 dark:border-amber-700/80' : ''
-      }`}
+      onDragEnd={onDragEnd}
+      className={`p-3.5 sm:p-4 rounded-2xl border transition-all flex flex-col gap-2.5 cursor-grab active:cursor-grabbing group min-w-0 select-none shadow-2xs ${colorClasses} ${g.isFocus ? 'ring-2 ring-amber-400 dark:ring-amber-400/80 shadow-xs border-amber-300 dark:border-amber-700/80' : ''
+        } ${isDragging ? 'opacity-50 scale-[0.98] ring-2 ring-[#0B6E72]/40' : ''}`}
     >
-      {/* Top Row: Checkbox & Goal Content */}
-      <div className="flex items-start gap-2.5 sm:gap-3 min-w-0 w-full">
+      {/* Top Row: Drag Handle, Checkbox & Goal Content */}
+      <div className="flex items-start gap-2 sm:gap-2.5 min-w-0 w-full">
+        <span
+          className="mt-1.5 text-slate-300 dark:text-slate-600 group-hover:text-slate-500 dark:group-hover:text-slate-400 transition-colors flex-shrink-0"
+          title="اسحب لنقل المهمة بين المربعات"
+          aria-hidden="true"
+        >
+          <GripVertical className="w-4 h-4" />
+        </span>
+
         <button
           type="button"
           onClick={(e) => {
@@ -93,13 +145,12 @@ export const EisenhowerGoalCard: React.FC<EisenhowerGoalCardProps> = ({
               </span>
             )}
             <p
-              className={`text-xs sm:text-[13px] font-bold leading-relaxed break-words text-right flex-1 ${
-                g.completed
+              className={`text-xs sm:text-[13px] font-bold leading-relaxed break-words text-right flex-1 ${g.completed
                   ? 'line-through text-slate-400 dark:text-slate-500'
                   : 'text-[#0F172A] dark:text-white'
-              }`}
+                }`}
             >
-              {g.title}
+              {isolateNumbersInText(localizeDomainText(g.title))}
             </p>
           </div>
         </div>
@@ -129,20 +180,39 @@ export const EisenhowerGoalCard: React.FC<EisenhowerGoalCardProps> = ({
           )}
         </div>
 
-        {/* Quick Actions: Quadrant Move Dropdown, Star, Edit & Delete Buttons */}
-        <div className="flex items-center gap-1.5 flex-shrink-0 ms-auto">
-          <select
-            aria-label="نقل المربع لمصفوفة أيزنهاور"
-            value={g.quadrant}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => onMoveQuadrant(g.id, e.target.value as EisenhowerQuadrant)}
-            className="text-[11px] sm:text-xs font-semibold bg-white dark:bg-[#0B161C] border border-slate-300 dark:border-slate-700 hover:border-[#0B6E72] dark:hover:border-cyan-400 rounded-lg px-2.5 py-1 text-slate-800 dark:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#112028] cursor-pointer shadow-2xs transition-colors min-h-[30px]"
+        {/* Quick Actions: 1-Tap Quadrant Buttons, Star, Edit & Delete */}
+        <div className="flex flex-wrap items-center gap-1.5 flex-shrink-0 ms-auto">
+          <div
+            className="inline-flex items-center gap-0.5 p-0.5 rounded-xl bg-white/95 dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 shadow-2xs"
+            role="group"
+            aria-label="نقل سريع بين المربعات الأربعة"
           >
-            <option value="q1_urgent_important">المربع 1 (نفّذ)</option>
-            <option value="q2_important_not_urgent">المربع 2 (جدول)</option>
-            <option value="q3_urgent_not_important">المربع 3 (فوّض)</option>
-            <option value="q4_not_urgent_not_important">المربع 4 (احذف)</option>
-          </select>
+            {QUICK_QUADRANT_OPTIONS.map((q) => {
+              const isCurrent = g.quadrant === q.id;
+              return (
+                <button
+                  key={q.id}
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!isCurrent) onMoveQuadrant(g.id, q.id);
+                  }}
+                  aria-pressed={isCurrent}
+                  aria-label={q.fullLabel}
+                  title={q.fullLabel}
+                  className={`min-h-[28px] px-2 py-0.5 rounded-lg text-[10px] font-extrabold transition-all cursor-pointer border ${isCurrent
+                      ? q.activeClass
+                      : 'border-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-[#0F172A] dark:hover:text-white'
+                    }`}
+                >
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">
+                    {q.shortNum}
+                  </span>{' '}
+                  <span className="hidden sm:inline">{q.shortLabel}</span>
+                </button>
+              );
+            })}
+          </div>
 
           <button
             type="button"
@@ -150,11 +220,10 @@ export const EisenhowerGoalCard: React.FC<EisenhowerGoalCardProps> = ({
               e.stopPropagation();
               onToggleFocus(g.id);
             }}
-            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer flex-shrink-0 ${
-              g.isFocus
+            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-lg flex items-center justify-center transition-all cursor-pointer flex-shrink-0 ${g.isFocus
                 ? 'text-amber-500 hover:text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700'
                 : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/40 border border-transparent'
-            }`}
+              }`}
             title={g.isFocus ? 'إلغاء تمييز بؤرة التركيز' : 'تمييز كبؤرة تركيز رئيسية'}
             aria-label={g.isFocus ? 'إلغاء تمييز بؤرة التركيز' : 'تمييز كبؤرة تركيز رئيسية'}
           >

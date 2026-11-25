@@ -1,6 +1,11 @@
 import { Router, Request, Response } from 'express';
 import { ai, Type } from '../config/ai';
 import { GEMINI_API_KEY, GEMINI_MODEL } from '../config/env';
+import {
+  getDomainArabicName,
+  reconcileDirectorReportWithScores,
+  sanitizeDirectorReportArabic,
+} from '../../src/utils/arabicDomainLabels';
 
 export const directorSummaryRouter = Router();
 
@@ -13,25 +18,42 @@ export function generateFallbackDirectorReport(userProfile: any, scores: any, _a
   const isStudent = status === 'طالب جامعي' || status.includes('طالب');
   const studentIncomeTerm = userProfile?.incomeSource?.includes('مكافأة') ? 'المكافأة' : 'المصروف';
 
-  const scoreEntries = Object.entries(scores || {}) as [string, number][];
-  const sorted = scoreEntries.sort((a, b) => b[1] - a[1]);
-  const best = sorted[0] || ['الروحي', 8];
-  const worst = sorted[sorted.length - 1] || ['الصحي', 5];
+  const rawEntries = Object.entries(scores || {}) as [string, number][];
+  const evaluatedEntries = rawEntries.filter(([, val]) => Number.isFinite(Number(val)) && Number(val) > 0);
+  const scoreEntries = evaluatedEntries.length > 0 ? evaluatedEntries : rawEntries;
+  const sorted = [...scoreEntries].sort((a, b) => Number(b[1]) - Number(a[1]));
+  const bestRaw = sorted[0] || ['spiritual', 8];
+  const worstRaw = sorted[sorted.length - 1] || ['health', 5];
+  const bestScore = Number(bestRaw[1]) || 0;
+  const bestLabel = getDomainArabicName(bestRaw[0]);
+  const worstLabel = getDomainArabicName(worstRaw[0]);
   const avg = scoreEntries.length > 0
-    ? (scoreEntries.reduce((acc, curr) => acc + curr[1], 0) / scoreEntries.length).toFixed(1)
+    ? (scoreEntries.reduce((acc, curr) => acc + Number(curr[1]), 0) / scoreEntries.length).toFixed(1)
     : '7.0';
   const avgNum = parseFloat(avg);
   const label = avgNum >= 8 ? 'تناغم قيادي متقدم 🌟' : avgNum >= 6.5 ? 'توازن واعد ومستقر 🚀' : 'مرحلة إعادة التأسيس والتركيز 🎯';
+  const synergyTitle =
+    bestScore >= 7.8
+      ? `قوة ${bestLabel} كرافعة للنمو`
+      : `استقرار ${bestLabel} كنقطة انطلاق`;
+  const synergyDesc =
+    bestScore >= 7.8
+      ? `الأداء المتقدم في ${bestLabel} (${bestScore.toFixed(1)}/10) يمنحك مناعة نفسية ورؤية صلبة يمكن استثمارها لدعم المجالات الأخرى.`
+      : `يمثل ${bestLabel} أعلى درجاتك الحالية في العجلة (${bestScore.toFixed(1)}/10)، ويمكن البناء على هذا الاستقرار النسبي لرفع باقي المجالات تدريجياً.`;
+  const diagnosisLead =
+    bestScore >= 7.8
+      ? `يتبين وجود ركيزة قوية في ${bestLabel} تمنحك استقراراً وطاقة إيجابية`
+      : `يمثل ${bestLabel} أعلى جوانبك الحالية نسبياً (${bestScore.toFixed(1)}/10) ويمكن البناء عليه بهدوء`;
 
   const studentHabits = [
     {
-      name: 'طقس السكينة والبدء الواعي (المربع 2)',
+      name: 'طقس السكينة والبدء الواعي في المربع الثاني',
       triggerTime: 'الصباح الباكر',
       targetDomains: ['الروحي', 'الصحي', 'الشخصي'],
       expectedImpact: 'رفع التركيز الذهني بنسبة 40% وتصفية الذهن قبل بدء المحاضرات.',
     },
     {
-      name: 'جلسة العمل والمذاكرة العميقة (Deep Study - 45 دقيقة)',
+      name: 'جلسة العمل والمذاكرة العميقة لمدة 45 دقيقة',
       triggerTime: 'العصر / المساء',
       targetDomains: ['المهني/الأكاديمي', 'المعرفي', 'الشخصي'],
       expectedImpact: 'إنجاز التكاليف الجامعية بجودة عالية وحماية وقت المساء للراحة.',
@@ -46,13 +68,13 @@ export function generateFallbackDirectorReport(userProfile: any, scores: any, _a
 
   const generalHabits = [
     {
-      name: 'طقس السكينة والبدء الواعي (المربع 2)',
+      name: 'طقس السكينة والبدء الواعي في المربع الثاني',
       triggerTime: 'الصباح الباكر',
       targetDomains: ['الروحي', 'الصحي', 'الشخصي'],
       expectedImpact: 'رفع التركيز الذهني بنسبة 40% وتقليل تشتت اليوم.',
     },
     {
-      name: 'المراجعة الاستراتيجية المسائية (10 دقائق)',
+      name: 'المراجعة الاستراتيجية المسائية لمدة 10 دقائق',
       triggerTime: 'نهاية اليوم',
       targetDomains: ['المهني', 'المالي', 'الأسري'],
       expectedImpact: 'إغلاق دوائر المهام المفتوحة وتحقيق راحة نفسية واستقرار.',
@@ -75,7 +97,7 @@ export function generateFallbackDirectorReport(userProfile: any, scores: any, _a
     {
       weekNumber: 2,
       weekTitle: 'ترسيخ وتيرة المذاكرة المنتظمة',
-      coreFocus: 'بناء روتين جلسات المذاكرة المركزة (Pomodoro) لكسر التسويف الأكاديمي',
+      coreFocus: 'بناء روتين جلسات المذاكرة المركزة المتقطعة لكسر التسويف الأكاديمي',
       actions: ['تثبيت موعد النوم والاستيقاظ', 'جلسة مذاكرة عميقة 45 دقيقة يومياً'],
     },
     {
@@ -119,19 +141,19 @@ export function generateFallbackDirectorReport(userProfile: any, scores: any, _a
     },
   ];
 
-  return {
-    overallDiagnosis: `بناءً على قراءة عجلة حياتك بمعدل عام (${avg}/10)، يتبين وجود ركيزة قوية في جانب (${best[0]}) تمنحك استقراراً وطاقة إيجابية. في المقابل، يمثل جانب (${worst[0]}) عنق الزجاجة الأبرز الذي يستوجب تركيزاً مباشراً لحمايته من التسويف وإدراجه في المربع الثاني بمصفوفة أيزنهاور.`,
+  return reconcileDirectorReportWithScores({
+    overallDiagnosis: `بناءً على قراءة عجلة حياتك بمعدل عام (${avg}/10)، ${diagnosisLead}. في المقابل، يمثل ${worstLabel} عنق الزجاجة الأبرز الذي يستوجب تركيزاً مباشراً لحمايته من التسويف وإدراجه في المربع 2 بمصفوفة أيزنهاور.`,
     balanceIndexLabel: label,
     strongestSynergy: {
-      title: `قوة ${best[0]} كرافعة للنمو`,
-      description: `الأداء المتقدم في هذا الجانب يمنحك مناعة نفسية ورؤية صلبة يمكن استثمارها لدعم المجالات الأخرى.`,
-      domainsInvolved: [String(best[0]), 'التطوير الشخصي', 'إدارة الطاقة'],
+      title: synergyTitle,
+      description: synergyDesc,
+      domainsInvolved: [bestLabel, 'التطوير الشخصي', 'إدارة الطاقة'],
     },
     criticalBottleneck: {
-      title: `فجوة ${worst[0]} وأثرها التراكمي`,
-      impact: `تراجع هذا الجانب يشكل تسرباً غير مرئي للطاقة قد يحد من استدامة نتائجك في بقية المجالات.`,
-      recommendation: `خصص 15 دقيقة يومياً لحماية هذا الجانب كعادة ثابتة في المربع الثاني دون تسويف.`,
-      domain: String(worst[0]),
+      title: `فجوة ${worstLabel} وأثرها التراكمي`,
+      impact: `تراجع هذا الجانب إلى (${Number(worstRaw[1] || 5).toFixed(1)}/10) يشكل تسرباً غير مرئي للطاقة قد يحد من استدامة نتائجك في بقية المجالات.`,
+      recommendation: `خصص 15 دقيقة يومياً لحماية هذا الجانب كعادة ثابتة في المربع 2 دون تسويف.`,
+      domain: worstLabel,
     },
     keystoneHabits: isStudent ? studentHabits : generalHabits,
     thirtyDayRoadmap: isStudent ? studentRoadmap : generalRoadmap,
@@ -139,7 +161,7 @@ export function generateFallbackDirectorReport(userProfile: any, scores: any, _a
       ? 'التوازن في المرحلة الجامعية لا يعني الكمال في كل مادة ولحظة، بل حماية بوصلة اليوم بين علم ينتفع به، وصمام أمان مالي ميسر، وسكينة قلب.'
       : 'التوازن ليس أن تمنح كل جانب نفس الوقت والجهد، بل أن تمنح كل جانب حقه في اللحظة المناسبة بحضور كامل.',
     source: 'fallback',
-  };
+  }, scores);
 }
 
 // Endpoint: Director Summary (Cross-Domain Insights & Master Action Plan)
@@ -188,18 +210,35 @@ ${incomeStability ? `- طبيعة واستقرار الدخل: ${incomeStability
 لا تطرح أي سؤال أو نصيحة أو توصية لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تبنِ خططاً مهنية لمتقاعد أو باحث عن عمل كأنهم موظفون). وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في التحليل.
 `;
 
+    const localizedScores = Object.fromEntries(
+      Object.entries(scores || {}).map(([k, v]) => [getDomainArabicName(k), v])
+    );
+    const localizedAdvisorSummaries = Object.fromEntries(
+      Object.entries(advisorSummaries || {}).map(([k, v]) => [getDomainArabicName(k), v])
+    );
+    const evaluatedScoreEntries = Object.entries(scores || {})
+      .map(([k, v]) => [k, Number(v)] as [string, number])
+      .filter(([, v]) => Number.isFinite(v) && v > 0)
+      .sort((a, b) => a[1] - b[1]);
+    const promptBottleneck = evaluatedScoreEntries[0];
+    const promptStrongest = evaluatedScoreEntries[evaluatedScoreEntries.length - 1];
+
     const systemInstruction = `
 ${directorUserContext}
 
-أنت "المنسق التكاملي العام (م. معتز)" في منصة "وزان" (Wazan).
-مهمتك النظر في حياة المستفيد كمنظومة واحدة متكاملة (Holistic Life Ecosystem) وليست جزراً منعزلة.
+أنت "المنسق التكاملي العام (م. معتز)" في منصة "وزان".
+مهمتك النظر في حياة المستفيد كمنظومة واحدة متكاملة وليست جزراً منعزلة.
 أنت خبير في:
-- تحليل التناغم والتأثير المتبادل بين مجالات الحياة الثمانية (الروحي، المالي، المهني، الشخصي، التعليمي، الأسري، الاجتماعي، الصحي).
-- كشف الحلقات المفرغة (Vicious Cycles) التي يسحب فيها جانب ضعيف الجوانب الأخرى.
-- تحديد "العادات المحورية" (Keystone Habits) التي يؤدي تحسينها إلى انتعاش تلقائي في 3 مجالات أو أكثر دفعة واحدة.
+- تحليل التناغم والتأثير المتبادل بين مجالات الحياة الثمانية (الجانب الروحي والسكينة، الجانب المالي والاستقلال، الجانب المهني والوظيفي، الجانب الشخصي والوعي بالذات، الجانب التعليمي والمعرفي، الجانب الأسري والعائلي، الجانب الاجتماعي والعلاقات، الجانب الصحي والبدني).
+- كشف الحلقات المفرغة التي يسحب فيها جانب ضعيف الجوانب الأخرى.
+- تحديد "العادات المحورية" التي يؤدي تحسينها إلى انتعاش تلقائي في 3 مجالات أو أكثر دفعة واحدة.
 - تصميم خطة عمل متكاملة لمدة 30 يوماً مقسمة أسبوعياً بنبرة قيادية حكيمة وواقعية ومحفزة للغاية.
 
-اللغة: عربية فصيحة، راقية، دقيقة، عميقة، وموجهة للعمل.
+⛔ قاعدة لغة ودقة الدرجات الإلزامية:
+- اكتب جميع النصوص وعناوين المجالات باللغة العربية الخالصة الفصيحة، ويُمنع تماماً إدراج أي مفاتيح أو كلمات إنجليزية مثل (career, health, financial, Keystone Habits, Deep Study, Bottleneck) في المخرجات.
+- التزم حرفياً بالدرجات الفعلية في عجلة الحياة: ${promptStrongest ? `أعلى جانب مقيّم حالياً هو "${getDomainArabicName(promptStrongest[0])}" بدرجة (${promptStrongest[1]}/10)، ` : ''}${promptBottleneck ? `وأدنى جانب (عنق الزجاجة) هو "${getDomainArabicName(promptBottleneck[0])}" بدرجة (${promptBottleneck[1]}/10).` : ''}
+- إذا كانت أعلى درجة أقل من 7.8 (مثل 6.5/10)، صفه بواقعية ("استقرار نسبي" أو "الأعلى نسبياً") ولا تصفه أبداً بأنه "استثنائي" أو "استثناءً مطلقاً" أو "قوة خارقة".
+- راعِ سلامة الإملاء واتصال حرف اللام بالاسم المعرّف (مثل «للجانب» لا «لـ الجانب»، و«الأسري» لا «الأسرى»، و«المربع 2» لا «(المربع (2)») وتجنب الأقواس الزائدة أو غير المتوازنة.
 `;
 
     const prompt = `
@@ -214,12 +253,12 @@ ${incomeStability ? `- طبيعة الدخل: ${incomeStability}` : ''}
 - الأولوية الحالية: ${focusArea || 'تحقيق التوازن الشامل'}
 
 درجات مجالات الحياة الثمانية (من 10):
-${JSON.stringify(scores || {}, null, 2)}
+${JSON.stringify(localizedScores, null, 2)}
 
 ملخص إجابات وأهداف المجالات:
-${JSON.stringify(advisorSummaries || {}, null, 2)}
+${JSON.stringify(localizedAdvisorSummaries, null, 2)}
 
-يرجى إعداد التقرير التكاملي الشامل بصيغة JSON وفق المخطط المطلوب.
+يرجى إعداد التقرير التكاملي الشامل بصيغة JSON وفق المخطط المطلوب وباللغة العربية الكاملة دون أي كلمات أو مفاتيح إنجليزية.
 `;
 
     // Strict 3800ms race timeout to guarantee sub-4s response time
@@ -314,7 +353,8 @@ ${JSON.stringify(advisorSummaries || {}, null, 2)}
     const durationMs = Date.now() - startGemini;
     console.log(`[Director Summary] استجاب Gemini بنجاح في ${durationMs}ms`);
 
-    const parsed = JSON.parse(response.text || '{}');
+    const rawParsed = JSON.parse(response.text || '{}');
+    const parsed = reconcileDirectorReportWithScores(rawParsed, scores);
     if (!parsed.reply && (parsed.overallDiagnosis || parsed.directorGoldenRule)) {
       parsed.reply = [parsed.overallDiagnosis, parsed.directorGoldenRule].filter(Boolean).join('\n\n');
     }

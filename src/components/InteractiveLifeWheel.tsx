@@ -426,7 +426,7 @@ export const InteractiveLifeWheel: React.FC<InteractiveLifeWheelProps> = ({
               style={{ backgroundColor: activeDomain.themeColor }}
             />
             <span className="text-xs font-black tracking-wider text-[#0B6E72] dark:text-cyan-400">
-              العجلة التفاعلية المتكاملة (Interactive Life Wheel)
+              عجلة الحياة التفاعلية المتكاملة
             </span>
           </div>
           <h3 className="text-lg sm:text-xl font-black text-[#0F172A] dark:text-white">

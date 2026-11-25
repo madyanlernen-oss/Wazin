@@ -13,9 +13,14 @@ interface EisenhowerQuadrantCardProps {
   inlineInputValue: string;
   placeholderText: string;
   emptyText: string;
+  isDropTarget?: boolean;
+  isAnyDragging?: boolean;
+  draggedGoalId?: string | null;
   onChangeInlineInput: (val: string) => void;
   onSubmitInlineInput: () => void;
   onDragOver: (e: React.DragEvent) => void;
+  onDragLeave?: (e: React.DragEvent) => void;
+  onDragEnd?: () => void;
   onDrop: (e: React.DragEvent, quadrant: EisenhowerQuadrant) => void;
   onToggleGoal: (id: string) => void;
   onToggleFocus: (id: string) => void;
@@ -35,9 +40,14 @@ export const EisenhowerQuadrantCard: React.FC<EisenhowerQuadrantCardProps> = ({
   inlineInputValue,
   placeholderText,
   emptyText,
+  isDropTarget = false,
+  isAnyDragging = false,
+  draggedGoalId = null,
   onChangeInlineInput,
   onSubmitInlineInput,
   onDragOver,
+  onDragLeave,
+  onDragEnd,
   onDrop,
   onToggleGoal,
   onToggleFocus,
@@ -95,26 +105,61 @@ export const EisenhowerQuadrantCard: React.FC<EisenhowerQuadrantCardProps> = ({
     slate: 'text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-800 bg-slate-50/20 dark:bg-slate-900/10',
   }[themeColor];
 
+  const completedInQuadrant = goals.filter((g) => g.completed).length;
+  const quadrantCompletionPct = goals.length > 0 ? Math.round((completedInQuadrant / goals.length) * 100) : 0;
+
+  const dropHighlightClasses = {
+    rose: 'ring-4 ring-rose-400/35 border-rose-500 dark:border-rose-400 bg-rose-50/30 dark:bg-rose-950/20 scale-[1.01]',
+    emerald: 'ring-4 ring-emerald-400/35 border-emerald-500 dark:border-emerald-400 bg-emerald-50/30 dark:bg-emerald-950/20 scale-[1.01]',
+    amber: 'ring-4 ring-amber-400/35 border-amber-500 dark:border-amber-400 bg-amber-50/30 dark:bg-amber-950/20 scale-[1.01]',
+    slate: 'ring-4 ring-cyan-400/30 border-[#0B6E72] dark:border-cyan-400 bg-slate-50/50 dark:bg-cyan-950/20 scale-[1.01]',
+  }[themeColor];
+
   return (
     <div
       onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
       onDrop={(e) => onDrop(e, quadrant)}
-      className={`bg-white dark:bg-[#112028] border-2 rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 transition-all ${containerClasses}`}
+      className={`bg-white dark:bg-[#112028] border-2 rounded-3xl p-5 sm:p-6 shadow-xs flex flex-col justify-between space-y-4 transition-all duration-150 ${
+        isDropTarget
+          ? dropHighlightClasses
+          : isAnyDragging
+          ? `${containerClasses} border-dashed`
+          : containerClasses
+      }`}
     >
-      <div className={`flex items-start justify-between pb-3 border-b ${headerBorder}`}>
+      <div className={`flex items-start justify-between gap-2 pb-3 border-b ${headerBorder}`}>
         <div>
           {badge}
           <h2 className={`text-lg font-black ${titleColor}`}>{title}</h2>
           <p className="text-xs text-[#64748B] dark:text-slate-400 mt-0.5">{subtitle}</p>
         </div>
-        <span
-          className={`w-8 h-8 rounded-xl font-black text-sm flex items-center justify-center tabular-nums flex-shrink-0 border ${countBadge}`}
-          dir="ltr"
-          aria-label={`عدد الأهداف: ${goals.length}`}
-        >
-          {goals.length}
-        </span>
+        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+          <span
+            className={`w-8 h-8 rounded-xl font-black text-sm flex items-center justify-center tabular-nums border ${countBadge}`}
+            dir="ltr"
+            aria-label={`عدد الأهداف: ${goals.length}`}
+          >
+            {goals.length}
+          </span>
+          {goals.length > 0 && (
+            <span
+              dir="ltr"
+              style={{ unicodeBidi: 'isolate' }}
+              className="text-[10px] font-bold text-slate-500 dark:text-slate-400 tabular-nums"
+              title={`تم إنجاز ${completedInQuadrant} من ${goals.length} في هذا المربع`}
+            >
+              {completedInQuadrant}/{goals.length} ({quadrantCompletionPct}%)
+            </span>
+          )}
+        </div>
       </div>
+
+      {isDropTarget && (
+        <div className="rounded-xl border border-dashed border-[#0B6E72]/50 dark:border-cyan-400/50 bg-[#0B6E72]/5 dark:bg-cyan-950/40 px-3 py-1.5 text-center text-[11px] font-black text-[#0B6E72] dark:text-cyan-300 animate-pulse">
+          أفلت المهمة هنا لنقلها إلى {title}
+        </div>
+      )}
 
       {/* Inline Quick Add */}
       <form
@@ -129,14 +174,15 @@ export const EisenhowerQuadrantCard: React.FC<EisenhowerQuadrantCardProps> = ({
           value={inlineInputValue}
           onChange={(e) => onChangeInlineInput(e.target.value)}
           placeholder={placeholderText}
+          aria-label={`إضافة مهمة سريعة في ${title}`}
           className="w-full bg-transparent border-0 px-2.5 py-1.5 text-xs text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none"
           dir="rtl"
         />
         <button
           type="submit"
           disabled={!inlineInputValue.trim()}
-          className={`px-3 py-1.5 rounded-xl text-white text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed ${inlineSubmitBtn}`}
-          title="إضافة"
+          className={`px-3 py-1.5 min-h-[34px] rounded-xl text-white text-[11px] font-black flex items-center gap-1 cursor-pointer transition-colors flex-shrink-0 disabled:opacity-30 disabled:cursor-not-allowed ${inlineSubmitBtn}`}
+          title="إضافة سريعة (Enter)"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>إضافة</span>
@@ -162,12 +208,14 @@ export const EisenhowerQuadrantCard: React.FC<EisenhowerQuadrantCardProps> = ({
               key={g.id}
               goal={g}
               quadrantColor={themeColor}
+              isDragging={draggedGoalId === g.id}
               onToggleGoal={onToggleGoal}
               onToggleFocus={onToggleFocus}
               onMoveQuadrant={onMoveQuadrant}
               onStartEditGoal={onStartEditGoal}
               onRequestDeleteGoal={onRequestDeleteGoal}
               onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
             />
           ))
         )}

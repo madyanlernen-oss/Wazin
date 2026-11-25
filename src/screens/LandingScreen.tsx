@@ -355,11 +355,11 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
               type="button"
               onClick={onActivateDemo || onLoadSample}
               className="min-h-[40px] px-3 sm:px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white text-xs sm:text-sm font-extrabold shadow-sm transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-1.5 flex-shrink-0 cursor-pointer"
-              title="تجربة فورية بحساب تجريبي (Demo Mode)"
+              title="تجربة فورية بحساب تجريبي للمحكّمين"
               aria-label="تجربة فورية بحساب تجريبي للمحكمين"
             >
               <Zap className="w-3.5 h-3.5 fill-current text-amber-200" aria-hidden="true" />
-              <span>تجربة فورية (Demo Mode)</span>
+              <span>تجربة فورية (وضع المحكّمين)</span>
             </button>
 
             <button
@@ -593,7 +593,7 @@ export const LandingScreen: React.FC<LandingScreenProps> = ({
                 {/* Shimmer sweep effect */}
                 <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/25 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-out pointer-events-none" />
                 <Zap className="w-5 h-5 fill-current text-amber-200 animate-pulse" aria-hidden="true" />
-                <span>تجربة فورية بحساب تجريبي (Demo Mode)</span>
+                <span>تجربة فورية بحساب تجريبي (وضع المحكّمين)</span>
                 <span className="text-xs px-2.5 py-0.5 rounded-full bg-black/25 text-amber-100 font-bold">للمحكّمين ⚡</span>
               </button>
 
