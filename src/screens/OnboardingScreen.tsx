@@ -567,8 +567,8 @@ ${openingQuestion}
       }
     }
 
-    // حفظ الإجابة النصية، ولا نعتمد درجة التقييم الرسمية في المحطة إلا عند الاعتماد الفعلي بعد بلوغ الحد الأدنى من الجولات
-    if (detectedScore !== null && currentTurns >= 3) {
+    // حفظ الإجابة النصية، ولا نعتمد درجة التقييم الرسمية في المحطة إلا عند الاعتماد الفعلي بعد بلوغ الحد الأدنى من الجولات (3 رسائل)
+    if (detectedScore !== null && currentTurns >= 2) {
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_self_rating`, detectedScore);
     } else {
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_response_${currentTurns}`, text);
@@ -747,7 +747,7 @@ ${openingQuestion}
         if (Array.isArray(local.suggestedReplies) && local.suggestedReplies.length > 0) aiSuggestedReplies = local.suggestedReplies;
       }
 
-      const isMinimumRoundsReached = currentTurns >= 3; // الجولة الرابعة (3 ردود سابقة + الرد الرابع الحالي)
+      const isMinimumRoundsReached = currentTurns >= 2; // بعد الرسالة الثالثة للمستخدم (رسالتان سابقتان + الرسالة الثالثة الحالية)
       if (isExplicitAdoption) {
         // إذا اختار المستفيد صراحة اعتماد التقييم، يتم اعتماد التقييم وإتمام المحطة فوراً
         isStationCompleted = true;

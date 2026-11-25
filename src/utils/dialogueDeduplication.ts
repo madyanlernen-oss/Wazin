@@ -297,7 +297,7 @@ export function isQuestionContradictingHistory(
 
   // 2. User explicitly affirmed no debts -> reject questions asking if they have debts
   const affirmedNoDebt =
-    /(?:بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:ديون|أقساط)|ما\s*عندي\s*(?:ديون|أقساط)|خالي\s*من\s*الديون)/i.test(
+    /(?:بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:علي[ّ]?\s*|لدي\s*)?(?:أي\s*)?(?:ديون|أقساط)|ليس(?:ت)?\s*(?:لدي|عندي|علي[ّ]?)\s*(?:أي\s*)?(?:ديون|أقساط)|ما\s*(?:عندي|علي[ّ]?)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون|خلو\s*سجلي\s*من\s*الديون)/i.test(
       userText
     );
   if (
@@ -336,6 +336,197 @@ export function isQuestionContradictingHistory(
     ) {
       return true;
     }
+  }
+
+  // 6. User already answered fixed diagnostic questions (emergency fund, debts, main expense leak, sleep, account separation)
+  if (isDiagnosticTopicAlreadyAnswered(candidateQuestion, history)) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Extracts whether the user has already answered regarding their emergency fund / reserve
+ * (including whether they have one and how many months it covers).
+ */
+export function extractEmergencyFundStatus(
+  history: HistoryEntryLike[],
+  currentMessage?: string
+): { answered: boolean; hasFund: boolean | null; monthsCovered: number | null } {
+  const userTexts: string[] = [];
+  for (const item of history || []) {
+    const { role, text } = extractEntryText(item);
+    if (!text || role === 'model') continue;
+    if (
+      role === 'unknown' &&
+      /(?:أهلاً بك|أقيّم وضعك|التقييم المستحق|بصفتي مستشارك|توصية|القاعدة الذهبية|المستشار المالي)/.test(
+        text
+      )
+    ) {
+      continue;
+    }
+    userTexts.push(text);
+  }
+  if (currentMessage && currentMessage.trim()) {
+    userTexts.push(currentMessage.trim());
+  }
+
+  const combined = userTexts.join(' ').trim();
+  if (!combined) {
+    return { answered: false, hasFund: null, monthsCovered: null };
+  }
+
+  const mentionsFundTerm =
+    /(?:صندوق\s*(?:ال)?طوارئ|احتياطي\s*(?:ال)?طوارئ|احتياطي\s*(?:مالي|نقدي)|صمام\s*(?:ال)?أمان|مبلغ\s*طوارئ|رصيد\s*طوارئ|مدخرات\s*الطوارئ)/i.test(
+      combined
+    );
+  const mentionsCoverageMonths =
+    /(?:يغطي|تغطي|يكفي|تكفي|يكفيني)\s*(?:مصاريف|نفقات|حاجتي)?\s*(?:لـ?\s*)?(\d+|ثلاثة|ثلاث|أربعة|أربع|خمسة|خمس|ستة|ست|سبعة|سبع|ثمانية|ثماني|شهرين|شهراً|شهر)\s*(?:أشهر|شهور|اشهر|شهر)?/i.test(
+      combined
+    ) ||
+    /(\d+|ثلاثة|ثلاث|أربعة|أربع|خمسة|خمس|ستة|ست)\s*(?:أشهر|شهور|اشهر)\s*(?:من\s*(?:المصاريف|النفقات|الراتب|الطوارئ)|طوارئ|احتياطي|نفقات)/i.test(
+      combined
+    );
+
+  if (!mentionsFundTerm && !mentionsCoverageMonths) {
+    return { answered: false, hasFund: null, monthsCovered: null };
+  }
+
+  let monthsCovered: number | null = null;
+  const digitMonthMatch = combined.match(/(\d+)\s*(?:أشهر|شهور|اشهر|شهر)/i);
+  if (digitMonthMatch) {
+    const parsed = parseInt(digitMonthMatch[1], 10);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 36) {
+      monthsCovered = parsed;
+    }
+  } else if (/(?:ستة|ست)\s*(?:أشهر|شهور|اشهر)/i.test(combined)) {
+    monthsCovered = 6;
+  } else if (/(?:خمسة|خمس)\s*(?:أشهر|شهور|اشهر)/i.test(combined)) {
+    monthsCovered = 5;
+  } else if (/(?:أربعة|أربع|اربعة|اربع)\s*(?:أشهر|شهور|اشهر)/i.test(combined)) {
+    monthsCovered = 4;
+  } else if (/(?:ثلاثة|ثلاث)\s*(?:أشهر|شهور|اشهر)/i.test(combined)) {
+    monthsCovered = 3;
+  } else if (/شهرين/.test(combined)) {
+    monthsCovered = 2;
+  }
+
+  const negatedFund =
+    /(?:ليس\s*(?:لدي|عندي)|لا\s*(?:يوجد|أملك|املك|لدي|عندي)|ما\s*(?:عندي|أملك|املك)|بدون\s*(?:صندوق|احتياطي|صمام)|لا\s*أملك\s*أمان|لم\s*(?:أؤسس|أبدأ|أكوّن))\s*(?:صندوق|احتياطي|صمام|أمان)?/i.test(
+      combined
+    ) && monthsCovered === null;
+
+  if (negatedFund) {
+    return { answered: true, hasFund: false, monthsCovered: 0 };
+  }
+
+  const affirmedFund =
+    monthsCovered !== null && monthsCovered > 0 ||
+    /(?:لدي|عندي|أملك|املك|أسست|اسست|وفرت|جمعت|موجود|متوفر|أحتفظ\s*بـ?\s*صندوق|يوجد\s*(?:لدي|عندي)?\s*(?:صندوق|احتياطي)|اكتمل\s*صندوق)/i.test(
+      combined
+    );
+
+  if (affirmedFund || mentionsFundTerm) {
+    return {
+      answered: true,
+      hasFund: affirmedFund ? true : null,
+      monthsCovered,
+    };
+  }
+
+  return { answered: false, hasFund: null, monthsCovered: null };
+}
+
+export function hasEmergencyFundAnswered(
+  history: HistoryEntryLike[],
+  currentMessage?: string
+): boolean {
+  return extractEmergencyFundStatus(history, currentMessage).answered;
+}
+
+/**
+ * Checks if a candidate question repeats a fixed diagnostic topic that the user
+ * has already answered in their prior messages (e.g., emergency fund, debt status,
+ * main expense leak, business account separation, sleep duration).
+ */
+export function isDiagnosticTopicAlreadyAnswered(
+  candidateQuestion: string,
+  history: HistoryEntryLike[]
+): boolean {
+  if (!candidateQuestion || !Array.isArray(history) || history.length === 0) return false;
+
+  const userUtterances: string[] = [];
+  for (const item of history) {
+    const { role, text } = extractEntryText(item);
+    if (!text || role === 'model') continue;
+    if (role === 'unknown' && /(?:أهلاً بك|أقيّم وضعك|التقييم المستحق|بصفتي مستشارك)/.test(text)) continue;
+    userUtterances.push(text);
+  }
+  if (userUtterances.length === 0) return false;
+
+  const userText = userUtterances.join(' ').toLowerCase();
+  const qLower = candidateQuestion.toLowerCase();
+
+  // A. Emergency fund diagnostic / existence / starter question already answered
+  const efStatus = extractEmergencyFundStatus(userUtterances);
+  if (efStatus.answered) {
+    const asksExistenceOrCoverageOrStarterFund =
+      /(?:هل\s*(?:لديك|عندك|تملك|يوجد\s*لديك|يكفي|تؤمّن|تستطيع\s*تأمين).*?(?:صندوق|احتياطي|طوارئ|صمام)|كم\s*(?:شهراً|شهر)\s*(?:يكفي|يغطي).*?(?:احتياط|طوارئ|رصيد)|ما\s*مدى\s*شعورك\s*بالأمان\s*تجاه\s*صندوق\s*الطوارئ|هل\s*جربت\s*سابقاً\s*اقتطاع\s*مبلغ\s*رمزي.*?صمام\s*أمان|تأمين\s*احتياطي\s*للطوارئ\s*(?:الأسرية|أم\s*تتآكل)|ما\s*العائق\s*الأبرز\s*أمام.*?(?:بناء\s*صمام\s*أمان|صندوق)|مراجعة\s*معاً\s*خطة\s*بناء\s*صندوق\s*الطوارئ)/i.test(
+        qLower
+      ) ||
+      (efStatus.hasFund === true &&
+        /(?:تأسيس\s*(?:أول\s*)?صندوق\s*طوارئ|بناء\s*(?:أول\s*)?صمام\s*أمان|كيف\s*تؤمّن\s*جانباً\s*احتياطياً)/i.test(qLower));
+
+    if (asksExistenceOrCoverageOrStarterFund) {
+      return true;
+    }
+  }
+
+  // B. Debt / installments status already answered (either with debt OR without debt)
+  if (hasDebtStatusAnswered(userUtterances, '')) {
+    if (
+      /(?:هل\s*(?:توجد|يوجد|لديك|عليك|تقتطع|يقتطع\s*من\s*راتبك).*?(?:ديون|قرض|قروض|أقساط|التزامات)|كم\s*نسبة\s*(?:الأقساط|الديون)|أم\s*يخلو\s*سجلك\s*منها|هل\s*تخلو\s*التزاماتك\s*من\s*الديون)/i.test(
+        qLower
+      )
+    ) {
+      return true;
+    }
+  }
+
+  // C. Main expense leak already specified by user
+  const alreadyNamedExpense =
+    userUtterances.some((u) => extractExpenseCategoryFromAnswer(u) !== null) ||
+    /(?:أكثر\s*(?:شيء|بند)\s*(?:أصرف|يصرف|يستهلك)|يصرف\s*على\s*(?:المطاعم|الإيجار|التسوق|المقاهي|الفواتير|السفر))/i.test(
+      userText
+    );
+  if (
+    alreadyNamedExpense &&
+    /(?:ما\s*(?:هو\s*)?البند\s*(?:الشهري|الأسبوعي|الجامعي|المالي)?\s*(?:الذي\s*)?(?:تلاحظ\s*أنه\s*)?(?:يستهلك|يلتهم|يقتطع|يشكل)|أي\s*بند\s*يستهلك\s*دخلك)/i.test(
+      qLower
+    )
+  ) {
+    return true;
+  }
+
+  // D. Business / variable income separation already answered
+  if (
+    /(?:أفصل\s*(?:الحسابات|حساب\s*العمل)|لا\s*أفصل\s*الحسابات|تداخل\s*في\s*الحسابات|لدي\s*حساب\s*منفصل\s*للعمل)/i.test(
+      userText
+    ) &&
+    /(?:هل\s*تفصل\s*(?:حالياً\s*)?بين\s*حساب\s*العمل\s*وحسابك)/i.test(qLower)
+  ) {
+    return true;
+  }
+
+  // E. Sleep hours/rhythm already answered
+  if (
+    /(?:أنام\s*\d+\s*ساع|ساعات\s*نوم|نومي\s*(?:منتظم|متقطع|ممتاز|سيئ|عميق)|أعاني\s*من\s*(?:الأرق|قلة\s*النوم))/i.test(
+      userText
+    ) &&
+    /(?:كيف\s*يبدو\s*إيقاع\s*نومك\s*واستيقاظك)/i.test(qLower)
+  ) {
+    return true;
   }
 
   return false;

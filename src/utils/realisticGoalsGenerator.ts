@@ -1,5 +1,6 @@
 import { LifeAreaId, UserProfile } from '../types/lifeBalance';
 import { parseUserContext, ParsedUserContext } from './contextPersonalization';
+import { extractEmergencyFundStatus } from './dialogueDeduplication';
 
 export interface DialogueConstraints {
   workHours: number | null;
@@ -106,13 +107,13 @@ export function parseDialogueConstraints(
     );
 
   const mentionsNoDebt =
-    /(?:بدون\s*ديون|لا\s*(?:يوجد\s*)?ديون|ليس\s*(?:لدي|عندي)\s*ديون|ما\s*عندي\s*ديون|خلو\s*(?:سجلي\s*)?من\s*الديون)/i.test(
+    /(?:بدون\s*ديون|لا\s*(?:يوجد|توجد|يوجد\s*لدي|توجد\s*علي[ّ]?|يوجد\s*علي[ّ]?|لدي|عندي)\s*(?:أي\s*)?(?:ديون|أقساط)|ليس(?:ت)?\s*(?:لدي|عندي|علي[ّ]?)\s*(?:أي\s*)?(?:ديون|أقساط)|ما\s*(?:عندي|علي[ّ]?)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون|خلو\s*(?:سجلي\s*)?من\s*الديون)/i.test(
       lower
     );
 
   const mentionsDebt =
     !mentionsNoDebt &&
-    /(?:قرض|قروض|بطاقة\s*ائتمان|بطاقات\s*ائتمان|فيزا|ماستركارد|أقساط|اقساط|تراكم\s*الديون|سداد\s*ديون|(?:لدي|عندي|علي|عليّ)\s*دين|(?:لدي|عندي|علي|عليّ)\s*ديون)/i.test(
+    /(?:قرض|قروض|بطاقة\s*ائتمان|بطاقات\s*ائتمان|فيزا|ماستركارد|أقساط|اقساط|تراكم\s*الديون|سداد\s*ديون|(?:لدي|عندي|علي|عليّ)\s*دين|(?<!لا\s+(?:توجد|يوجد)\s+)(?:لدي|عندي|علي|عليّ)\s*ديون)/i.test(
       lower
     );
 
@@ -571,9 +572,16 @@ export function synthesizeGoldenRecommendation(
       .trim();
 
     const isGenericFiller =
-      /^(?:البدء\s*بخطوة\s*عملية\s*(?:واحدة\s*)?صغيرة|تحديد\s*خطوة\s*عملية\s*واحدة|ركز\s*على\s*خطوة|التوازن\s*يبدأ\s*بخطوة|ابدأ\s*بخطوة\s*صغيرة|حماية\s*وقتك\s*اليومي|التركيز\s*على\s*عادة\s*واحدة)/i.test(
+      /^(?:البدء\s*بخطوة\s*عملية\s*(?:واحدة\s*)?(?:صغيرة|محددة)|تحديد\s*خطوة\s*عملية\s*واحدة|ركز\s*على\s*خطوة|التوازن\s*يبدأ\s*بخطوة|ابدأ\s*بخطوة\s*صغيرة|حماية\s*وقتك\s*اليومي|التركيز\s*على\s*عادة\s*واحدة)/i.test(
         cleaned
-      );
+      ) ||
+      /(?:خطوة\s*عملية\s*واحدة\s*صغيرة\s*ومحددة\s*تعالج\s*التحدي|تعالج\s*التحدي\s*(?:الرئيسي|الأساسي)|التحدي\s*الذي\s*تحدثنا\s*عنه)/i.test(
+        cleaned
+      ) ||
+      (score >= 7.5 &&
+        /(?:تعالج\s*(?:التحدي|العجز)|تأسيس\s*أول\s*صمام|كسر\s*حاجز\s*البداية|تحديد\s*العجز)/i.test(
+          cleaned
+        ));
     if (
       cleaned.length >= 14 &&
       cleaned.length <= 200 &&
@@ -605,6 +613,34 @@ export function synthesizeGoldenRecommendation(
     }
 
     case 'financial': {
+      const efStatus = extractEmergencyFundStatus(userTexts);
+      const mentionsInvestmentOrSurplus =
+        /(استثمار|أستثمر|استثمر|طويل\s*(?:ال)?مدى|أصول|محفظة|فائض|عائد|تنمية|توسع|تنويع|صناديق|نمو)/i.test(
+          rawLower
+        );
+
+      if (score >= 7.5 && !constraints.mentionsDebt) {
+        if (
+          efStatus.hasFund &&
+          efStatus.monthsCovered !== null &&
+          efStatus.monthsCovered >= 1 &&
+          efStatus.monthsCovered < 6
+        ) {
+          return mentionsInvestmentOrSurplus
+            ? `استكمال صندوق الطوارئ من ${efStatus.monthsCovered} إلى 6 أشهر من نفقاتك الأساسية، مع توجيه جزء من الفائض الشهري إلى استثمار طويل المدى ومتوازن.`
+            : `رفع تغطية صندوق الطوارئ القائم تدريجياً من ${efStatus.monthsCovered} إلى 6 أشهر، ثم توجيه الفائض الشهري نحو استثمار طويل المدى.`;
+        }
+        if (efStatus.hasFund && (efStatus.monthsCovered === null || efStatus.monthsCovered >= 6)) {
+          return mentionsInvestmentOrSurplus
+            ? 'الحفاظ على استقرار صندوق الطوارئ القائم، وتوجيه جزء منتظم من الفائض الشهري نحو مسار استثماري طويل المدى لتعظيم النمو.'
+            : 'الارتقاء باستقرارك المالي القائم عبر تنويع قنوات الاستثمار طويل المدى من فائضك الشهري مع بقاء صندوق الطوارئ محمياً.';
+        }
+        if (mentionsInvestmentOrSurplus) {
+          return 'تعزيز متانتك المالية عبر استكمال احتياطي الطوارئ لـ 6 أشهر وتوجيه جزء ثابت من الفائض الشهري نحو استثمار طويل المدى.';
+        }
+        return 'الانتقال من الاستقرار المالي الحالي إلى مرحلة النمو عبر استكمال تغطية صندوق الطوارئ لـ 6 أشهر وأتمتة استثمار الفائض على المدى الطويل.';
+      }
+
       if (/(حصالة|صندوق\s*صغير|حساب\s*فرعي)/i.test(rawLower)) {
         return 'خصّص حصالة مستقلة أو حساباً فرعياً منفصلاً واقتطع فيه مبلغاً ميسراً فور استلام الدخل قبل أي صرف يومي.';
       }
@@ -619,6 +655,14 @@ export function synthesizeGoldenRecommendation(
       }
       if (constraints.mentionsIncomeLeak) {
         return 'سجّل مصروفاتك اليومية لمدة 7 أيام لكشف مواضع التسرب الفعلية، وضع سقفاً واضحاً للبنود المتغيرة قبل اقتطاع الادخار.';
+      }
+      if (
+        efStatus.hasFund &&
+        efStatus.monthsCovered !== null &&
+        efStatus.monthsCovered >= 1 &&
+        efStatus.monthsCovered < 6
+      ) {
+        return `البناء على صندوق الطوارئ القائم (${efStatus.monthsCovered} أشهر) لاستكماله إلى 6 أشهر مع أتمتة تحويل شهري ثابت للفائض.`;
       }
       if (constraints.mentionsNoDebt && (constraints.mentionsSavingDesire || score >= 7.0)) {
         return 'فعّل تحويلاً ثابتاً وميسراً للادخار في حساب منفصل فور استلام الراتب لتنمية صندوق طوارئك باستقرار.';
@@ -645,6 +689,11 @@ export function synthesizeGoldenRecommendation(
     }
 
     case 'career': {
+      if (score >= 7.5 && !ctx.isJobSeeker) {
+        return ctx.isStudent
+          ? 'استثمر تفوقك الدراسي في مشروع تطبيقي أو تدريب نوعي يبني محفظة أعمالك المهنية قبل التخرج.'
+          : 'وجّه استقرارك المهني نحو تطوير مهارة قيادية أو مشروع استراتيجي نوعي يضاعف أثرك وقيمتك في المرحلة القادمة.';
+      }
       if (ctx.isStudent) {
         return 'خصّص 30 دقيقة منتظمة أسبوعياً لتطبيق عملي أو مهارة تدعم تخصصك بجانب متطلبات المذاكرة.';
       }
@@ -661,6 +710,9 @@ export function synthesizeGoldenRecommendation(
     }
 
     case 'personal': {
+      if (score >= 7.5) {
+        return 'استثمر توازنك النفسي الحالي في بناء هدف شخصي أو مسار إبداعي يعمّق رضاك ونموك الذاتي المستمر.';
+      }
       if (constraints.mentionsDistractionOrPhone) {
         return 'احمِ 10 دقائق مسائية بعيداً عن الهاتف لتهدئة ذهنك ورصد إنجاز يومي صغير يعزز ثقتك دون ضغط.';
       }
@@ -674,6 +726,9 @@ export function synthesizeGoldenRecommendation(
     }
 
     case 'learning': {
+      if (score >= 7.5) {
+        return 'حوّل حصيلتك المعرفية المستقرة إلى تطبيق عملي أو تلخيص أسبوعي تشاركه لترسيخ الإتقان ومضاعفة الأثر.';
+      }
       if (constraints.mentionsDistractionOrPhone || /(مذاكرة|دراسة|محاضرات)/i.test(rawLower)) {
         return 'أبعد الهاتف عن متناول يدك أثناء المذاكرة وقسّم التعلّم إلى جلسات قصيرة مركزة مع تلخيص الفكرة الرئيسية بعد كل جلسة.';
       }
@@ -687,6 +742,9 @@ export function synthesizeGoldenRecommendation(
     }
 
     case 'family': {
+      if (score >= 7.5) {
+        return 'حافظ على دفء التواصل الأسري الحالي وأضف عادة أو جلسة نوعية أسبوعية تعمّق الترابط والذكريات المشتركة.';
+      }
       if (constraints.mentionsDistractionOrPhone) {
         return 'أبقِ الهاتف بعيداً أثناء جلوسك مع أسرتك لتحويل الوقت المشترك إلى حضور قلبي وإنصات صافٍ يضاعف المودة.';
       }
@@ -697,6 +755,9 @@ export function synthesizeGoldenRecommendation(
     }
 
     case 'social': {
+      if (score >= 7.5) {
+        return 'استثمر جودة علاقاتك الداعمة في مبادرات نوعية وتبادل معرفي مثمر يوسّع أثرك الإيجابي باستدامة.';
+      }
       if (/(خجل|ارتباك|تردد)/i.test(rawLower)) {
         return 'ابدأ بخطوة تواصل خفيفة ومريحة أسبوعياً مع صديق موثوق عبر رسالة ودية أو لقاء قصير دون إلزام النفس بمناسبات مرهقة.';
       }

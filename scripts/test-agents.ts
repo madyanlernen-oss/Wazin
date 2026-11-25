@@ -57,6 +57,7 @@ import {
   isGenuineUserQuestion,
   isQuestionAlreadyAsked,
   isQuestionContradictingHistory,
+  isDiagnosticTopicAlreadyAnswered,
   pickNextUnaskedQuestion,
   stripRepeatedOpeningGreeting,
 } from '../src/utils/dialogueDeduplication';
@@ -2955,6 +2956,235 @@ async function testGoldenRecommendationSynthesis() {
         isQuestionContradictingHistory('متى يمكنك الجلوس مع أسرتك للتفاهم معهم؟', isolationHistory),
       `Personal station & contradiction detector must block guilt/dependents-sitting assumptions under acute isolation; got local="${localIsoReply.reply}"`
     );
+
+    // Emergency fund deduplication & high-score growth-oriented golden recommendation
+    const finAdv = ADVISORS_LIST.find((a) => a.id === 'financial')!;
+    const highFinHistory = [
+      { role: 'user', content: 'راتبي مستقر ولا توجد عليّ ديون، ولدي صندوق طوارئ يغطي 4 أشهر (8/10)' },
+      { role: 'model', content: 'وضعك مستقر وواعٍ، كيف توظف الفائض الحالي؟' },
+      { role: 'user', content: 'أريد استكماله إلى 6 أشهر وتوجيه جزء من الفائض لاستثمار طويل المدى' },
+    ];
+    assert(
+      isDiagnosticTopicAlreadyAnswered('هل لديك صندوق طوارئ يغطي مصاريفك؟', highFinHistory) &&
+        isQuestionContradictingHistory(
+          'بناءً على التزاماتك الحالية، كم يتبقى لك فعلياً من الراتب بعد المصاريف الحتمية، وهل يكفي لتأمين احتياطي طوارئ أم تتأكل السيولة قبل نهاية الشهر؟',
+          highFinHistory
+        ) &&
+        isQuestionContradictingHistory(
+          'أولاً وقبل الحديث عن أتمتة الادخار: هل يقتطع من راتبك الشهري أي أقساط قروض شخصية أو بطاقات ائتمانية؟',
+          highFinHistory
+        ),
+      'Must block repeating emergency fund and debt diagnostic questions once answered by user'
+    );
+
+    const highFinNextReply = generateLocalAgentResponse(
+      'financial',
+      'أوضح لك أن الفائض يتراكم شهرياً وأفكر في الاستثمار طويل المدى',
+      'سعد',
+      finAdv,
+      8.2,
+      true,
+      0,
+      'الجانب المالي والاستقلال',
+      'initial_assessment',
+      2,
+      employeeProfile,
+      [],
+      ['لدي صندوق طوارئ يغطي 4 أشهر ولا توجد عليّ ديون']
+    );
+    assert(
+      !/هل\s*(?:لديك|عندك|تملك)\s*صندوق\s*طوارئ|تأسيس\s*أول\s*صمام/i.test(highFinNextReply.reply),
+      `Local financial engine must not re-ask emergency fund existence or starter setup when 4-month fund was stated; got: ${highFinNextReply.reply}`
+    );
+
+    const highFinGolden = synthesizeGoldenRecommendation({
+      areaId: 'financial',
+      userTexts: [
+        'راتبي مستقر ولا توجد عليّ ديون، ولدي صندوق طوارئ يغطي 4 أشهر',
+        'أريد استكماله إلى 6 أشهر وتوجيه جزء من الفائض لاستثمار طويل المدى',
+      ],
+      userProfile: employeeProfile,
+      score: 8.2,
+      advisorCandidate: 'البدء بخطوة عملية واحدة صغيرة ومحددة تعالج التحدي الرئيسي',
+    });
+    const highFinAdopt = generateLocalAgentResponse(
+      'financial',
+      'اعتمد التقييم',
+      'سعد',
+      finAdv,
+      8.2,
+      true,
+      0,
+      'الجانب المالي والاستقلال',
+      'initial_assessment',
+      4,
+      employeeProfile,
+      [],
+      [
+        'راتبي مستقر ولا توجد عليّ ديون، ولدي صندوق طوارئ يغطي 4 أشهر',
+        'أريد استكماله إلى 6 أشهر وتوجيه جزء من الفائض لاستثمار طويل المدى',
+      ]
+    );
+    const highFinSummary = buildConversationAwareStationSummary(
+      'financial',
+      'الجانب المالي والاستقلال',
+      highFinHistory,
+      8.2,
+      employeeProfile
+    );
+    assert(
+      !highFinGolden.includes('تعالج التحدي') &&
+        highFinGolden.includes('4') &&
+        highFinGolden.includes('6') &&
+        /استثمار\s*طويل/i.test(highFinGolden) &&
+        !highFinAdopt.advice.includes('تعالج التحدي') &&
+        /استثمار\s*طويل/i.test(highFinAdopt.advice) &&
+        /6\s*أشهر/.test(highFinSummary.goldenRecommendation),
+      `High-score (>=7.5) golden recommendation must reflect 4->6 months & surplus investment, never generic challenge filler; got golden="${highFinGolden}", adopt="${highFinAdopt.advice}", summary="${highFinSummary.goldenRecommendation}"`
+    );
+
+    // Fresh consultation score reset (no inheritance from stale 4.5/10) & Personal station calibration
+    const stablePersonalMsg =
+      'أخصص وقتاً يومياً ثابتاً للراحة والبعد عن الشاشات، وأشعر بصفاء ذهني وحضور أعمق مع الأسرة';
+    const fluctuatingPersonalMsg =
+      'وضعي متذبذب ومتعب، أحياناً ألتزم وأحياناً أنقطع بسبب الإرهاق وضغط العمل';
+    const srvStablePersonal = calculateServerSemanticScore(stablePersonalMsg, []);
+    const cliStablePersonal = calculateSemanticScore(stablePersonalMsg, []);
+    const srvFluctPersonal = calculateServerSemanticScore(fluctuatingPersonalMsg, []);
+    const cliFluctPersonal = calculateSemanticScore(fluctuatingPersonalMsg, []);
+    assert(
+      srvStablePersonal >= 7.5 && srvStablePersonal <= 9.0 &&
+        cliStablePersonal >= 7.5 && cliStablePersonal <= 9.0,
+      `Positive & stable Personal answers must score in [7.5, 9.0]; got server=${srvStablePersonal}, client=${cliStablePersonal}`
+    );
+    assert(
+      srvFluctPersonal >= 4.0 && srvFluctPersonal <= 5.5 &&
+        cliFluctPersonal >= 4.0 && cliFluctPersonal <= 5.5,
+      `Fluctuating/exhausted Personal answers must score in [4.0, 5.5]; got server=${srvFluctPersonal}, client=${cliFluctPersonal}`
+    );
+
+    // Even if stale previous score 4.5 is passed to a fresh evaluation consultation, ignore it completely
+    const freshPersonalPositiveTurn = generateLocalAgentResponse(
+      'personal',
+      stablePersonalMsg,
+      'نورة',
+      personalAdv,
+      4.5,
+      true,
+      4,
+      'الجانب الشخصي والوعي بالذات',
+      'initial_assessment',
+      3,
+      employeeProfile,
+      [],
+      [stablePersonalMsg]
+    );
+    const freshPersonalFluctTurn = generateLocalAgentResponse(
+      'personal',
+      fluctuatingPersonalMsg,
+      'نورة',
+      personalAdv,
+      8.5,
+      true,
+      4,
+      'الجانب الشخصي والوعي بالذات',
+      'initial_assessment',
+      3,
+      employeeProfile,
+      [],
+      [fluctuatingPersonalMsg]
+    );
+    assert(
+      freshPersonalPositiveTurn.score >= 7.5 && freshPersonalPositiveTurn.score <= 9.0 &&
+        freshPersonalFluctTurn.score >= 4.0 && freshPersonalFluctTurn.score <= 5.5,
+      `Fresh consultation must ignore stale prior score (4.5 or 8.5) and score strictly from current session messages; got positive=${freshPersonalPositiveTurn.score}, fluctuating=${freshPersonalFluctTurn.score}`
+    );
+
+    // Social context grounding (work/family overload -> energy protection without guilt, zero clubs/gathering-fear templates)
+    // AND unified 3rd-message (stationTurnCount === 2) provisional assessment across all 8 stations
+    const socialAdv = ADVISORS_LIST.find((a) => a.id === 'social')!;
+    const socialOverloadMsg =
+      'بسبب ضغط العمل ومسؤوليات الأسرة والإرهاق صرت أبتعد عن اللقاءات ولا أجد طاقة';
+    const socialOverloadR1 = generateLocalAgentResponse(
+      'social',
+      socialOverloadMsg,
+      'مازن',
+      socialAdv,
+      0,
+      true,
+      7,
+      'الجانب الاجتماعي والعلاقات',
+      'initial_assessment',
+      0,
+      employeeProfile,
+      [],
+      []
+    );
+    const socialOverloadClient = getClientAdvisorResponse(
+      socialAdv,
+      'أشعر بعزلة اجتماعية بسبب ضغط العمل والأسرة والإرهاق',
+      7,
+      0,
+      0,
+      [],
+      employeeProfile
+    );
+    assert(
+      !/الخوف\s*والارتباك\s*وسط\s*التجمعات|تكوين\s*الصداقات|نوادي\s*قراءة|لست\s*منبوذاً|الانضمام\s*لمجتمع/.test(
+        socialOverloadR1.reply
+      ) &&
+        !/الانضمام\s*لمجتمع|نواد/.test(socialOverloadClient.reply) &&
+        /(?:طاقة|الالتزامات|ذنب|ضغط\s*العمل|الأسرة)/.test(socialOverloadR1.reply),
+      `Social advisor must avoid canned gathering-fear/clubs templates and focus on social energy & obligations without guilt; got="${socialOverloadR1.reply}"`
+    );
+
+    const all8Domains: LifeAreaId[] = [
+      'spiritual',
+      'financial',
+      'career',
+      'personal',
+      'learning',
+      'family',
+      'social',
+      'health',
+    ];
+    for (const dom of all8Domains) {
+      const domAdv = ADVISORS_LIST.find((a) => a.id === dom)!;
+      const msg3Local = generateLocalAgentResponse(
+        dom,
+        'أحاول تنظيم هذا الجانب وأشعر أحياناً بالتذبذب بسبب ضغط العمل والأسرة',
+        'مازن',
+        domAdv,
+        0,
+        true,
+        1,
+        domAdv.title,
+        'initial_assessment',
+        2,
+        employeeProfile,
+        [],
+        ['رسالة أولى', 'رسالة ثانية']
+      );
+      const msg3Client = getClientAdvisorResponse(
+        domAdv,
+        'أحاول تنظيم هذا الجانب وأشعر بالتذبذب أحياناً',
+        1,
+        0,
+        2,
+        ['رسالة أولى', 'رسالة ثانية'],
+        employeeProfile
+      );
+      assert(
+        msg3Local.station_completed === false &&
+          msg3Local.score >= 1 &&
+          /(?:\/10|من 10)/.test(msg3Local.reply) &&
+          /اعتماد/.test(msg3Local.reply) &&
+          msg3Client.station_completed === false &&
+          /(?:\/10|من 10)/.test(msg3Client.reply) &&
+          /اعتماد/.test(msg3Client.reply),
+        `Station "${dom}" MUST offer provisional (X/10) + adopt/continue automatically after user's 3rd message (stationTurnCount=2); got local="${msg3Local.reply}", client="${msg3Client.reply}"`
+      );
+    }
 
     results.push({
       suite: 'Golden Recommendation',

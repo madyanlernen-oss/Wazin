@@ -1,4 +1,9 @@
-import { extractExplicitRating, calculateSemanticScore } from '../middleware/validation';
+import { extractExplicitRating } from '../middleware/validation';
+import {
+  calculateUnifiedScore,
+  extractUnifiedMetricsFromSession,
+  formatUnifiedScoreConfirmationMessage,
+} from './unifiedScorer';
 import { parseUserContext, getDomainContextConfig } from '../../src/utils/contextPersonalization';
 import { generateDynamicQuickSuggestions } from '../../src/utils/dynamicSuggestions';
 import {
@@ -10,10 +15,13 @@ import {
   pickNextUnaskedQuestion,
   isQuestionAlreadyAsked,
   isQuestionContradictingHistory,
+  isDiagnosticTopicAlreadyAnswered,
   isRequestingAdvisorSuggestions,
   stripRepeatedOpeningGreeting,
   hasDebtStatusAnswered,
   extractExpenseCategoryFromAnswer,
+  extractEmergencyFundStatus,
+  extractAnchorSelfRatingFromHistory,
   hasAcuteIsolationOrRejection,
 } from '../../src/utils/dialogueDeduplication';
 
@@ -104,17 +112,59 @@ export function pickNonRepeatingFallbackReply(
     nextIdx = (lastIdx + 1) % pool.length;
   }
 
-  // تأكد من عدم تكرار أي سؤال ورد سابقاً في سجل المحادثة الحالية
+  // تأكد من عدم تكرار أي سؤال ورد سابقاً أو أُجيب عليه بالفعل في سجل المحادثة الحالية
   if (historyTexts.length > 0) {
     const unasked = pickNextUnaskedQuestion(pool, historyTexts, nextIdx);
     if (unasked.question && unasked.index >= 0) {
       lastFallbackIndexBySession.set(trackerKey, unasked.index);
       return { reply: unasked.question, index: unasked.index };
     }
+
+    // في حال استنفاد جميع الأسئلة التشخيصية الثابتة، نولّد سؤال متابعة أمامي دون إعادة سؤال قديم
+    lastFallbackIndexBySession.set(trackerKey, nextIdx);
+    if (agentKey === 'financial') {
+      const efStatus = extractEmergencyFundStatus(historyTexts);
+      if (efStatus.hasFund && efStatus.monthsCovered !== null && efStatus.monthsCovered >= 1 && efStatus.monthsCovered < 6) {
+        return {
+          reply: `بما أن صندوق طوارئك يغطي ${efStatus.monthsCovered} أشهر حالياً، ما الخطوة العملية التي تناسبك الآن لاستكماله إلى 6 أشهر وبالتوازي توجيه جزء من الفائض لاستثمار طويل المدى؟`,
+          index: nextIdx,
+        };
+      }
+      if (efStatus.hasFund || hasDebtStatusAnswered(historyTexts, '')) {
+        return {
+          reply: 'انطلاقاً مما وضحته حول وضعك المالي، ما فرصة النمو أو استثمار الفائض التي ترغب في التركيز عليها خلال المرحلة القادمة؟',
+          index: nextIdx,
+        };
+      }
+    }
+    return {
+      reply: 'بناءً على ما شاركته حتى الآن، ما الخطوة العملية التالية التي تراها الأنسب لوضعك الحالي خلال هذا الأسبوع؟',
+      index: nextIdx,
+    };
   }
 
   lastFallbackIndexBySession.set(trackerKey, nextIdx);
   return { reply: pool[nextIdx], index: nextIdx };
+}
+
+const EIGHT_EVALUATION_DOMAINS = new Set([
+  'spiritual',
+  'financial',
+  'health',
+  'career',
+  'personal',
+  'learning',
+  'family',
+  'social',
+]);
+
+function stripEarlyTurnScoreMentions(text: string): string {
+  return (text || '')
+    .replace(/بعد\s*ما\s*شاركتني[\s\S]*?(?:أكثر\s*دقة\s*[؟?]|المحطة\s*التالية\s*[؟?]?)/gi, '')
+    .replace(/[^\n.]*(?:أقيّم|أقيم)\s*(?:وضعك|حالتك)[^\n.]*\d+(?:\.\d+)?\s*(?:\/|\s*من\s*)\s*10[^\n.]*[.!؟]?/gi, '')
+    .replace(/\(\s*\d+(?:\.\d+)?\s*(?:\/|\s*من\s*)\s*10\s*\)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
 
 export function generateLocalAgentResponse(
@@ -131,7 +181,8 @@ export function generateLocalAgentResponse(
   userProfile?: any,
   previousSuggestions?: string[],
   historyTexts?: string[],
-  isEditedOrResent: boolean = false
+  isEditedOrResent: boolean = false,
+  historyUserOnlyTexts?: string[]
 ) {
   const msg = message.toLowerCase().trim();
   const parsedCtx = parseUserContext(userProfile, userName);
@@ -144,6 +195,28 @@ export function generateLocalAgentResponse(
   const incomeSrc = parsedCtx.incomeSource || (isStudent ? 'المكافأة الجامعية/المصروف' : '');
   const incomeStab = parsedCtx.incomeStability;
   const hasDep = parsedCtx.hasDependents;
+  const isEightDomain = EIGHT_EVALUATION_DOMAINS.has(agentKey);
+  const isEarlyConversationalTurn = isEightDomain && stationTurnCount < 2;
+
+  const rawSessionUserTexts = Array.isArray(historyUserOnlyTexts)
+    ? [...historyUserOnlyTexts, message]
+    : [...(historyTexts || []).filter((t) => !/(?:أهلاً بك|أقيّم وضعك|التقييم المستحق|بصفتي مستشارك|هل ترغب في اعتماد التقييم)/i.test(String(t || ''))), message];
+  const sessionUserMessages = rawSessionUserTexts
+    .map((t) => String(t || '').trim())
+    .filter(
+      (t) =>
+        t.length > 0 &&
+        !/^(?:اعتمد\s*التقييم(?:\s*بدرجة.*)?|نعم\s*اعتمد|اعتماد|نكتفي|خلاص|انتهينا|أرغب في الاستمرار|حسناً?\s*نكمل)/i.test(
+          t
+        )
+    );
+  const currentSessionUnifiedScore =
+    sessionUserMessages.length > 0
+      ? calculateUnifiedScore(extractUnifiedMetricsFromSession(sessionUserMessages, agentKey))
+      : (score > 0
+        ? Number((score > 10 ? score / 10 : score).toFixed(1))
+        : 5.5);
+  const currentSessionSemanticScore = currentSessionUnifiedScore;
   const accountName = parsedCtx.name !== 'عزيزي' ? parsedCtx.name : '';
   const userGreeting = accountName ? `يا ${accountName}` : '';
 
@@ -167,7 +240,7 @@ export function generateLocalAgentResponse(
   const isCareerDistress = /(عاطل|عاطلة|بدون وظيفة|ما لقيت وظيفة|مرفوض|رفضوني|خريج جديد|تائه مهنيا|ما ادري ايش اشتغل|ضياع مهني|احتراق وظيفي|مديري ظالم|بيئة عمل سامة|كرهت وظيفتي|دوامي متعب|ضغط العمل|ما في ترقية|راتبي قليل في الدوام|زملاء العمل|مضغوط بالدوام|انتاجيتي ضعيفة|تسويف بالعمل)/i.test(msg);
   const isSpiritualDistress = /(ما اصلي|تارك الصلاة|اقصر في الصلاة|قلبي قاسي|قسوة قلب|ما احس بالخشوع|فتور|تراجع روحي|ضائع روحيا|تائه روحيا|ما احس بالسلام|ما في سكينة|حيرة وجودية|وسواس|وساوس|ضيق في الصدر|روحي تعبانة|ما اقرا قران|هاجر القران)/i.test(msg);
   const isPersonalDistress = /(ثقتي بنفسي ضعيفة|ما عندي ثقة|احس اني فاشل|اكره نفسي|جلد الذات|اقارن نفسي بالناس|دونية|خجل شديد|خوف من الفشل|اسوف|تسويف|كسل|مشتت|ما اقدر التزم|ما عندي ارادة|ما عندي شغف|هدفي ضائع|فوضى في حياتي|حساس زيادة|ما اقدر اتحكم بمشاعري|عصبية|بكاء مستمر)/i.test(msg);
-  const isSocialDistress = /(وحيد|ما عندي اصدقاء|ما عندي ربع|معزول|عزلة اجتماعية|ما احد يسال عني|احس بالوحدة|ما عندي اصحاب|رهاب اجتماعي|اخاف من الناس|اخجل اتكلم|ارتبك في التجمعات|ما اعرف اسولف|انطوائي زيادة|اصدقائي استغلوني|خيانة صديق|غدر|ناس سامين|صداقة مزيفة)/i.test(msg);
+  const isSocialDistress = /(عزلة اجتماعية|فتور اجتماعي|تباعد في التواصل|اصدقائي استغلوني|خيانة صديق|غدر|ناس سامين|صداقة مزيفة)/i.test(msg);
 
   // 2. مشاعر التعب الشديد والحزن والضيق والفضفضة النفسية (Exhaustion & Grief) مع حدود الكلمات العربية
   // استثناء مواضيع الصحة البدنية والنوم عند التحدث مع المستشار الصحي لتناولها فسيولوجياً وطبياً
@@ -274,19 +347,11 @@ export function generateLocalAgentResponse(
         const nextPick = pickNextUnaskedQuestion(pool, historyTexts, stationTurnCount);
         safeReflectionQ =
           nextPick.question ||
-          (stationTurnCount >= 3
-            ? 'هل ترغب في اعتماد التقييم المرحلي الحالي والانتقال للمحطة التالية، أم تفضل إضافة تفصيل آخر؟'
+          (stationTurnCount >= 2
+            ? 'هل ترغب في اعتماد التقييم المبدئي الحالي والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟'
             : `ما الخطوة العملية البسيطة التي تراها مناسبة لتطبيقها في ${stationTitle} هذا الأسبوع؟`);
       }
     }
-
-    // Ensure the reply ends with an engaging question if it doesn't already contain one
-    if (safeReflectionQ && !finalReply.includes('؟') && !finalReply.includes('?')) {
-      finalReply = `${finalReply}\n\n${safeReflectionQ}`;
-    }
-    const rawAdvice = data.advice || (data.actionSteps && data.actionSteps.length > 0 ? data.actionSteps[0] : finalReply);
-    const finalSummary = data.summary || (finalReply.length > 120 ? finalReply.slice(0, 120) + '...' : finalReply);
-    const finalReasoning = data.reasoning || `محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد (${userName}) في مجال (${stationTitle})، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي لتحقيق التوازن المستدام.`;
 
     // Strict normalization to 1.0 - 10.0 scale ensuring 100% parity with Life Wheel
     const normalizeScore = (val: number | undefined): number => {
@@ -295,7 +360,45 @@ export function generateLocalAgentResponse(
       if (val > 10) return Number((val / 10).toFixed(1));
       return Number(val.toFixed(1));
     };
-    const computedScore = data.score !== undefined ? normalizeScore(data.score) : normalizeScore(score > 0 ? score : 5.0);
+    const isEvalContinueReply =
+      /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار|المزيد|فهم\s*أكثر|فهم\s*اكثر|تقييم\s*أدق|تقييم\s*ادق)/i.test(msg) &&
+      !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل\s*للمحطة|ننتقل\s*للتالية|المحطة التالية)/i.test(msg);
+
+    let computedScore = isEarlyConversationalTurn
+      ? 0
+      : data.score !== undefined
+        ? normalizeScore(data.score)
+        : (Boolean(isEvaluationSession) && !data.station_completed
+          ? currentSessionUnifiedScore
+          : normalizeScore(score > 0 ? score : 5.0));
+
+    if (isEarlyConversationalTurn) {
+      computedScore = 0;
+      finalReply = stripEarlyTurnScoreMentions(finalReply);
+      if (safeReflectionQ && !finalReply.includes('؟') && !finalReply.includes('?')) {
+        finalReply = `${finalReply}\n\n${safeReflectionQ}`;
+      }
+    } else if (
+      Boolean(isEvaluationSession) &&
+      stationTurnCount >= 2 &&
+      !data.station_completed &&
+      !isCrisisOrDeath &&
+      !isDomainBoundaryQuery &&
+      !isEvalContinueReply &&
+      !isBareGreetingOnly &&
+      !/(?:أقيّم\s+وضعك|أقيم\s+وضعك|التقييم\s+التقديري\s+المبدئي|هل\s+ترغب\s+في\s+اعتماد|هل\s+نعتمد\s+هذا\s+التقييم|هل\s+تود\s+اعتماد)/i.test(finalReply)
+    ) {
+      if (computedScore <= 0) {
+        computedScore = currentSessionUnifiedScore;
+      }
+      safeReflectionQ = '';
+      finalReply = `${finalReply}\n\n${formatUnifiedScoreConfirmationMessage(computedScore)}`;
+    } else if (safeReflectionQ && !finalReply.includes('؟') && !finalReply.includes('?')) {
+      finalReply = `${finalReply}\n\n${safeReflectionQ}`;
+    }
+    const rawAdvice = data.advice || (data.actionSteps && data.actionSteps.length > 0 ? data.actionSteps[0] : finalReply);
+    const finalSummary = data.summary || (finalReply.length > 120 ? finalReply.slice(0, 120) + '...' : finalReply);
+    const finalReasoning = data.reasoning || `محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد (${userName}) في مجال (${stationTitle})، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي لتحقيق التوازن المستدام.`;
 
     const combinedUserTexts = [...(historyTexts || []), message].filter(Boolean);
     const finalAdvice = isCompletedEval
@@ -324,13 +427,13 @@ export function generateLocalAgentResponse(
     return {
       agent_name: finalName,
       reasoning: finalReasoning,
-      score: computedScore,
+      score: isEarlyConversationalTurn ? 0 : computedScore,
       summary: finalSummary,
       advice: finalAdvice,
       reply: finalReply,
       actionSteps: data.actionSteps || [finalAdvice],
       reflectionQuestion: safeReflectionQ || (isCompletedEval ? '' : 'ما هي الخطوة البسيطة التي ستبدأ بها اليوم؟'),
-      station_completed: Boolean(isEvaluationSession) && Boolean(data.station_completed),
+      station_completed: isEarlyConversationalTurn ? false : Boolean(isEvaluationSession) && Boolean(data.station_completed),
       strengths: data.strengths || [],
       challenges: data.challenges || [],
       suggestedReplies: dynamicSuggestedReplies,
@@ -443,8 +546,8 @@ export function generateLocalAgentResponse(
     });
   }
 
-  // 1. استجابة تخصصية فورية لأزمات المستشارين المباشرة (Domain Distress)
-  if (isFinancialDistress && (agentKey === 'financial' || !coreMsg.includes('صلاة'))) {
+  // 1. استجابة تخصصية فورية لأزمات المستشارين المباشرة (Turn 3+ أو خارج الجلسات الثماني فقط؛ الجولات 1 و 2 تقتصر على التعاطف وسؤال تشخيصي واحد مرتبط بكلام المستفيد)
+  if (!isEarlyConversationalTurn && isFinancialDistress && (agentKey === 'financial' || !coreMsg.includes('صلاة'))) {
     return formatAgentOutput({
       reasoning: `تحليل أزمة وضائقة مالية حادة لدى المستفيد (${userName}) ("${message}"): المستفيد يصارح المستشار بحالة إفلاس أو نفاد سيولة أو تراكم ديون. التدخل العملي الحكيم يقتضي فك الضغط النفسي فوراً، وتبيان أن الإفلاس المالي عارض إجرائي مؤقت، والبدء بإجراءات الإسعاف المالي الطارئ: إيقاف النزيف الاستهلاكي، حماية مثلث البقاء، والبحث عن تدفق نقدي سريع دون أي تنظير جاف.`,
       summary: `استجابة فورية لأزمة الإفلاس والضائقة المالية والتركيز على خطة إسعاف مالي وإيقاف النزيف.`,
@@ -458,7 +561,7 @@ export function generateLocalAgentResponse(
     });
   }
 
-  if (isHealthDistress && agentKey === 'health') {
+  if (!isEarlyConversationalTurn && isHealthDistress && agentKey === 'health') {
     return formatAgentOutput({
       reasoning: `تحليل تحدي صحي وبدني لدى المستفيد (${userName}) ("${message}"): استيعاب التعب أو اضطراب الطاقة بنهج استكشافي محايد دون افتراض أعراض غير مذكورة.`,
       summary: `احتواء لضغوط الإرهاق وتذبذب الطاقة وبناء روتين استعادة النشاط تدريجياً.`,
@@ -472,7 +575,7 @@ export function generateLocalAgentResponse(
     });
   }
 
-  if (isCareerDistress && agentKey === 'career') {
+  if (!isEarlyConversationalTurn && isCareerDistress && agentKey === 'career') {
     return formatAgentOutput({
       reasoning: `تحليل تحدي مهني وضغط وظيفي حاد لدى المستفيد (${userName}) ("${message}"): رصد مشاعر الإحباط من البطالة أو بيئة العمل السامة أو ضياع البوصلة المهنية. التوجيه يقتضي بناء وضوح استراتيجي وتطوير مهارة فارقة وحماية الطاقة من الاستنزاف.`,
       summary: `توجيه مهني استراتيجي لتجاوز البطالة أو الاحتراق الوظيفي وبناء مسار مهني قوي.`,
@@ -486,7 +589,7 @@ export function generateLocalAgentResponse(
     });
   }
 
-  if (isSpiritualDistress && agentKey === 'spiritual') {
+  if (!isEarlyConversationalTurn && isSpiritualDistress && agentKey === 'spiritual') {
     const mentionsPrayer = /(صلاة|الصلاة|اصلي|أصلي|فرض)/i.test(msg);
     return formatAgentOutput({
       reasoning: `تحليل فتور روحي وحرقة قلبية لدى المستفيد (${userName}) ("${message}"): احتواء المشاعر برفق والتركيز على السكينة العملية دون افتراض تقصير لم يذكره.`,
@@ -512,7 +615,7 @@ export function generateLocalAgentResponse(
     });
   }
 
-  if (isPersonalDistress && agentKey === 'personal') {
+  if (!isEarlyConversationalTurn && isPersonalDistress && agentKey === 'personal') {
     return formatAgentOutput({
       reasoning: `تحليل أزمة تقدير الذات والتسويف والتشتت الداخلي لدى المستفيد (${userName}) ("${message}"): التفكير النفسي الحكيم يقتضي احتضان المشاعر وكسر حلقة المقارنة وجلد الذات، والتركيز على التعاطف مع النفس وبناء الثقة من خلال إنجازات يومية صغيرة.`,
       summary: `مساندة نفسية لإعادة بناء تقدير الذات والتغلب على التسويف والمقارنات الهدامة.`,
@@ -526,22 +629,44 @@ export function generateLocalAgentResponse(
     });
   }
 
-  if (isSocialDistress && agentKey === 'social') {
+  if (!isEarlyConversationalTurn && isSocialDistress && agentKey === 'social') {
+    const socialCtxCombined = [...(historyTexts || []), message].join(' ');
+    const isSocialWorkFamilyOverload =
+      /(?:ضغط\s*(?:ال)?عمل|ضغوط\s*(?:ال)?عمل|مشغول|انشغال|أسرة|اسرة|أسري|أسرية|عائلة|عائلية|أولاد|أبناء|بيت|إرهاق|ارهاق|مرهق|تعب|استنزاف|تعبان|ما\s*(?:عندي|أجد|اجد)\s*طاقة|قلة\s*طاقة|مسؤوليات|التزامات|الدوام)/i.test(
+        socialCtxCombined
+      );
+
+    if (isSocialWorkFamilyOverload) {
+      return formatAgentOutput({
+        reasoning: `تحليل السياق الاجتماعي الفعلي للمستفيد (${userName}) ("${message}"): تراجع التواصل ناتج عن ضغط العمل ومسؤوليات الأسرة والإرهاق، لذا نركز على حماية الطاقة الاجتماعية وتخفيف الالتزامات دون شعور بالذنب.`,
+        summary: `حماية الطاقة الاجتماعية وتقليل الالتزامات والمجاملات غير الضرورية وسط ضغط العمل والأسرة دون ذنب.`,
+        advice: `احمِ طاقتك الاجتماعية بتخفيف المجاملات غير الضرورية دون ذنب، واكتفِ بتواصل قصير ومريح مع من ترتاح لهم.`,
+        reply: `أفهم تماماً هذا الثقل ${userGreeting} 🤝؛ حين يتزاحم ضغط العمل مع مسؤوليات الأسرة والإرهاق، فمن الطبيعي أن تنفد طاقتك الاجتماعية وتقل لقاءاتك، وهذا ليس تقصيراً بل حماية مشروعة لتوازنك.`,
+        actionSteps: [
+          'الاعتذار بلباقة عن التزام اجتماعي واحد مستنزف هذا الأسبوع دون لوم للذات',
+          'إبقاء التواصل مقتصراً على رسالة أو مكالمة مريحة مع شخص مقرب يقدّر ظروفك'
+        ],
+        score: currentSessionUnifiedScore,
+        reflectionQuestion: 'ما الالتزام الاجتماعي الذي تشعر أنه يستنزف طاقتك أكثر ويمكنك تخفيفه دون ذنب؟'
+      });
+    }
+
     return formatAgentOutput({
-      reasoning: `تحليل ألم العزلة والوحدة أو الخذلان الاجتماعي لدى المستفيد (${userName}) ("${message}"): الإنسان كائن اجتماعي بطبعه، والوحدة أو الخوف من أحكام الناس يثقلان الروح. التفكير الاجتماعي الحكيم يقتضي بناء الثقة بالأمان الاجتماعي والبدء بعلاقات نوعية صغيرة.`,
-      summary: `توجيه اجتماعي دافئ لاحتواء مشاعر الوحدة وتفكيك الرهاب الاجتماعي وبناء علاقات حقيقية.`,
-      advice: `الجودة أهم من الكثرة: صديق واحد صادق ومخلص يشبهك في قيمك خير من عشرات العلاقات السطحية المستنزفة.`,
-      reply: `أشعر بصدق بكل كلمة كتبتها وبثقل هذا الشعور في صدرك ${userGreeting}. 🌿\n\nالوحدة، أو الشعور بأنك لا تجد الصديق الصادق الذي يفهمك، أو الخوف والارتباك وسط التجمعات، هو ألم إنساني يمر به الكثيرون في زمن طغت فيه العلاقات السطحية خلف الشاشات.\n\nكمرشد اجتماعي وصديق معك:\n1. **أنت لست منبوذاً ولا غريباً**: صعوبة تكوين الصداقات لا تعني أنك غير محبوب، بل تعني أنك تبحث عن عمق وصدق لا تجده في البيئات العابرة.\n2. **البحث في دوائر الشغف**: أفضل الصداقات تنشأ بشكل عفوي في أماكن الاهتمامات المشتركة (تطوع، دورات، نوادي قراءة أو رياضة)، وليس بالتصنع.\n3. **خطوة تواصل صغيرة**: لا تعزل نفسك تماماً؛ بادر بابتسامة أو كلمة طيبة مع شخص واحد ترتاح له في محيطك.\n\nما الذي يجعلك تشعر بالحذر أو التردد في التواصل مع الناس حالياً؟`,
+      reasoning: `استجابة اجتماعية متوازنة مرتبطة بواقع المستفيد (${userName}) ("${message}") دون قوالب معلبة أو افتراضات مسبقة.`,
+      summary: `استكشاف احتياج المستفيد الاجتماعي الفعلي وبناء مساحة تواصل مريحة وملائمة لطاقته.`,
+      advice: `الجودة أهم من الكثرة: تواصل صادق ومريح مع شخص تثق به يغني عن مجاملات واسعة مستنزفة.`,
+      reply: `أسمعك بوضوح وتقدير ${userGreeting} 🤝. توازن العلاقات يُقاس بمدى راحتك وأثر التواصل على طاقتك، لا بكثرة اللقاءات.`,
       actionSteps: [
-        'المبادرة بسلام أو محادثة قصيرة مع شخص لطيف في محيطك اليوم',
-        'الانضمام لمجموعة أو نشاط مجتمعي يشاركك نفس الهواية'
+        'التواصل الهادئ مع شخص واحد تثق به وتشعر بالارتياح معه',
+        'وضع حدود واضحة تحمي طاقتك النفسية من العلاقات أو المجاملات المرهقة'
       ],
-      reflectionQuestion: 'ما هي الصفة الأهم التي تبحث عنها في الصديق الحقيقي؟'
+      score: currentSessionUnifiedScore,
+      reflectionQuestion: 'ما الذي تشعر أنه يصعّب الحفاظ على تواصل مريح مع الدائرة القريبة منك؟'
     });
   }
 
   // أولوية التفاعل الإنساني 1: مشاعر الحزن والضيق والتعب النفسي والإنهاك
-  if (isGriefOrExhaustion) {
+  if (!isEarlyConversationalTurn && isGriefOrExhaustion) {
     return formatAgentOutput({
       reasoning: `تحليل مشاعر الإنهاك والحزن والضيق النفسي لدى المستفيد (${userName}): إدراك أن المشاعر المتألمة تحتاج إلى إنصات واحتواء إنساني دافئ قبل أي نصائح عملية، وكسر حلقة العزلة والضغط الداخلي.`,
       summary: `احتواء إنساني دافئ لمشاعر الحزن والتعب والضيق، وتقديم سند معنوي يخفف وطأة المشاعر.`,
@@ -609,6 +734,268 @@ export function generateLocalAgentResponse(
       reflectionQuestion: isEvaluationSession
         ? (evaluationQuestionTitle || 'كيف تقيّم هذا الجانب من 1 إلى 10؟')
         : 'ما هو الهدف أو التحدي الأبرز الذي ترغب بالحديث عنه اليوم؟'
+    });
+  }
+
+  // =========================================================================
+  // طبقة الحوار التمهيدي الحصري للجولتين الأولى والثانية (User Turns 1 & 2)
+  // تعاطف موجز + سؤال تشخيصي واحد مرتبط مباشرة بكلام المستفيد (دون درجات ودون قوالب معلبة)
+  // =========================================================================
+  if (isEarlyConversationalTurn) {
+    const combinedDialogue = [...(historyTexts || []), message];
+    const cleanInputSnippet = message.replace(/\s+/g, ' ').trim();
+    const shortSnippet =
+      cleanInputSnippet.length > 75 ? `${cleanInputSnippet.slice(0, 72)}...` : cleanInputSnippet;
+    const isGenuineQ = isGenuineUserQuestion(message);
+    const hasAcuteIso = hasAcuteIsolationOrRejection(combinedDialogue);
+    const domainPool = getDomainContextConfig(agentKey, parsedCtx).exploratoryQuestions;
+    const sessionKey = `${userProfile?.email || userName || 'default'}:${parsedCtx.workStatus}:${parsedCtx.dependentsLabel}:${agentKey}`;
+    const lastIdx = lastFallbackIndexBySession.get(sessionKey);
+    let preferredIdx = stationTurnCount >= 0 ? stationTurnCount % domainPool.length : 0;
+    if (lastIdx !== undefined && preferredIdx === lastIdx) {
+      preferredIdx = (lastIdx + 1) % domainPool.length;
+    }
+    const nextUnasked = pickNextUnaskedQuestion(domainPool, combinedDialogue, preferredIdx);
+    if (nextUnasked.index >= 0) {
+      lastFallbackIndexBySession.set(sessionKey, nextUnasked.index);
+    } else {
+      lastFallbackIndexBySession.set(sessionKey, preferredIdx);
+    }
+
+    const pickEarlyFollowUp = (candidates: string[]): string => {
+      for (const candidate of candidates) {
+        if (
+          candidate &&
+          !isQuestionAlreadyAsked(candidate, combinedDialogue) &&
+          !isQuestionContradictingHistory(candidate, combinedDialogue) &&
+          !isDiagnosticTopicAlreadyAnswered(candidate, combinedDialogue)
+        ) {
+          return candidate;
+        }
+      }
+      if (nextUnasked.question) return nextUnasked.question;
+      return `ما الجانب الأكثر تأثراً في ${stationTitle} الذي ترغب أن نركز عليه في هذا الأسبوع؟`;
+    };
+
+    let empathyLine = '';
+    let followUpQuestion = '';
+
+    if (agentKey === 'social') {
+      const socialWorkFamilyOverload =
+        /(?:ضغط\s*(?:ال)?عمل|ضغوط\s*(?:ال)?عمل|مشغول|انشغال|أسرة|اسرة|أسري|أسرية|عائلة|عائلية|أولاد|أبناء|بيت|إرهاق|ارهاق|مرهق|تعب|استنزاف|تعبان|ما\s*(?:عندي|أجد|اجد)\s*طاقة|قلة\s*طاقة|مسؤوليات|التزامات|الدوام)/i.test(
+          combinedDialogue.join(' ')
+        );
+      if (socialWorkFamilyOverload) {
+        empathyLine = `أقدّر صراحتك يا ${userName}؛ حين تجتمع ضغوط العمل ومسؤوليات الأسرة مع الإرهاق، من الطبيعي أن تتراجع طاقتك الاجتماعية وهذا ليس تقصيراً بل حاجة لحماية توازنك.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما الالتزامات أو المجاملات الاجتماعية التي تشعر أن تخفيفها دون شعور بالذنب سيمنحك مساحة راحة أوضح هذا الأسبوع؟',
+          'أي تواصل قصير ومريح مع شخص مقرب تراه مناسباً لطاقتك الحالية دون إرهاق؟',
+        ]);
+      } else if (isGenuineQ) {
+        empathyLine = `تساؤلك في محله في ${stationTitle} يا ${userName}؛ جودة التواصل تُقاس بمدى راحتك وأثرها على طاقتك لا بكثرة اللقاءات.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما أكثر موقف أو التزام اجتماعي تشعر أنه يستنزف طاقتك أو يصعّب عليك التواصل المريح هذه الفترة؟',
+        ]);
+      } else {
+        empathyLine = `أسمعك بوضوح وتقدير يا ${userName} حول ما شاركته في ${stationTitle} ("${shortSnippet}").`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما الذي تشعر أنه يصعّب عليك حالياً الحفاظ على تواصل مريح ومتوازن مع الدائرة القريبة منك؟',
+          'كيف تؤثر وتيرة يومك الحالية على طاقتك للتواصل مع من ترتاح لوجودهم؟',
+        ]);
+      }
+    } else if (agentKey === 'personal') {
+      if (hasAcuteIso) {
+        empathyLine = `أقدر صراحتك التامة يا ${userName}، وأحترم حدودك ومساحتك الشخصية بعيداً عمّا يسبب لك الاستنزاف أو الأذى.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'كيف ينعكس هذا الضغط والانفصال المستمر على راحتك الذهنية وطاقتك خلال بقية يومك؟',
+          'ما الشيء الصغير الذي يمنحك قدراً أكبر من الهدوء والأمان النفسي في مساحتك الخاصة هذه الأيام؟',
+        ]);
+      } else if (/(تخصيص\s*وقت|راحة|البعد\s*عن\s*الشاشات|صفاء|هدوء|حضور\s*أعمق)/i.test(msg)) {
+        empathyLine = `ما أجمل هذا الاتزان يا ${userName} في ${stationTitle}؛ تخصيصك وقتاً للراحة والبعد عن الشاشات ينعكس بوضوح على صفائك الذهني.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما الشيء الذي يساعدك على حماية هذه المساحة الهادئة إذا ارتفع ضغط المهام في بعض الأيام؟',
+        ]);
+      } else if (isGenuineQ) {
+        empathyLine = `سؤال مهم في ${stationTitle} يا ${userName}؛ الاتزان الذاتي يبدأ بخطوة واقعية هادئة تناسب طاقتك دون إرهاق أو مثالية.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما الموقف أو العادة اليومية التي تشعر أنها تستهلك طاقتك الذهنية أكثر من غيرها هذه الأيام؟',
+        ]);
+      } else {
+        empathyLine = `أسمعك بتفهم ووضوح يا ${userName} في ${stationTitle}؛ ما ذكرته من ("${shortSnippet}") يعكس واقعاً يستحق التعامل معه برفق وواقعية.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'في الأيام التي يشتد فيها هذا الضغط، ما النمط أو العقبة الأولى التي تلاحظها في يومك؟',
+          'ما الإجراء البسيط الذي ترى أنه قد يخفف عنك هذا الثقل ولو بنسبة محدودة هذا الأسبوع؟',
+        ]);
+      }
+    } else if (agentKey === 'financial') {
+      const studentIncomeTerm = incomeSrc?.includes('مكافأة')
+        ? 'مكافأتك'
+        : incomeSrc?.includes('مصروف')
+          ? 'مصروفك'
+          : 'دخلك الحالي';
+      const detectedExpense = extractExpenseCategoryFromAnswer(message);
+      const debtAnswered = hasDebtStatusAnswered(historyTexts || [], message);
+      const efStatus = extractEmergencyFundStatus(combinedDialogue);
+
+      const hasLoanOrInstallmentMsg =
+        /(قرض|قروض|دين|ديون|أقساط|اقساط|قسط)/i.test(msg) &&
+        !/(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*ديون)/i.test(msg);
+
+      if (hasLoanOrInstallmentMsg) {
+        empathyLine = `أقدّر صراحتك يا ${userName} في مشاركة واقع الأقساط والديون والالتزامات الحالية في ${stationTitle}.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما القسط أو الالتزام الذي تشعر أنه يضغط على تدفقك الشهري أكثر من غيره هذه الفترة؟',
+        ]);
+      } else if (detectedExpense) {
+        empathyLine = `وضحت الصورة يا ${userName}${isEditedOrResent ? ' بعد تعديل إجابتك' : ''}؛ تسرب جزء من السيولة في **${detectedExpense}** نقطة مهمة يمكن ضبطها بهدوء في ${stationTitle}.`;
+        followUpQuestion = pickEarlyFollowUp([
+          !isStudent && !debtAnswered
+            ? 'وقبل أن نضع سقفاً لضبط هذا البند: هل توجد عليك حالياً أي ديون أو أقساط شهرية ثابتة تقتطع من دخلك؟'
+            : `ما السقف الأسبوعي المرن الذي تراه واقعياً لبند ${detectedExpense} دون شعور بالحرمان؟`,
+        ]);
+      } else if (efStatus.hasFund && efStatus.monthsCovered !== null) {
+        empathyLine = `خطوة مطمئنة وواعية يا ${userName} امتلاكك صندوق طوارئ يغطي ${efStatus.monthsCovered} أشهر في ${stationTitle}.`;
+        followUpQuestion = pickEarlyFollowUp([
+          efStatus.monthsCovered < 6
+            ? `ما الخطة أو النسبة المريحة لك الآن لاستكمال الصندوق من ${efStatus.monthsCovered} إلى 6 أشهر أو توجيه جزء من الفائض للنمو؟`
+            : 'كيف توظف الفائض الشهري حالياً بين أهدافك القريبة والنمو طويل المدى؟',
+        ]);
+      } else if (/(نصف\s*ساعة|30|50|100|سأجرب|ساجرب|سأبدأ|سأدخر|سأوفر|صمام\s*أمان)/i.test(msg)) {
+        const microHint = msg.includes('30') ? 'ادخار 30 ريالاً كصمام أمان' : 'هذه الخطوة الميسرة';
+        empathyLine = `خطوة ممتازة وموزونة يا ${userName}؛ البدء بـ ${microHint} من ${isStudent ? studentIncomeTerm : 'دخلك'} يكسر جمود البداية دون ضغط.`;
+        followUpQuestion = pickEarlyFollowUp([
+          isStudent
+            ? `ما الطريقة الأنسب لك لحماية هذا المبلغ من الصرف العفوي حتى نهاية الشهر؟`
+            : !debtAnswered
+              ? 'وهل تقتطع أي أقساط أو التزامات دورية جزءاً من دخلك الشهري قبل تثبيت هذه الخطوة؟'
+              : 'ما العائق العملي الأبرز الذي قد يواجه استمرارك في هذه الخطوة خلال الشهر القادم؟',
+        ]);
+      } else if (/(قرض|قروض|دين|ديون|أقساط|اقساط)/i.test(msg) && !/(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*ديون)/i.test(msg)) {
+        empathyLine = `أقدّر صراحتك يا ${userName} في مشاركة واقع الأقساط والديون والالتزامات الحالية في ${stationTitle}.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما القسط أو الالتزام الذي تشعر أنه يضغط على تدفقك الشهري أكثر من غيره هذه الفترة؟',
+        ]);
+      } else if (isStudent && /(يفي|تكفي|يكفي|احتياجاتي|الأساسية|لا ادخر|لا أدخر)/i.test(msg)) {
+        empathyLine = `أقدّر صراحتك يا ${userName}؛ كون ${studentIncomeTerm} يفي باحتياجاتك الأساسية كطالب يمثّل أرضية جيدة رغم صعوبة الادخار حالياً.`;
+        followUpQuestion = pickEarlyFollowUp([
+          `ما البند الذي تلاحظ أنه يستهلك النسبة الأكبر من ${studentIncomeTerm} خلال الشهر؟`,
+        ]);
+      } else if (isGenuineQ) {
+        empathyLine = `استفسار وجيه في ${stationTitle} يا ${userName}؛ التخطيط المالي السليم يبدأ دائماً من التدفق الفعلي والالتزامات القائمة لا من التخمين.`;
+        followUpQuestion = pickEarlyFollowUp([
+          isStudent
+            ? `هل يكفيك ${studentIncomeTerm} حتى نهاية الشهر، وما البند الذي يستهلك الجزء الأكبر منه؟`
+            : !debtAnswered
+              ? 'هل تقتطع أي أقساط أو ديون أو التزامات حتمية جزءاً من دخلك الشهري حالياً؟'
+              : 'ما البند الشهري الذي تشعر أنه يضغط على تدفقك النقدي أكثر من غيره؟',
+        ]);
+      } else {
+        empathyLine = `أقدّر صراحتك يا ${userName} في توصيف وضعك في ${stationTitle} ("${shortSnippet}").`;
+        followUpQuestion = pickEarlyFollowUp([
+          isStudent
+            ? `ما البند الذي يستهلك النسبة الأكبر من ${studentIncomeTerm} خلال الشهر؟`
+            : !debtAnswered
+              ? 'قبل التخطيط لأي ادخار، هل تقتطع أي أقساط أو ديون أو التزامات شهرية جزءاً من دخلك؟'
+              : 'ما البند الشهري أو الأسبوعي الذي تلاحظ أنه يستهلك النسبة الأكبر من دخلك؟',
+        ]);
+      }
+    } else if (agentKey === 'spiritual') {
+      const mentionsTimeStep = /(نصف\s*ساعة|ربع\s*ساعة|\d+\s*دقيقة|\d+\s*دقائق|مشي|تأمل|تامل|خلوة|هدوء)/i.test(msg);
+      if (mentionsTimeStep) {
+        empathyLine = `خطوة واعية ومريحة يا ${userName}؛ تخصيص ${msg.includes('نصف ساعة') ? 'نصف ساعة' : 'هذه الدقائق'} بعيداً عن الهاتف يمنحك مساحة صادقة لاستعادة السكينة في ${stationTitle}.`;
+        followUpQuestion = pickEarlyFollowUp([
+          `وسط ضغوط يومك ${isStudent ? 'الدراسية' : 'العملية'}، ما التوقيت الأنسب لك لتثبيت هذه المساحة الهادئة يومياً؟`,
+        ]);
+      } else if (/(قلق|ضغط|دراسة|شغل|تشتت|هاتف|جوال|شاشات)/i.test(msg)) {
+        empathyLine = `أسمعك باهتمام يا ${userName} في ${stationTitle}؛ تزاحم الضغوط والمشتتات الرقمية يرهق صفاء الذهن ويسرق لحظات السكون.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'في زحام يومك المعتاد، متى تلاحظ أن التشتت يبلغ ذروته، وهل تتاح لك 10 دقائق هادئة بلا شاشات؟',
+        ]);
+      } else if (isGenuineQ) {
+        empathyLine = `تساؤلك مهم في ${stationTitle} يا ${userName}؛ السكينة لا تتطلب مثالية أو جهداً شاقاً، بل دقائق صدق وهدوء يومية.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما العادة الهادئة أو اللحظة اليومية الأقرب لقلبك التي تشعرك بصفاء الذهن؟',
+        ]);
+      } else {
+        empathyLine = `أسمعك بهدوء وتقدير يا ${userName} حول ما ذكرته في ${stationTitle} ("${shortSnippet}").`;
+        followUpQuestion = pickEarlyFollowUp([
+          'متى كانت آخر لحظة شعرت فيها بصفاء ذهني وسلام داخلي، وما الذي ساعدك وقتها؟',
+        ]);
+      }
+    } else if (agentKey === 'health') {
+      if (/(نوم|أرق|ارق|سهر|إرهاق|ارهاق|تعب|طاقة)/i.test(msg)) {
+        empathyLine = `أسمعك باهتمام يا ${userName} في ${stationTitle}؛ حين يتأثر النوم أو تتراجع الطاقة، يرسل الجسد إشارة واضحة بحاجته إلى ضبط الإيقاع والراحة.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'كم ساعة تنام فعلياً في الأيام الأخيرة، وهل يسبق نومك استخدام للشاشات أو منبهات متأخرة؟',
+        ]);
+      } else if (isGenuineQ) {
+        empathyLine = `سؤال عملي ومهم في ${stationTitle} يا ${userName}؛ الطاقة البدنية تبدأ عادةً بخطوة صغيرة ثابتة في النوم أو الترطيب أو الحركة البسيطة.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما الجانب الصحي الذي تشعر أن جسدك يطلبه بإلحاح أكبر الآن: انتظام النوم أم الحركة الخفيفة؟',
+        ]);
+      } else {
+        empathyLine = `أقدّر مشاركتك لصورتك الصحية في ${stationTitle} يا ${userName} ("${shortSnippet}").`;
+        followUpQuestion = pickEarlyFollowUp([
+          'خلال ساعات يومك المعتاد، متى تلاحظ أكبر هبوط في طاقتك البدنية أو نشاطك؟',
+        ]);
+      }
+    } else if (agentKey === 'career') {
+      if (isGenuineQ) {
+        empathyLine = `سؤال في الصميم حول ${stationTitle} يا ${userName}؛ التقدم المهني يبدأ بحماية وقت التركيز في مهمة واحدة مؤثرة بدل تشتت المهام.`;
+        followUpQuestion = pickEarlyFollowUp([
+          `في ${isStudent ? 'دراستك ومشاريعك' : 'عملك اليومي'}، ما الشيء الأكثر استنزافاً لوقتك دون عائد حقيقي؟`,
+        ]);
+      } else {
+        empathyLine = `أسمعك بتركيز يا ${userName} حول وضعك في ${stationTitle} ("${shortSnippet}").`;
+        followUpQuestion = pickEarlyFollowUp([
+          `ما أكبر عائق أو مشتت يقطع تركيزك ويصعّب عليك إنجاز أولوياتك ${isStudent ? 'الدراسية والمهارية' : 'المهنية'}؟`,
+        ]);
+      }
+    } else if (agentKey === 'learning') {
+      if (/(لا\s*أقرأ|لا\s*اقرأ|ما\s*عندي\s*وقت|لا\s*أجد\s*وقت|تشتت|تسويف)/i.test(msg)) {
+        empathyLine = `أقدّر صراحتك يا ${userName} في ${stationTitle}؛ ضيق الوقت وتزاحم الالتزامات يجعلان إيجاد مساحة للقراءة أو التعلم تحدياً حقيقياً.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما الذي يقف عادةً بينك وبين تخصيص 10 إلى 15 دقيقة أسبوعية للقراءة أو تعلم مهارة محددة؟',
+        ]);
+      } else if (isGenuineQ) {
+        empathyLine = `تساؤل جيد في ${stationTitle} يا ${userName}؛ التعلم التراكمي الهادئ بعادة قصيرة أثبت من الاندفاع المؤقت.`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما المهارة أو المجال المعرفي الأقرب لاحتياجك الفعلي في هذه المرحلة؟',
+        ]);
+      } else {
+        empathyLine = `أقدّر مشاركتك حول مسارك في ${stationTitle} يا ${userName} ("${shortSnippet}").`;
+        followUpQuestion = pickEarlyFollowUp([
+          'ما المجال أو المهارة التي تود التركيز عليها هذا الشهر، وما العائق الأبرز أمام البدء؟',
+        ]);
+      }
+    } else {
+      if (isGenuineQ) {
+        empathyLine = `سؤال صادق ومهم في ${stationTitle} يا ${userName}؛ جودة الحضور والإنصات الهادئ تصنع أثراً أعمق من طول الوقت مع انشغال الذهن.`;
+        followUpQuestion = pickEarlyFollowUp([
+          hasDep
+            ? 'ما أكثر وقت أو عائق يومي يصعّب عليكم الجلوس معاً بهدوء بعيداً عن المشتتات؟'
+            : 'ما الشيء الذي يصعّب عليك حالياً الحفاظ على تواصل دافئ ومنتظم مع والديك وأهلك؟',
+        ]);
+      } else {
+        empathyLine = `أسمعك باهتمام وتقدير يا ${userName} لما ذكرته في ${stationTitle} ("${shortSnippet}").`;
+        followUpQuestion = pickEarlyFollowUp([
+          hasDep
+            ? 'كيف تصف جودة الوقت الهادئ الذي تقضيه مع أسرتك بعيداً عن الشاشات وضغط العمل؟'
+            : 'كيف تصف إيقاع تواصلك وبرّك مع أهلك وسط انشغالاتك الحالية؟',
+        ]);
+      }
+    }
+
+    const earlyReply = `${empathyLine}\n\n${followUpQuestion}`;
+    return formatAgentOutput({
+      reasoning: `جولة استكشافية تمهيدية (${stationTurnCount + 1} من 2) في ${stationTitle}: تعاطف موجز مرتبط بكلام المستفيد ("${shortSnippet}") وسؤال تشخيصي واحد دون أي تقييم رقمي أو قوالب معلبة.`,
+      summary: `استكشاف حواري تمهيدي في ${stationTitle} مرتبط بمدخلات المستفيد.`,
+      advice: `متابعة الاستكشاف الحواري بهدوء لفهم واقع ${stationTitle} قبل التقييم.`,
+      reply: earlyReply,
+      actionSteps: [`متابعة تشخيص ${stationTitle} بخطوات واقعية واضحة`],
+      score: 0,
+      station_completed: false,
+      reflectionQuestion: followUpQuestion,
     });
   }
 
@@ -748,7 +1135,7 @@ export function generateLocalAgentResponse(
           'تأخير تصفح الهاتف لمدة 15 دقيقة بعد الاستيقاظ لإعطاء العقل مساحة استيقاظ هادئة',
           'أخذ 3 أنفاس عميقة وملاحظة تدفق الهواء قبل البدء في أول مهمة يومية'
         ],
-        score: score > 0 ? (score > 10 ? score / 10 : score) : 5.0,
+        score: currentSessionUnifiedScore,
         station_completed: false,
         reflectionQuestion: 'كيف تصف بداية صباحك، وهل تشعر أنها تشحن طاقتك أم تشتتك فوراً؟'
       });
@@ -757,7 +1144,7 @@ export function generateLocalAgentResponse(
     // فحص ما إذا كان المستخدم يطلب صراحة اعتماد التقييم
     const isSpiritualAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|أنهِ\s*المحطة|أنه\s*المحطة|انهي\s*المحطة|انهاء\s*المحطة|إنهاء\s*المحطة|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(msg);
     if (isSpiritualAdoption) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 5.8;
+      const finalScore = currentSessionUnifiedScore;
       return formatAgentOutput({
         reasoning: `المستفيد (${userName}) اختار صراحة اعتماد التقييم الروحي ("${message}"). نثبت الدرجة (${finalScore}) ونغلق المحطة بنجاح.`,
         summary: `تم اعتماد تقييم السكينة والسلام الداخلي بنجاح.`,
@@ -776,8 +1163,8 @@ export function generateLocalAgentResponse(
     // إذا شارك المستفيد خطوة تهدئة أو التزاماً وقتياً (مثل نصف ساعة أو 3 دقائق)
     const isStepOrWrapup = !isContinueIntent && !isSpiritualAdoption && /(نصف\s*ساعة|ساعة|ربع\s*ساعة|\d+\s*دقيقة|\d+\s*دقائق|خطوة|امشي|أمشي|مشي|تأمل|تامل|رياضة خفيفة|صلاة|ذكر|تنفس|خلوة)/i.test(msg);
     if (isStepOrWrapup && !isGreeting) {
-      if (stationTurnCount < 3) {
-        // أول 3 ردود للمستفيد: تأكيد الخطوة ومواصلة الحوار بأسئلة متدرجة دون إنهاء أو اقتراح اعتماد مبكر
+      if (stationTurnCount < 2) {
+        // قبل الرسالة الثالثة للمستفيد: تأكيد الخطوة ومواصلة الحوار بأسئلة متدرجة دون إنهاء أو اقتراح اعتماد مبكر
         return formatAgentOutput({
           reasoning: `المستفيد قدم التزاماً وقتياً للسكينة ("${message}") في الجولة (${stationTurnCount + 1}). نؤكد على هذه الخطوة بوعي ونواصل الحوار التدرجي لتعميق فهم واقعه دون إنهاء مبكر للمحطة.`,
           summary: `تثبيت التزام المستفيد بخطوة السكينة اليومية ومواصلة الاستكشاف التشخيصي.`,
@@ -787,22 +1174,23 @@ export function generateLocalAgentResponse(
             'تثبيت مساحة الهدوء والتنفس يومياً',
             'ملاحظة مواضع التوتر أثناء اليوم وأخذ وقفة تنفس قصيرة'
           ],
-          score: score > 0 ? (score > 10 ? score / 10 : score) : 5.5,
+          score: isEvaluationSession ? currentSessionSemanticScore : (score > 0 ? (score > 10 ? score / 10 : score) : 5.5),
           station_completed: false,
           reflectionQuestion: 'ما الذي يسحب حضورك القلبي عند ذروة ضغوط يومك؟'
         });
       } else {
-        // ابتداءً من الجولة الرابعة (stationTurnCount >= 3): عرض التقييم وخيار الاعتماد
+        // ابتداءً من الرسالة الثالثة للمستخدم (stationTurnCount >= 2): عرض التقييم الموحد وخيار الاعتماد
+        const spiritualOfferScore = currentSessionUnifiedScore;
         return formatAgentOutput({
-          reasoning: `المستفيد في الجولة (${stationTurnCount + 1}) وقدم التزاماً بالسكينة ("${message}"). بعد 4 جولات، نعرض التقييم المرحلي وخيار الاعتماد.`,
-          summary: `تشخيص اتزان روحي واعد مع تثبيت خطوة تهدئة يومية هادئة.`,
+          reasoning: `المستفيد في الرسالة (${stationTurnCount + 1}) وقدم التزاماً بالسكينة ("${message}"). عرض التقييم الموحد وخيار الاعتماد.`,
+          summary: `تشخيص اتزان روحي مع تثبيت خطوة تهدئة يومية هادئة.`,
           advice: `تثبيت مساحتك الهادئة يومياً بانتظام لصيانة حضور القلب.`,
-          reply: `ما شاركته عبر حوارنا يعكس وعياً طيباً بقيمة الهدوء واستعادة حضور القلب وسط صخب اليوم.\n\nخطوتك البسيطة هذه تمثل بداية ممتازة لترسيخ السكينة وتخفيف الشتات. بعد هذه الرؤية الواضحة، أقيّم وضعك الحالي بدرجة (5.8/10).\n\nهل تود اعتماد هذا التقييم وخلاصة المحطة لننتقل معاً إلى المحطة التالية، أم تفضل إضافة تفصيل روحي آخر؟`,
+          reply: `ما شاركته عبر حوارنا يعكس وعياً طيباً بقيمة الهدوء واستعادة حضور القلب وسط صخب اليوم.\n\n${formatUnifiedScoreConfirmationMessage(spiritualOfferScore)}`,
           actionSteps: [
             'تثبيت مساحة الهدوء والتنفس لمدة 15-30 دقيقة يومياً',
             'حماية صفاء الذهن من شاشات الهاتف في مستهل الصباح'
           ],
-          score: 5.8,
+          score: spiritualOfferScore,
           station_completed: false,
           reflectionQuestion: 'هل نعتمد هذا التقييم وننتقل للمحطة التالية؟'
         });
@@ -928,7 +1316,7 @@ export function generateLocalAgentResponse(
     // رصد اختيار المستفيد مواصلة الحوار المالي والتعمق
     const isFinContinueIntent = /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار|المزيد|فهم\s*أكثر|فهم\s*اكثر|تقييم\s*أدق|تقييم\s*ادق)/i.test(msg) && !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل\s*للمحطة|ننتقل\s*للتالية|المحطة التالية)/i.test(msg);
     if (isFinContinueIntent) {
-      const interimScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 5.8 : 5.5);
+      const interimScore = currentSessionUnifiedScore;
       const userMentionsRestaurants = /(مطاعم|مطعم|كافيهات|مقاهي|اكل برا|أكل برا|طلبات|هنقرستيشن|جاهز)/i.test(msg);
 
       const finContinueReply = userMentionsRestaurants
@@ -959,46 +1347,58 @@ export function generateLocalAgentResponse(
       });
     }
 
+    const finEfStatus = extractEmergencyFundStatus([...(historyTexts || []), message]);
+    const callerFinScore = score > 0 ? (score > 10 ? score / 10 : score) : 0;
+
     // رصد طلب الاعتماد الصريح وإغلاق المحطة فوراً
     const isFinancialAdoption = !isFinContinueIntent && /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي|كافي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(msg);
     const isAdoptionIntent = isFinancialAdoption;
     if (isAdoptionIntent) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 5.8 : 5.5);
+      const finalScore = currentSessionUnifiedScore;
       const fullFinContext = `${(historyTexts || []).join(' ')} ${message}`;
-      const hasExplicitNoDebt = /(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون|خلو\s*سجلي\s*من\s*الديون)/i.test(fullFinContext);
+      const hasExplicitNoDebt = /(?:بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:علي[ّ]?\s*|لدي\s*)?(?:أي\s*)?(?:ديون|أقساط)|ليس(?:ت)?\s*(?:لدي|عندي|علي[ّ]?)\s*(?:أي\s*)?(?:ديون|أقساط)|ما\s*(?:عندي|علي[ّ]?)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون|خلو\s*سجلي\s*من\s*الديون)/i.test(fullFinContext);
       const hasUserMentionedDebt = !hasExplicitNoDebt && /(قرض|قروض|دين|ديون|أقساط|اقساط|بطاقة|فيزا|التزامات)/i.test(fullFinContext);
+      const goldenFinAdvice = synthesizeGoldenRecommendation({
+        areaId: 'financial',
+        userTexts: [...(historyTexts || []), message],
+        userProfile,
+        score: finalScore,
+      });
       const debtAdoptionPhrase = hasUserMentionedDebt
         ? 'وحصر التزاماتك والأقساط الشهرية لمعالجتها بواقعية'
         : (isStudent && hasExplicitNoDebt
           ? 'وخلو سجلك من الديون'
-          : (hasExplicitNoDebt ? 'وخلو سجلك من الديون وتنظيم ميزانيتك' : 'وضبط تدفقك النقدي ومراجعة التزاماتك الشهرية'));
+          : (finEfStatus.hasFund
+            ? 'ومتانة رصيدك الحالي وتوجهك للنمو المالي'
+            : (hasExplicitNoDebt ? 'وخلو سجلك من الديون وتنظيم ميزانيتك' : 'وضبط تدفقك النقدي ومراجعة التزاماتك الشهرية')));
       return formatAgentOutput({
-        reasoning: `المستفيد (${userName}) يطلب صراحة اعتماد التقييم المالي وإنهاء المحطة للانتقال للتالية. تم اعتماد الدرجة المستحقة (${finalScore.toFixed(1)}/10) وتثبيت خطة واقعية متسقة مع حالة الالتزامات دون طرح أي سؤال.`,
-        summary: hasUserMentionedDebt
-          ? `اعتماد تشخيص المحطة المالية بأولوية إدارة الديون والأقساط وضبط التدفق النقدي.`
-          : `اعتماد تشخيص المحطة المالية وتحديد خطوة عملية متدرجة لحماية التدفق النقدي.`,
-        advice: isStudent
-          ? `اقتطاع مبلغ رمزي (30 إلى 50 ريالاً شهرياً) فور استلام ${studentIncomeTerm} كصمام أمان جامعي.`
-          : (hasUserMentionedDebt
-            ? `ترتيب أولويات سداد الأقساط والديون أولاً مع بناء صمام أمان مصغر وضبط التدفق النقدي.`
-            : (hasExplicitNoDebt
-              ? `تخصيص جزء ثابت من الدخل لحساب الطوارئ وتتبع المصروفات الاستهلاكية.`
-              : `حصر كافة الالتزامات الشهرية الثابتة وأي أقساط قائمة لتحديد الهامش الفعلي لصمام الأمان.`)),
-        reply: `تم اعتماد تقييمك المالي بنجاح يا ${userName}! 💎\n\nأثبتّ وعياً كبيراً بصراحتك حول إدارة نفقاتك ${debtAdoptionPhrase}. خطتك بسيطة وفعالة: ${isStudent ? `اقتطاع مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} كصمام أمان` : (hasUserMentionedDebt ? 'التركيز على إدارة الأقساط الشهرية وتدفق النقد وحماية صمام أمان مصغر' : (hasExplicitNoDebt ? 'تخصيص جزء ثابت لحساب الطوارئ وترشيد المصاريف' : 'جرد الالتزامات الشهرية وضبط التدفق النقدي لبناء صمام أمان تدريجي'))}، لإنهاء الشهر بأريحية.\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
-        actionSteps: isStudent
-          ? [
-            `اقتطاع 30 إلى 50 ريالاً شهرياً في حصالة أو حساب ادخار فرعي فور استلام ${studentIncomeTerm}`,
-            `تحديد سقف أسبوعي للمصاريف الشخصية والكمالية لحماية ميزانيتك`
-          ]
+        reasoning: `المستفيد (${userName}) يطلب صراحة اعتماد التقييم المالي وإنهاء المحطة للانتقال للتالية. تم اعتماد الدرجة المستحقة (${finalScore.toFixed(1)}/10) وتثبيت توصية مخصصة لحواره دون طرح أي سؤال.`,
+        summary: finalScore >= 7.5 || finEfStatus.hasFund
+          ? `اعتماد تشخيص المحطة المالية والتركيز على فرص النمو المالي وتنمية الفائض.`
           : hasUserMentionedDebt
+            ? `اعتماد تشخيص المحطة المالية بأولوية إدارة الديون والأقساط وضبط التدفق النقدي.`
+            : `اعتماد تشخيص المحطة المالية وتحديد خطوة عملية متدرجة لحماية التدفق النقدي.`,
+        advice: goldenFinAdvice,
+        reply: `تم اعتماد تقييمك المالي بنجاح يا ${userName}! 💎\n\nأثبتّ وعياً كبيراً بصراحتك حول إدارة نفقاتك ${debtAdoptionPhrase}. خطتك العملية للمرحلة القادمة: ${goldenFinAdvice}\n\nأنت جاهز الآن تماماً للانتقال إلى المحطة التالية.`,
+        actionSteps: finalScore >= 7.5 || finEfStatus.hasFund
+          ? [
+            goldenFinAdvice,
+            'تحديد نسبة ثابتة من الفائض الشهري لأهداف النمو والاستثمار طويل المدى'
+          ]
+          : isStudent
             ? [
-              'إعداد جدول واضح لحصر الأقساط والديون الشهرية وترتيب أولويات السداد',
-              'حماية صمام أمان نقدي مصغر يمنع الاستدانة عند أي طارئ'
+              `اقتطاع 30 إلى 50 ريالاً شهرياً في حصالة أو حساب ادخار فرعي فور استلام ${studentIncomeTerm}`,
+              `تحديد سقف أسبوعي للمصاريف الشخصية والكمالية لحماية ميزانيتك`
             ]
-            : [
-              'جرد الالتزامات الشهرية ومراقبة المصروفات اليومية لمدة أسبوع لتحديد الفائض الفعلي',
-              'تخصيص المبلغ المناسب لصمام الأمان في حساب منفصل وفق واقع الدخل'
-            ],
+            : hasUserMentionedDebt
+              ? [
+                'إعداد جدول واضح لحصر الأقساط والديون الشهرية وترتيب أولويات السداد',
+                'حماية صمام أمان نقدي مصغر يمنع الاستدانة عند أي طارئ'
+              ]
+              : [
+                'جرد الالتزامات الشهرية ومراقبة المصروفات اليومية لمدة أسبوع لتحديد الفائض الفعلي',
+                'تخصيص المبلغ المناسب لصمام الأمان في حساب منفصل وفق واقع الدخل'
+              ],
         score: finalScore,
         station_completed: true,
         reflectionQuestion: ''
@@ -1007,11 +1407,23 @@ export function generateLocalAgentResponse(
 
     // رصد الموافقة على الخطوة الميكروية المقترحة (مثل: حسناً سأجرب ادخار 30 ريال، سوف أحاول)
     const isNegativeSaving = /(لا|ما|لن)\s*(ادخر|أدخر|اوفر|أوفر)/i.test(msg);
-    const isFinancialCommitment = !isFinContinueIntent && !isFinancialAdoption && !isNegativeSaving && /(سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|سأوفر|ساوفر|سأدخر|سادخر|وفر|أوفر|ادخر|أدخر|حصالة|50|100|30)/i.test(msg);
+    const isFinancialCommitment =
+      !isFinContinueIntent &&
+      !isFinancialAdoption &&
+      !isNegativeSaving &&
+      callerFinScore < 7.5 &&
+      !finEfStatus.hasFund &&
+      /(سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|سأوفر|ساوفر|سأدخر|سادخر|وفر|أوفر|ادخر|أدخر|حصالة|50|100|30)/i.test(msg);
     if (isFinancialCommitment) {
-      const interimScore = isStudent ? 5.5 : 5.0;
-      if (stationTurnCount < 3) {
-        // أول 3 ردود: نؤكد على خطوة صمام الأمان المالي ونستمر في الحوار بسؤال تشخيصي ذكي دون إنهاء مبكر
+      const interimScore = currentSessionUnifiedScore;
+      const commitmentGolden = synthesizeGoldenRecommendation({
+        areaId: 'financial',
+        userTexts: [...(historyTexts || []), message],
+        userProfile,
+        score: interimScore,
+      });
+      if (stationTurnCount < 2) {
+        // قبل الرسالة الثالثة: نؤكد على خطوة صمام الأمان المالي ونستمر في الحوار بسؤال تشخيصي ذكي دون إنهاء مبكر
         return formatAgentOutput({
           reasoning: `المستفيد وافق على تجربة الخطوة المالية الميكروية ("${message}") في الجولة (${stationTurnCount + 1}). نؤكد عليها ونستكمل التشخيص المالي بسؤال متدرج دون إنهاء مبكر.`,
           summary: `تأكيد خطوة صمام الأمان المالي ومواصلة استكشاف إدارة الميزانية.`,
@@ -1032,7 +1444,7 @@ export function generateLocalAgentResponse(
         return formatAgentOutput({
           reasoning: `المستفيد وافق على تجربة الخطوة المالية الميكروية في الجولة (${stationTurnCount + 1}). بعد 4 جولات، نقدم تقييماً مرحلياً معتدلاً وخيار الاعتماد.`,
           summary: `الاتفاق على خطوة عملية مبدئية لضبط التدفق النقدي وبناء الأمان المالي.`,
-          advice: `البدء بخطوة عملية محددة تتناسب مع التزاماتك الحقيقية لكسر حاجز البداية.`,
+          advice: commitmentGolden,
           reply: `خطوة ممتازة وموفقة يا ${userName}! 💎\n\nالتزامك بخطوة عملية واضحة ومتابعة نفقاتك يضعك على الطريق الصحيح دون تعقيد.\n\nبعد ما شاركتني به عبر حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10)${isStudent && confirmedNoDebt ? ' مع الحفاظ على ميزة خلو سجلك من الديون وتأسيس أول خط دفاع مالي' : ' بناءً على واقع تدفقك النقدي والتزاماتك الحالية ورغبتك في التحسين'}.\n\nهل ترغب في اعتماد هذا التقييم وإنهاء الاستشارة والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`,
           actionSteps: [
             `اقتطاع 30 إلى 50 ريالاً في حصالة أو حساب فرعي فور استلام ${studentIncomeTerm} القادم`,
@@ -1047,8 +1459,8 @@ export function generateLocalAgentResponse(
 
     // رصد توضيح المستفيد لعدم امتلاكه أماناً مالياً أو تأكيده على ما سبق
     if (/(ليس لدي|ما عندي|ما املك|لا املك|قلت لك|ذكرت لك|سبق وقلت|ما عندي امان|لا يوجد امان|لا املك امان)/i.test(msg)) {
-      const interimScore = isStudent ? 5.5 : 5.0;
-      if (stationTurnCount < 3) {
+      const interimScore = currentSessionUnifiedScore;
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
           reasoning: `المستفيد يؤكد عدم امتلاكه لصمام أمان حالياً في الجولة (${stationTurnCount + 1}). احتواء وتعميق الاستكشاف بسؤال متدرج دون إنهاء مبكر.`,
           summary: `استيعاب واقع عدم وجود صمام أمان ومواصلة تشخيص أوجه الميزانية.`,
@@ -1080,11 +1492,7 @@ export function generateLocalAgentResponse(
     }
 
     if (isRequestingAdvisorSuggestions(message)) {
-      const finSemantic = calculateSemanticScore(message, historyTexts || [], explicitRatingScore ?? undefined);
-      const balancedFinScore =
-        explicitRatingScore !== null
-          ? explicitRatingScore
-          : Math.max(finSemantic, score > 0 ? (score > 10 ? score / 10 : score) : 5.5);
+      const balancedFinScore = currentSessionUnifiedScore;
       const concreteFin = generateConcreteDomainSuggestions(
         'financial',
         [...(historyTexts || []), message],
@@ -1118,16 +1526,28 @@ export function generateLocalAgentResponse(
     }
 
     if (msg.includes('وضح') || msg.includes('توضح') || msg.includes('لا ادري') || msg.includes('لا أدري') || msg.includes('كيف')) {
+      const debtClarifiedAlready = hasDebtStatusAnswered(historyTexts || [], message);
+      const clarifyPool = getDomainContextConfig('financial', parsedCtx).exploratoryQuestions;
+      const nextClarifyQ = pickNextUnaskedQuestion(clarifyPool, [...(historyTexts || []), message], stationTurnCount).question;
       return formatAgentOutput({
         reasoning: `تحليل سيكولوجيا المال: المستفيد يحتاج توضيحاً عملياً. التحليل يفكك الواقع المالي إلى حصر الالتزامات والأقساط أولاً، الفصل بين الرغبة والاحتياج، ثم بناء صمام الأمان وتوجيه الفائض المتبقي للادخار.`,
         summary: `توضيح استراتيجية المال الحكيم: حصر الديون والالتزامات أولاً، فصل الاحتياج عن الرغبة، ثم بناء صمام الأمان.`,
-        advice: `ابدأ بحصر أقساطك والتزاماتك الشهرية أولاً لمعرفة الفائض الحقيقي قبل أي خطة ادخار.`,
+        advice: callerFinScore >= 7.5 || finEfStatus.hasFund
+          ? synthesizeGoldenRecommendation({
+              areaId: 'financial',
+              userTexts: [...(historyTexts || []), message],
+              userProfile,
+              score: callerFinScore >= 7.5 ? callerFinScore : 7.5,
+            })
+          : `ابدأ بحصر أقساطك والتزاماتك الشهرية أولاً لمعرفة الفائض الحقيقي قبل أي خطة ادخار.`,
         reply: `يسعدني جداً أن أفسر لك الفكرة ببساطة وعمق يا ${userName}.\n\nالمال ليس مجرد لغة حسابية جافة، بل قرارات متزنة تبدأ بالواقع لا بالتخمين. التوضيح العملي الذي أقصده يتلخص في ثلاث خطوات متتابعة:\n\n1. **حصر الالتزامات والأقساط أولاً**: التأكد من قيمة أي ديون أو أقساط شهرية ثابتة تقتطع من الدخل لمعرفة التدفق النقدي المتاح فعلياً.\n2. **فصل الاحتياج عن الرغبة**: الاحتياج هو ما لا تستقيم حياتك بدونه (مسكن، طعام، فواتير والتزامات). أما الرغبة فهي ما يمكن تأجيله لحماية السيولة.\n3. **صمام الأمان وتوجيه الفائض**: بعد ترتيب الالتزامات وضبط الصرف، نخصص صمام أمان مصغراً أو ممتداً ثم نوجّه ما يتوفر فعلياً للادخار التلقائي دون إثقال ميزانيتك.`,
         actionSteps: [
           'جرد الأقساط والالتزامات الشهرية الثابتة ونسبتها من الدخل الصافي',
           'تحديد صافي الفائض المتاح فعلياً قبل اقتطاع أي نسبة ادخار تلقائي'
         ],
-        reflectionQuestion: 'هل تقتطع أي أقساط أو التزامات دورية جزءاً من دخلك حالياً، أم يخلو سجلك منها؟'
+        reflectionQuestion: debtClarifiedAlready
+          ? (nextClarifyQ || 'ما فرصة النمو المالي أو تنظيم الفائض التي تراها أنسب لمرحلتك القادمة؟')
+          : 'هل تقتطع أي أقساط أو التزامات دورية جزءاً من دخلك حالياً، أم يخلو سجلك منها؟'
       });
     }
 
@@ -1145,8 +1565,8 @@ export function generateLocalAgentResponse(
     );
 
     if (hasActualDebtIntent) {
-      const interimScore = 4.8;
-      if (stationTurnCount < 3) {
+      const interimScore = currentSessionUnifiedScore;
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
           reasoning: `إدارة الالتزامات المالية: التعامل مع الديون والأقساط يتطلب خطة منهجية باردة تبدأ بحصر الالتزامات وترتيب الأولويات بدلاً من افتراض مرونة نقدية كاملة.`,
           summary: `إعطاء الأولوية لإدارة الأقساط والديون وضبط التدفق النقدي بدلاً من الاستهلاك أو الاستثمار المتسرع.`,
@@ -1177,7 +1597,7 @@ export function generateLocalAgentResponse(
       }
     }
 
-    const fallbackScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 5.5 : 5.0);
+    const fallbackScore = currentSessionUnifiedScore;
     const coversNeeds = /(يفي|تكفي|يكفي|يغطي)/i.test(msg);
     const notSaving = /(لا ادخر|لا أدخر|ما اوفر|ما أوفر|ما ادخر|ما أدخر|صفر ادخار)/i.test(msg);
     const incomeIsSmall = /(قليل|بسيط|محدود|كونه قليل)/i.test(msg);
@@ -1196,13 +1616,16 @@ export function generateLocalAgentResponse(
         !isQuestionAlreadyAsked(debtCheckQ, historyTexts || []);
 
       const finPool = getDomainContextConfig('financial', parsedCtx).exploratoryQuestions;
-      const nextUnaskedFin = pickNextUnaskedQuestion(finPool, historyTexts || [], stationTurnCount);
+      const combinedFinHistory = [...(historyTexts || []), message];
+      const nextUnaskedFin = pickNextUnaskedQuestion(finPool, combinedFinHistory, stationTurnCount);
       const nextFollowupQ = canAskDebtCheck
         ? debtCheckQ
-        : stationTurnCount >= 3
+        : stationTurnCount >= 2
           ? `أقيّم وضعك الحالي مبدئياً بدرجة (${fallbackScore.toFixed(1)}/10). هل ترغب في اعتماد هذا التقييم والبدء بخطة ضبط بند ${detectedExpenseCategory}، أم نواصل الحوار؟`
           : (nextUnaskedFin.question ||
-            `ما السقف الأسبوعي المرن الذي تراه مناسباً لبند ${detectedExpenseCategory} حتى لا يضغط على آخر الشهر؟`);
+            (finEfStatus.hasFund
+              ? `ما السقف الأسبوعي المرن الذي تراه مناسباً لبند ${detectedExpenseCategory} لتوجيه الفائض نحو أهدافك المالية التالية؟`
+              : `ما السقف الأسبوعي المرن الذي تراه مناسباً لبند ${detectedExpenseCategory} حتى لا يضغط على آخر الشهر؟`));
 
       const directAckReply = isStudent
         ? `وضحت الصورة${isEditedOrResent ? ' بعد تعديل إجابتك' : ''}؛ الإنفاق المتكرر على **${detectedExpenseCategory}** قد يلتهم جانباً كبيراً من ${studentIncomeTerm} دون ملاحظة.\n\nالخطوة العملية الأذكى هنا هي تخصيص سقف أسبوعي واضح لهذا البند وحماية مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm}.\n\n${nextFollowupQ}`
@@ -1237,7 +1660,7 @@ export function generateLocalAgentResponse(
         `تخصيص مبلغ رمزي ميسر (30 إلى 50 ريالاً فقط) كحصالة أمان فور استلام ${studentIncomeTerm} القادم`,
         `حصر المستلزمات الأساسية شهرياً للحفاظ على كفايتها دون هدر`
       ];
-      studentQuestion = stationTurnCount >= 3
+      studentQuestion = stationTurnCount >= 2
         ? `هل ترغب في اعتماد هذا التقييم وخطة البداية برمزية بسيطة (30-50 ريالاً) والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`
         : `ما رأيك في تجربة اقتطاع هذا المبلغ الرمزي البسيط (30-50 ريالاً) من ${studentIncomeTerm} القادم كأول حصالة أمان جامعي؟ هل تراه مناسباً لواقعك؟`;
     } else if (userMentionsRestaurants) {
@@ -1246,7 +1669,7 @@ export function generateLocalAgentResponse(
         `تخصيص مبلغ رمزي (30 إلى 50 ريالاً) فور استلام ${studentIncomeTerm} القادم`,
         `تحديد سقف لمصاريف المطاعم والمقاهي لحماية ميزانيتك`
       ];
-      studentQuestion = stationTurnCount >= 3
+      studentQuestion = stationTurnCount >= 2
         ? `هل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`
         : `ما الخطوة البسيطة التي ترى أنها ستساعدك في ضبط هذا البند حتى نهاية الشهر؟`;
     } else {
@@ -1296,7 +1719,7 @@ export function generateLocalAgentResponse(
   if (agentKey === 'health') {
     const isHealthAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(msg);
     if (isHealthAdoption) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8;
+      const finalScore = currentSessionUnifiedScore;
       return formatAgentOutput({
         reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
         summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة النوم والنشاط البدني.`,
@@ -1383,7 +1806,7 @@ export function generateLocalAgentResponse(
     }
 
     if (isCareerAdoption) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : (isStudent ? 6.8 : 6.5);
+      const finalScore = currentSessionUnifiedScore;
       return formatAgentOutput({
         reasoning: `اعتماد تقييم محطة ${stationTitle} (${finalScore.toFixed(1)}/10) بناءً على رغبة المستفيد (${userName}).`,
         summary: `اعتماد تشخيص ${stationTitle} وتثبيت خطة الإنتاجية وحماية ساعات التركيز.`,
@@ -1401,8 +1824,8 @@ export function generateLocalAgentResponse(
     }
 
     if (isCareerCommitment) {
-      const interimScore = isStudent ? 6.5 : 6.2;
-      if (stationTurnCount < 3) {
+      const interimScore = currentSessionUnifiedScore;
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
           reasoning: `المستفيد قدم التزاماً للتركيز والإنتاجية ("${message}") في الجولة (${stationTurnCount + 1}). نؤكد عليها ونستكمل بسؤال متدرج دون إنهاء مبكر.`,
           summary: `تأكيد خطوة العمل العميق ومواصلة الاستكشاف المهني.`,
@@ -1435,7 +1858,7 @@ export function generateLocalAgentResponse(
       advice: 'التركيز المنهجي في فترة قصيرة يومياً يتفوق على ساعات طويلة مشتتة.',
       reply: careerFallback.reply,
       actionSteps: ['تقسيم المهام الكبيرة إلى أجزاء صغيرة لا تتجاوز 30 دقيقة', 'إبعاد الإشعارات وقت العمل المركز'],
-      score: score > 0 ? (score > 10 ? score / 10 : score) : 6.0,
+      score: currentSessionUnifiedScore,
       station_completed: false,
       reflectionQuestion: ''
     });
@@ -1446,16 +1869,10 @@ export function generateLocalAgentResponse(
     const isPersonalAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(msg);
     const isPersonalCommitment = /(عادة|أجرب|اجرب|سأجرب|سوف\s*احاول|سأحاول|تفريغ|كتابة|تدوين|انتصار|10\s*دقائق|15\s*دقيقة)/i.test(msg);
     const isPersonalAcuteIsolation = hasAcuteIsolationOrRejection([...(historyTexts || []), message]);
-    const personalExplicitRating = extractExplicitRating(message);
-    const personalFairScore =
-      personalExplicitRating !== null
-        ? personalExplicitRating
-        : calculateSemanticScore(message, historyTexts || [], undefined);
+    const personalFairScore = currentSessionUnifiedScore;
 
     if (isPersonalAdoption) {
-      const finalScore = isPersonalAcuteIsolation
-        ? personalFairScore
-        : (score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8);
+      const finalScore = currentSessionUnifiedScore;
       return formatAgentOutput({
         reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
         summary: isPersonalAcuteIsolation
@@ -1477,7 +1894,7 @@ export function generateLocalAgentResponse(
     }
 
     if (isPersonalAcuteIsolation) {
-      if (stationTurnCount < 3) {
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
           reasoning: `رصد سلبية صريحة وعزلة حادة أو رفض للجلوس مع الآخرين في ${stationTitle} (${personalFairScore.toFixed(1)}/10). احترام حدود المستفيد دون افتراض تقصير أو إلزام بمخالطة.`,
           summary: `احترام حدود المستفيد وتقييم أثر العزلة والتوتر المحيط على توازنه الشخصي (${personalFairScore.toFixed(1)}/10).`,
@@ -1505,25 +1922,49 @@ export function generateLocalAgentResponse(
     }
 
     if (isPersonalCommitment) {
-      const interimScore = 6.4;
-      if (stationTurnCount < 3) {
+      const interimScore = currentSessionUnifiedScore;
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
-          reasoning: `المستفيد أبدى استعداداً لتطبيق عادة التهدئة وتفريغ الضغوط ("${message}") في الجولة (${stationTurnCount + 1}). تأكيد الخطوة ومواصلة الحوار دون إنهاء مبكر.`,
-          summary: `تأكيد عادة التهدئة النفسية واستكمال التشخيص الذاتي.`,
-          advice: 'الانتصار اليومي الصغير يكسر دائرة الإحباط ويصنع ثقة مستدامة.',
-          reply: `خطوة واعية ومباركة يا ${userName}! 🌸 الرفق بالذات والانتصارات الصغيرة اليومية هما جسر الاتزان النفسي الحقيقي.\n\nولكن لنستكشف هذا الجانب بعمق أكبر: في الأيام التي تشعر فيها بالثقل أو جلد الذات، ما هو النمط الذي يتكرر في تفكيرك؟ وكيف يمكنك تذكير نفسك بلطف أنك إنسان يتطور؟`,
+          reasoning: `المستفيد ${personalFairScore >= 7.5 ? 'يُظهر استقراراً وصفاءً ذهنياً مع عادة يومية صحية' : 'أبدى استعداداً لتطبيق عادة التهدئة وتفريغ الضغوط'} ("${message}") في الجولة (${stationTurnCount + 1}). تأكيد الخطوة ومواصلة الحوار دون إنهاء مبكر.`,
+          summary: personalFairScore >= 7.5
+            ? `تعزيز الاستقرار النفسي والصفاء الذهني في ${stationTitle}.`
+            : `تأكيد عادة التهدئة النفسية واستكمال التشخيص الذاتي.`,
+          advice: personalFairScore >= 7.5
+            ? synthesizeGoldenRecommendation({
+                areaId: 'personal',
+                userTexts: [...(historyTexts || []), message],
+                userProfile,
+                score: interimScore,
+              })
+            : 'الانتصار اليومي الصغير يكسر دائرة الإحباط ويصنع ثقة مستدامة.',
+          reply: personalFairScore >= 7.5
+            ? `ما أجمل هذا التوازن يا ${userName}! 🌸 تخصيصك وقتاً يومياً ثابتاً للراحة والبعد عن الشاشات ينعكس بوضوح على صفائك الذهني وحضورك مع أسرتك.\n\nانطلاقاً من هذا الاستقرار الطيب، كيف تخطط لحماية هذه المساحة الهادئة واستثمارها في هدف شخصي يثري مرحلتك القادمة؟`
+            : `خطوة واعية ومباركة يا ${userName}! 🌸 الرفق بالذات والانتصارات الصغيرة اليومية هما جسر الاتزان النفسي الحقيقي.\n\nولكن لنستكشف هذا الجانب بعمق أكبر: في الأيام التي تشعر فيها بالثقل أو جلد الذات، ما هو النمط الذي يتكرر في تفكيرك؟ وكيف يمكنك تذكير نفسك بلطف أنك إنسان يتطور؟`,
           actionSteps: ['تخصيص 10 دقائق لتفريغ الذهن وتدوين المشاعر بصدق'],
           score: interimScore,
           station_completed: false,
           reflectionQuestion: 'ما النمط الذي يتكرر في تفكيرك عند الشعور بالضغط؟'
         });
       } else {
+        const personalRound4Advice =
+          personalFairScore >= 7.5
+            ? synthesizeGoldenRecommendation({
+                areaId: 'personal',
+                userTexts: [...(historyTexts || []), message],
+                userProfile,
+                score: interimScore,
+              })
+            : 'الانتصار اليومي الصغير يكسر دائرة الإحباط ويصنع ثقة مستدامة.';
         return formatAgentOutput({
-          reasoning: `المستفيد أبدى استعداداً لتطبيق عادة التهدئة وتفريغ الضغوط في الجولة (${stationTurnCount + 1}). عرض التقييم المرحلي وخيار الاعتماد.`,
-          summary: `الاتفاق على عادة نفسية صغرى لتفريغ الضغوط واستعادة الهدوء.`,
-          advice: 'الانتصار اليومي الصغير يكسر دائرة الإحباط ويصنع ثقة مستدامة.',
-          reply: `خطوة واعية ومباركة يا ${userName}! الرفق بالذات هو جسر الاتزان النفسي الحقيقي.\n\nبناءً على هذا الوعي الطيب عبر حوارنا، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`,
-          actionSteps: ['تخصيص 10 دقائق لتفريغ الذهن وتدوين المشاعر بصدق'],
+          reasoning: `المستفيد أبدى ${personalFairScore >= 7.5 ? 'استقراراً وصفاءً ذهنياً في' : 'استعداداً لتطبيق عادة التهدئة وتفريغ الضغوط في'} الجولة (${stationTurnCount + 1}). عرض التقييم المرحلي وخيار الاعتماد.`,
+          summary: personalFairScore >= 7.5
+            ? `تعزيز الاستقرار النفسي والصفاء الذهني مع عرض التقييم المرحلي.`
+            : `الاتفاق على عادة نفسية صغرى لتفريغ الضغوط واستعادة الهدوء.`,
+          advice: personalRound4Advice,
+          reply: personalFairScore >= 7.5
+            ? `استمرارك على هذا الاتزان وصفاء الذهن أمر مشجع للغاية يا ${userName}! 🌸\n\nبناءً على حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`
+            : `خطوة واعية ومباركة يا ${userName}! الرفق بالذات هو جسر الاتزان النفسي الحقيقي.\n\nبناءً على هذا الوعي الطيب عبر حوارنا، أقيّم وضعك الحالي بدرجة (${interimScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟`,
+          actionSteps: personalFairScore >= 7.5 ? [personalRound4Advice] : ['تخصيص 10 دقائق لتفريغ الذهن وتدوين المشاعر بصدق'],
           score: interimScore,
           station_completed: false,
           reflectionQuestion: 'هل ترغب في اعتماد هذا التقييم والانتقال للمحطة التالية؟'
@@ -1539,7 +1980,7 @@ export function generateLocalAgentResponse(
     const isLearningCommitment = !isLearningComplaint && /(قراءة|كتاب|صفحات|دورة|بودكاست|تعلم|مهارة|15\s*دقيقة|20\s*دقيقة|سأقرأ|ساقرا)/i.test(msg) && !/(لا|ما|لن|بدون|غير)/i.test(msg);
 
     if (isLearningAdoption) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 7.0;
+      const finalScore = currentSessionUnifiedScore;
       return formatAgentOutput({
         reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
         summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة القراءة والتعلم التراكمي.`,
@@ -1553,8 +1994,8 @@ export function generateLocalAgentResponse(
     }
 
     if (isLearningCommitment) {
-      const interimScore = 6.8;
-      if (stationTurnCount < 3) {
+      const interimScore = currentSessionUnifiedScore;
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
           reasoning: `المستفيد التزم بخطوة تعلم وقراءة منتظمة ("${message}") في الجولة (${stationTurnCount + 1}). نؤكد عليها ونستكمل بسؤال متدرج دون إنهاء مبكر.`,
           summary: `تثبيت عادة القراءة والتعلم التراكمي ومواصلة الاستكشاف.`,
@@ -1586,7 +2027,7 @@ export function generateLocalAgentResponse(
     const isFamilyCommitment = /(جلسة|حوار|بدون شاشات|أمي|امي|أبي|ابي|والدين|أسرة|اسرة|أهل|اهل|20\s*دقيقة|تواصل)/i.test(msg);
 
     if (isFamilyAdoption) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 7.2;
+      const finalScore = currentSessionUnifiedScore;
       return formatAgentOutput({
         reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
         summary: `اعتماد تقييم ${stationTitle} وتثبيت عادة الحضور الواعي والدفء العائلي.`,
@@ -1600,8 +2041,8 @@ export function generateLocalAgentResponse(
     }
 
     if (isFamilyCommitment) {
-      const interimScore = 6.9;
-      if (stationTurnCount < 3) {
+      const interimScore = currentSessionUnifiedScore;
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
           reasoning: `المستفيد التزم بخطوة حضور أسري وتواصل دافئ ("${message}") في الجولة (${stationTurnCount + 1}). نؤكد عليها ونستكمل بسؤال متدرج دون إنهاء مبكر.`,
           summary: `تثبيت جلسة دفء أسري بدون شاشات ومواصلة الاستكشاف الأسري.`,
@@ -1630,26 +2071,51 @@ export function generateLocalAgentResponse(
   // 3.5. Domain: Social (أ. سامي الاجتماعي)
   if (agentKey === 'social') {
     const isSocialAdoption = /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(msg);
+    const socialCombined = [...(historyTexts || []), message].join(' ');
+    const isSocialOverload =
+      /(?:ضغط\s*(?:ال)?عمل|ضغوط\s*(?:ال)?عمل|مشغول|انشغال|أسرة|اسرة|أسري|أسرية|عائلة|عائلية|أولاد|أبناء|بيت|إرهاق|ارهاق|مرهق|تعب|استنزاف|تعبان|ما\s*(?:عندي|أجد|اجد)\s*طاقة|قلة\s*طاقة|مسؤوليات|التزامات|الدوام)/i.test(
+        socialCombined
+      );
     const isSocialComplaint = /(أعاني|اعاني|فتور|انعزال|تباعد|وحدة|وحيد|ما\s*عندي\s*أصدقاء|صعوبة\s*في\s*التواصل)/i.test(msg);
-    const isSocialCommitment = !isSocialComplaint && /(صديق|تواصل|لقاء|حدود|انتقاء|أصدقاء|اصدقاء|صحبة|مجالسة)/i.test(msg) && !/(لا|ما|لن|بدون|غير|فتور|انعزال|تباعد)/i.test(msg);
+    const isSocialCommitment = !isSocialComplaint && /(صديق|تواصل|لقاء|حدود|انتقاء|أصدقاء|اصدقاء|صحبة|مجالسة|تقليل الالتزامات|حماية الطاقة)/i.test(msg) && !/(لا|ما|لن|بدون|غير|فتور|انعزال|تباعد)/i.test(msg);
 
     if (isSocialAdoption) {
-      const finalScore = score && score > 0 ? (score > 10 ? score / 10 : score) : 6.8;
+      const finalScore = currentSessionUnifiedScore;
       return formatAgentOutput({
         reasoning: `اعتماد تشخيص محطة ${stationTitle} (${finalScore.toFixed(1)}/10) للمستفيد (${userName}).`,
-        summary: `اعتماد تقييم ${stationTitle} وتثبيت حدود العلاقات الصحية والصحبة الملهمة.`,
-        advice: 'العلاقات كالأشجار: احرص على رعاية العميق منها، وضع حدوداً صحية تحميك من الاستنزاف.',
-        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🤝\n\nنضجك في اختيار دائرة علاقاتك ووضع حدود صحية تحمي طاقتك هو مكسب كبير. خطتك معتمدة، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
-        actionSteps: ['المبادرة بالتواصل الإيجابي مع صديق واحد مخلص يشاركك طموحك', 'وضع حدود صحية تمنع استنزاف العلاقات السطحية'],
+        summary: `اعتماد تقييم ${stationTitle} وتثبيت حدود العلاقات الصحية وحماية الطاقة الاجتماعية.`,
+        advice: synthesizeGoldenRecommendation({
+          areaId: 'social',
+          userTexts: [...(historyTexts || []), message],
+          userProfile,
+          score: finalScore,
+        }),
+        reply: `تم اعتماد تقييمك في ${stationTitle} بنجاح يا ${userName}! 🤝\n\nوعيك بحدود طاقتك الاجتماعية واختيار ما يريحك دون مجاملات مستنزفة هو مكسب حقيقي. خطتك معتمدة، وأنت جاهز تماماً للانتقال للمحطة التالية.`,
+        actionSteps: isSocialOverload
+          ? ['تخفيف الالتزامات والمجاملات غير الضرورية دون ذنب', 'حماية تواصل خفيف ومريح مع شخص تثق به']
+          : ['المبادرة بالتواصل الهادئ مع شخص واحد تثق به', 'وضع حدود صحية تمنع استنزاف العلاقات السطحية'],
         score: finalScore,
         station_completed: true,
         reflectionQuestion: ''
       });
     }
 
+    if (isSocialOverload && stationTurnCount < 2) {
+      return formatAgentOutput({
+        reasoning: `رصد سياق ضغط العمل والأسرة والإرهاق في محطة ${stationTitle} للمستفيد (${userName}). تركيز الاستجابة على حماية الطاقة الاجتماعية وتقليل الالتزامات دون شعور بالذنب، مع تجنب أي قوالب عن النوادي أو البحث عن أصدقاء جدد.`,
+        summary: `حماية الطاقة الاجتماعية وتقليل الالتزامات والمجاملات وسط ضغوط العمل والأسرة دون ذنب.`,
+        advice: 'حماية طاقتك الاجتماعية عبر تقليل المجاملات دون ذنب خطوة صحية تحافظ على توازنك مع عملك وأسرتك.',
+        reply: `أقدر صراحتك يا ${userName} 🤝؛ حين تجتمع ضغوط العمل ومسؤوليات الأسرة مع الإرهاق، فمن الطبيعي أن تحتاج لحماية طاقتك الاجتماعية بتقليل الالتزامات واللقاءات الثقيلة دون أي شعور بالذنب.\n\nما هي المجاملات أو الالتزامات الاجتماعية الحالية التي تشعر أن تخفيفها سيمنحك مساحة راحة أوضح هذا الأسبوع؟`,
+        actionSteps: ['تقليل التزام اجتماعي واحد غير ضروري هذا الأسبوع دون لوم للذات'],
+        score: currentSessionSemanticScore,
+        station_completed: false,
+        reflectionQuestion: 'ما هي الالتزامات أو المجاملات التي ترى أن تخفيفها سيمنحك راحة أكبر؟'
+      });
+    }
+
     if (isSocialCommitment) {
-      const interimScore = 6.6;
-      if (stationTurnCount < 3) {
+      const interimScore = currentSessionUnifiedScore;
+      if (stationTurnCount < 2) {
         return formatAgentOutput({
           reasoning: `المستفيد التزم بخطوة اجتماعية نوعية وصحية ("${message}") في الجولة (${stationTurnCount + 1}). نؤكد عليها ونستكمل بسؤال متدرج دون إنهاء مبكر.`,
           summary: `تأكيد أهمية الصحبة الصادقة ووضع الحدود ومواصلة الحوار.`,
@@ -1755,15 +2221,8 @@ export function generateLocalAgentResponse(
   // 6. مسار جلسات التقييم الحواري التكيفي (Doctor-Like Clinical Evaluation Session)
   if (isEvaluationSession) {
     const explicitEvalRating = extractExplicitRating(message);
-    const semanticEvalScore = calculateSemanticScore(message, historyTexts || [], explicitEvalRating ?? undefined);
-    const isEvalAcuteIsolation = hasAcuteIsolationOrRejection([...(historyTexts || []), message]);
-    const normalizedCallerScore = score > 0 ? (score > 10 ? score / 10 : score) : 0;
-    const parsedScore =
-      explicitEvalRating !== null
-        ? explicitEvalRating
-        : isEvalAcuteIsolation
-          ? semanticEvalScore
-          : Math.max(semanticEvalScore, normalizedCallerScore >= 6.5 ? semanticEvalScore : normalizedCallerScore || semanticEvalScore);
+    const isEvalAdoption = /(اعتمد|نعتمد|اعتماد|اعتمد التقييم|انهاء|إنهاء|نكتفي|كافي|يكفي|موافق|تمام اعتمد)/i.test(msg);
+    const parsedScore = currentSessionUnifiedScore;
     const isGreeting = !isEditedOrResent && !hasPriorHistory && /(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)/i.test(message) && message.length < 25;
     const isShortVague = (message.length < 25 || isGreeting) && explicitEvalRating === null && !extractExpenseCategoryFromAnswer(message);
     const isUserAsking = isGenuineUserQuestion(message);
@@ -1780,12 +2239,20 @@ export function generateLocalAgentResponse(
         directAnswer = 'المساحة الروحية واحة للنفس وليست واجباً شاقاً؛ صفحة واحدة من قراءة ملهمة، أو دقيقتان من التأمل والاستغفار وذكر الله والامتنان المركز مع حضور القلب كفيلة بإنارة يومك وطرد شتات الذهن.';
       }
     } else if (agentKey === 'financial') {
-      if (/(طوارئ|طواريء|صندوق|ادخار|أدخر|ادخر|توفير|أوفر)/i.test(t)) {
-        directAnswer = isStudent
-          ? `بصفتك طالباً جامعياً، بناء صمام الأمان يبدأ بخطوة ميسرة من ${incomeSrc}: اقتطاع مبلغ رمزي (30 إلى 100 ريال شهرياً) في حصالة أو حساب فرعي يمنحك راحة نفسية ويحميك من الطوارئ الدراسية.`
-          : isVariableIncome
-            ? 'مع طبيعة الدخل المتغير، صمام الأمان المرن يبدأ بتجنيب نسبة من كل دفعة مرتفعة في حساب منفصل لتغطية الأشهر الأهدأ دون ضغط.'
-            : `بناء صندوق الطوارئ يبدأ بقرار ميسر: اقتطاع مبلغ ثابت في حساب بنكي منفصل تماماً فور استلام الراتب ليكون صمام أمان${hasDep ? ' لك ولأسرتك' : ''} ضد الطوارئ.`;
+      const evalEfStatus = extractEmergencyFundStatus([...(historyTexts || []), message]);
+      if (/(طوارئ|طواريء|صندوق|ادخار|أدخر|ادخر|توفير|أوفر|استثمار|أستثمر)/i.test(t)) {
+        if (evalEfStatus.hasFund) {
+          const curMonths = evalEfStatus.monthsCovered;
+          directAnswer = curMonths && curMonths < 6
+            ? `امتلاكك صندوق طوارئ يغطي ${curMonths} أشهر ركيزة ممتازة يا ${userName}؛ الخطوة الأذكى الآن هي استكماله تدريجياً إلى 6 أشهر من نفقاتك الأساسية، وبالتوازي توجيه جزء ثابت من الفائض الشهري إلى استثمار طويل المدى ومتنوع.`
+            : `امتلاكك صندوق طوارئ قائم يمنحك قاعدة مالية متينة يا ${userName}؛ يمكنك الآن التركيز على أتمتة توجيه جزء منتظم من فائضك الشهري نحو استثمار طويل المدى ومتنوع يناسب أهدافك.`;
+        } else {
+          directAnswer = isStudent
+            ? `بصفتك طالباً جامعياً، بناء صمام الأمان يبدأ بخطوة ميسرة من ${incomeSrc}: اقتطاع مبلغ رمزي (30 إلى 100 ريال شهرياً) في حصالة أو حساب فرعي يمنحك راحة نفسية ويحميك من الطوارئ الدراسية.`
+            : isVariableIncome
+              ? 'مع طبيعة الدخل المتغير، صمام الأمان المرن يبدأ بتجنيب نسبة من كل دفعة مرتفعة في حساب منفصل لتغطية الأشهر الأهدأ دون ضغط.'
+              : `بناء صندوق الطوارئ يبدأ بقرار ميسر: اقتطاع مبلغ ثابت في حساب بنكي منفصل تماماً فور استلام الراتب ليكون صمام أمان${hasDep ? ' لك ولأسرتك' : ''} ضد الطوارئ.`;
+        }
       } else if (/(دين|ديون|قرض|سداد|أقساط|اقساط|بطاقة|فيزا)/i.test(t)) {
         directAnswer = isStudent
           ? 'في المرحلة الجامعية، القاعدة الأهم هي تجنب أي أقساط استهلاكية وتصفية الالتزامات الصغيرة أولاً بأول من مصروفك أو مكافأتك.'
@@ -1847,7 +2314,7 @@ export function generateLocalAgentResponse(
       );
       const formattedList = concreteSuggestions.map((s, idx) => `${idx + 1}. ${s}`).join('\n');
       const directSugReply =
-        stationTurnCount >= 3
+        stationTurnCount >= 2
           ? `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${stationTitle}:\n\n${formattedList}\n\nبناءً على حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${parsedScore}/10).\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل تعديل أحد هذه الاقتراحات؟`
           : `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${stationTitle}:\n\n${formattedList}\n\nأيّ من هذه الخطوات الثلاث تشعر أنها الأقرب لتجربتها هذا الأسبوع؟`;
 
@@ -1857,7 +2324,7 @@ export function generateLocalAgentResponse(
         station_completed: false,
         strengths: [`الوضوح في توصيف واقع ${stationTitle} والرغبة في حل عملي`],
         challenges: [concreteSuggestions[0] || `تطبيق خطوة عملية واضحة في ${stationTitle}`],
-        reasoning: `تلبية طلب الاقتراحات المباشر للمستفيد ("${message}") عبر 3 خطوات متسقة مع الحوار${stationTurnCount >= 3 ? ' وعرض التقييم المبدئي' : ''}.`,
+        reasoning: `تلبية طلب الاقتراحات المباشر للمستفيد ("${message}") عبر 3 خطوات متسقة مع الحوار${stationTurnCount >= 2 ? ' وعرض التقييم المبدئي' : ''}.`,
         summary: `تقديم 3 اقتراحات عملية مخصصة في ${stationTitle}.`,
         advice: synthesizeGoldenRecommendation({
           areaId: agentKey,
@@ -1868,13 +2335,13 @@ export function generateLocalAgentResponse(
         reply: directSugReply,
         actionSteps: concreteSuggestions,
         reflectionQuestion:
-          stationTurnCount >= 3
+          stationTurnCount >= 2
             ? 'هل ترغب في اعتماد التقييم الحالي أم تعديل أحد الاقتراحات؟'
             : 'أيّ من هذه الخطوات الثلاث تشعر أنها الأنسب للبدء بها؟',
       });
     }
 
-    if (stationTurnCount >= 3 && !isUserWantingToContinue) {
+    if (stationTurnCount >= 2 && !isUserWantingToContinue) {
       const dynamicStrengths = [
         `وعي صريح وشفافية في تشخيص واقع ${stationTitle}`,
         `الرغبة الصادقة في بناء نمط متزن واستعادة السيطرة`
@@ -1890,21 +2357,21 @@ export function generateLocalAgentResponse(
         station_completed: false,
         strengths: dynamicStrengths,
         challenges: dynamicChallenges,
-        reasoning: `قاعدة الجولات الأربع والتقييم المرحلي (المحطة ${evaluationStep || 1} من 8: ${stationTitle} - الجولة ${stationTurnCount + 1}): عرض الدرجة المبدئية (${parsedScore}/10) وتخيير المستشير بين الاعتماد أو مواصلة الحوار.`,
-        summary: `عرض التقييم المرحلي المبدئي (${parsedScore}/10) لمحطة ${stationTitle} والتخيير بين الاعتماد أو التعمق.`,
+        reasoning: `قاعدة التقييم المبدئي الموحدة بعد الرسالة الثالثة (المحطة ${evaluationStep || 1} من 8: ${stationTitle} - الرسالة ${stationTurnCount + 1}): عرض الدرجة المبدئية (${parsedScore}/10) وتخيير المستشير بين الاعتماد أو مواصلة الحوار.`,
+        summary: `عرض التقييم المبدئي (${parsedScore}/10) لمحطة ${stationTitle} والتخيير بين الاعتماد أو التعمق.`,
         advice: synthesizeGoldenRecommendation({
           areaId: agentKey,
           userTexts: [...(historyTexts || []), message].filter(Boolean),
           userProfile,
           score: parsedScore,
         }),
-        reply: `بعد ما شاركتني به عبر حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${parsedScore}/10). هذا تقييم مبدئي مبني على المعلومات التي ذكرتها، وقد يتغير إذا واصلنا الاستكشاف.\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة؟`,
+        reply: formatUnifiedScoreConfirmationMessage(parsedScore),
         actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
         reflectionQuestion: 'هل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار؟'
       });
     }
 
-    if (stationTurnCount < 3 || isUserAsking || isShortVague || isUserWantingToContinue) {
+    if (stationTurnCount < 2 || isUserAsking || isShortVague || isUserWantingToContinue) {
       if (isShortVague && stationTurnCount > 0) {
         return formatAgentOutput({
           agent_name: advName,
@@ -1922,12 +2389,28 @@ export function generateLocalAgentResponse(
       }
 
       const sessionId = userProfile?.email || userName || 'default';
-      const rotatedFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
+      const rotatedFallback = pickNonRepeatingFallbackReply(
+        agentKey,
+        stationTurnCount,
+        sessionId,
+        userProfile,
+        userName,
+        [...(historyTexts || []), message].filter(Boolean)
+      );
 
       let dynamicReply = rotatedFallback.reply;
       if (directAnswer) {
-        dynamicReply = `💡 **إجابة عن استفسارك:**\n${directAnswer}\n\n🌿 **ولنواصل استكشاف واقعك في ${stationTitle}:**\n${rotatedFallback.reply}`;
+        dynamicReply = isDiagnosticTopicAlreadyAnswered(rotatedFallback.reply, [...(historyTexts || []), message])
+          ? `💡 **إجابة عن استفسارك:**\n${directAnswer}\n\n🌿 ما الخطوة العملية التالية التي تراها الأنسب لك انطلاقاً من هذا التوجه؟`
+          : `💡 **إجابة عن استفسارك:**\n${directAnswer}\n\n🌿 **ولنواصل استكشاف واقعك في ${stationTitle}:**\n${rotatedFallback.reply}`;
       }
+
+      const interimEvalAdvice = synthesizeGoldenRecommendation({
+        areaId: agentKey,
+        userTexts: [...(historyTexts || []), message].filter(Boolean),
+        userProfile,
+        score: parsedScore,
+      });
 
       return formatAgentOutput({
         agent_name: advName,
@@ -1937,9 +2420,11 @@ export function generateLocalAgentResponse(
         challenges: [],
         reasoning: `تحليل استشاري تكيفي (المحطة ${evaluationStep || 1} من 8: ${stationTitle} - المحاورة ${stationTurnCount + 1}، رد #${rotatedFallback.index + 1}): مواصلة الحوار الاستكشافي المباشر دون تكرار.`,
         summary: `متابعة استيضاحية تكيفية لتشخيص (${stationTitle}).`,
-        advice: `التشخيص الاستشاري الدقيق لواقعك اليومي هو الخطوة الأولى لتحديد احتياجك الفعلي.`,
+        advice: parsedScore >= 7.5 ? interimEvalAdvice : `التشخيص الاستشاري الدقيق لواقعك اليومي هو الخطوة الأولى لتحديد احتياجك الفعلي.`,
         reply: dynamicReply,
-        actionSteps: advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة'],
+        actionSteps: parsedScore >= 7.5
+          ? [interimEvalAdvice, ...(advisor?.defaultGoals?.slice(0, 1) || [])]
+          : (advisor?.defaultGoals?.slice(0, 2) || ['تأمل واقع هذا الجانب وتحديد أولويتك القادمة']),
         reflectionQuestion: ''
       });
     }
@@ -1969,10 +2454,10 @@ export function generateLocalAgentResponse(
       challenges: dynamicChallenges,
       reasoning: `اعتماد تشخيص استشاري متزن لمحطة (${evaluationStep || 1} من 8: ${stationTitle}): تم اعتماد التقييم بناءً على اختيار المستشير (${parsedScore}/10).`,
       summary: `اعتماد تشخيص محطة (${stationTitle}) بدرجة ${parsedScore}/10 وتحديد التوصية الذهبية.`,
-      advice: `المحافظة على قاعدة اتزانك في ${stationTitle}: ${goldenHabit}`,
+      advice: goldenHabit,
       reply: `تم اعتماد تقييم محطة (${evaluationStep || 1} من 8: ${stationTitle}) بدرجة (${parsedScore} من 10) بنجاح بناءً على المعلومات التي شاركتها بكل صدق. 🎯\n\n💡 **التوصية العملية:**\n${goldenHabit}.`,
-      actionSteps: advisor?.defaultGoals?.slice(0, 2) || [goldenHabit],
-      reflectionQuestion: 'كيف تجعل خطوتك القادمة أكثر سكينة وإنجازاً في هذا الجانب؟'
+      actionSteps: parsedScore >= 7.5 ? [goldenHabit] : (advisor?.defaultGoals?.slice(0, 2) || [goldenHabit]),
+      reflectionQuestion: ''
     });
   }
 

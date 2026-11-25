@@ -93,6 +93,10 @@ export function calculateSemanticScore(
 
   const anchorRating = extractAnchorSelfRatingFromHistory(historyTexts);
   const allText = [text, ...historyTexts].join(' ').toLowerCase();
+  const cleanedForNegativeCheck = allText.replace(
+    /(?:بعيد[اً ]*عن|البعد\s*عن|إبعاد|ابعد|تجنب|دون|بدون|بلا|تخلصت\s*من|تجاوزت|لا\s*(?:أشعر|اشعر|يوجد|توجد)\s*(?:ب|ل)?)\s*(?:الشاشات|الهاتف|الجوال|التوتر|الضغط|القلق|الإرهاق|الارهاق|التشتت|السهر|اللوم|المقاطعات)/gi,
+    ' '
+  );
   const hasAcuteIsolation = hasAcuteIsolationOrRejection([text, ...historyTexts]);
 
   // 1. Severe breakdown & collapse (1.5 - 3.0)
@@ -100,14 +104,14 @@ export function calculateSemanticScore(
     /(مدمر|محطم|كارثي|كارثة|صفر|ضياع تام|ضائع كليا|لا املك شيء|مفلس تماما|غارق ديون|غرقان ديون|لا اصلي ابدا|تارك الصلاة|ما اصلي نهائيا|انعدام|طاقتي صفر|نومي مدمر|ما انام ابدا|فاشل جدا|اكره حياتي|مكتئب جدا|منهار|مخنوق تماما|مفيش امل|منعدم|مديونية خانقة|صفر ريال)/i,
   ];
 
-  // 2. Strong negative & high struggle (2.6 - 3.8 for isolation/mistreatment, 2.7 - 3.8 overall)
+  // 2. Strong negative & high struggle (2.6 - 3.8 for isolation/mistreatment, 2.7 - 3.6 overall)
   const strongNegativePatterns = [
     /(سيء جدا|سلبي جدا|غير راض ابدا|ضياع|يضيع بسرعة|الوقت يضيع|ما في فايدة|ما اقدر|عاجز|مستنزف|قلق دائم|خوف مستمر|توتر شديد|سهر مستمر|ارق شديد|خمول مستمر|كسل شديد|تراكم|تسويف دائم|ديون كثيرة|راتب لا يكفي|ما اقدر اوفر|عزلة تامة|وحيد تماما|فجوة كبيرة|مشاكل مستمرة|نزاع دائم|تعبت من الوضع|مخنوق|تعبان كثير|فاقد السيطرة|بدون هدف|ما اصلي|اقصر بالصلاة|سلبي تماما|سلبي جدا|لا أجلس مع|لا اجلس مع|لا أريد الجلوس|لا اريد الجلوس|سوء معاملة|سوء المعاملة|لا أشعر بأي فائدة|لا فائدة من وجودهم)/i,
   ];
 
-  // 3. Moderate negative & inconsistency (4.5 - 5.6 alone, balanced to 6.5-7.5 when high anchor/positive baseline exists)
+  // 3. Moderate negative, fluctuation, & exhaustion (4.0 - 5.5 alone, balanced to 6.6-7.3 when strong positive baseline exists)
   const moderateNegativePatterns = [
-    /(تشتت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|صعوبة|ضغط|مرهق|تعبان|متعب|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت|خجل)/i,
+    /(تشتت|يشتت|تشتيت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|متذبذب|متقلب|تقلب|غير مستقر|غير منتظم|صعوبة|ضغط|مضغوط|مرهق|تعبان|متعب|إرهاق|ارهاق|استنزاف|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت|خجل|يوم .* ويوم|أحيانا ألتزم|مرة ألتزم|أغرق في الهاتف|انقطاع)/i,
   ];
 
   // 4. Moderate positive & improving (6.1 - 7.3)
@@ -115,12 +119,12 @@ export function calculateSemanticScore(
     /(مقبول|جيد نوعا ما|احاول|أحاول|اتحسن|أتحسن|خطوة طيبة|وعي|راض نسبيا|ماشي الحال|استقرار متوسط|احيانا ملتزم|بديت اتعلم|علاقة طيبة|احسن من قبل|تطور بسيط|في تحسن|جيدة|مرتاح|قريب|نتفاهم)/i,
   ];
 
-  // 5. Strong positive & balanced (7.6 - 8.8)
+  // 5. Strong positive & stable across all 8 domains (7.5 - 9.0)
   const strongPositivePatterns = [
-    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|نوم عميق|نشاط وحيوية|رياضة مستمرة|راحة بال|كثير من الوقت|الكثير من الوقت|وقت كبير|أمنحهم|أعطيهم وقت|دائماً معهم|نجلس معاً كثيراً|تواصل دافئ)/i,
+    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|فائض شهري|راتبي مستقر|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|قراءة يومية|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|علاقات داعمة|نوم عميق|نوم منتظم|نوم مريح|نشاط وحيوية|رياضة مستمرة|رياضة يومية|راحة بال|كثير من الوقت|الكثير من الوقت|وقت كبير|أمنحهم|أعطيهم وقت|دائماً معهم|نجلس معاً كثيراً|تواصل دافئ|وقت\s*(?:يومي\s*)?ثابت|تخصيص\s*وقت|البعد\s*عن\s*الشاشات|بعيد[اً ]*عن\s*الشاشات|بدون\s*(?:هاتف|شاشات)|صفاء\s*(?:ذهني|الذهن|البال)|هدوء\s*(?:نفسي|داخلي|ذهني)|اتزان\s*(?:نفسي|داخلي)|توازن\s*(?:نفسي|داخلي|جيد|ممتاز)|راحة\s*ذهنية|مستقر\s*(?:نفسياً|داخلياً|ذهنياً)|استقرار\s*(?:نفسي|داخلي)|حضور\s*(?:أعمق|اعمق|ذهني|كامل|دافئ)|عمل\s*عميق|روتين\s*صحي|ألتزم\s*(?:يومياً|بانتظام)|بانتظام\s*يومياً)/i,
   ];
 
-  // 6. Outstanding (8.9 - 9.7)
+  // 6. Outstanding (8.6 - 9.0)
   const outstandingPositivePatterns = [
     /(مثالي|استثنائي|فوق الممتاز|شغف عالي جدا|سلام داخلي عميق|استقلال مالي|حرية مالية|انتاجية استثنائية|ثقة مطلقة|عطاء ملهم|صحة حديدية|انجاز عظيم)/i,
   ];
@@ -129,9 +133,9 @@ export function calculateSemanticScore(
   const charHash = allText.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const variance = (charHash % 9) * 0.1; // 0.0 - 0.8
 
-  const hasSevere = severeNegativePatterns.some((p) => p.test(allText));
-  const hasStrongNeg = strongNegativePatterns.some((p) => p.test(allText));
-  const hasModerateNeg = moderateNegativePatterns.some((p) => p.test(allText));
+  const hasSevere = severeNegativePatterns.some((p) => p.test(cleanedForNegativeCheck));
+  const hasStrongNeg = strongNegativePatterns.some((p) => p.test(cleanedForNegativeCheck));
+  const hasModerateNeg = moderateNegativePatterns.some((p) => p.test(cleanedForNegativeCheck));
   const hasStrongPos = strongPositivePatterns.some((p) => p.test(allText));
   const hasOutstandingPos = outstandingPositivePatterns.some((p) => p.test(allText));
   const hasModeratePos = moderatePositivePatterns.some((p) => p.test(allText));
@@ -139,24 +143,26 @@ export function calculateSemanticScore(
   let calculated = 5.2;
 
   if (hasAcuteIsolation) {
-    // Acute isolation/mistreatment -> realistic low score (2.6 - 3.6), never pulled up toward ~4.8 by solo coping
+    // Acute isolation/mistreatment -> realistic low score (2.6 - 3.5), never pulled up toward ~4.8 by solo coping
     calculated = 2.6 + (charHash % 10) * 0.1;
   } else if (anchorRating !== null && anchorRating >= 6.8 && !hasSevere && !hasStrongNeg) {
     calculated = hasModerateNeg
       ? Math.max(6.5, Math.min(7.5, anchorRating - 0.8))
-      : Math.max(6.8, Math.min(8.8, anchorRating));
+      : Math.max(7.5, Math.min(9.0, anchorRating));
   } else if (hasSevere) {
     calculated = 1.8 + variance * 0.8;
   } else if (hasStrongNeg) {
     calculated = 2.7 + variance * 0.9;
   } else if ((hasStrongPos || hasOutstandingPos) && hasModerateNeg) {
-    calculated = 6.7 + (variance % 7) * 0.1;
+    calculated = 6.6 + (variance % 8) * 0.1;
   } else if (hasModerateNeg) {
-    calculated = 4.3 + variance * 0.9;
+    // Fluctuating / exhausted -> 4.0 to 5.4
+    calculated = 4.0 + (charHash % 15) * 0.1;
   } else if (hasOutstandingPos) {
-    calculated = 9.0 + (variance % 6) * 0.12;
+    calculated = 8.6 + (charHash % 5) * 0.1;
   } else if (hasStrongPos) {
-    calculated = 7.7 + variance * 0.9;
+    // Positive & stable -> 7.6 to 9.0
+    calculated = 7.6 + (charHash % 15) * 0.1;
   } else if (hasModeratePos) {
     calculated = 6.2 + variance * 0.9;
   }
@@ -279,11 +285,17 @@ export function answerUserInquiry(
 
   // 7. الجانب الاجتماعي (أ. سامي الاجتماعي)
   if (advisorId === 'social') {
-    if (/(وحدة|وحيد|أصدقاء|اصدقاء|صحبة|عزلة|انطواء)/i.test(t)) {
-      return 'العلاقات الصادقة تُبنى حول الاهتمامات والقيم المشتركة؛ جرب الانضمام لمجتمع قراءة، تطوع، أو نشاط رياضي، فالصحبة الملهمة تأتي عبر الأنشطة ذات المعنى.';
+    const isOverloadFromWorkFamily = /(?:ضغط\s*(?:ال)?عمل|ضغوط\s*(?:ال)?عمل|مشغول|انشغال|أسرة|اسرة|أسري|أسرية|عائلة|عائلية|أولاد|أبناء|إرهاق|ارهاق|مرهق|تعب|استنزاف|تعبان|قلة\s*طاقة|مسؤوليات)/i.test(
+      t
+    );
+    if (isOverloadFromWorkFamily) {
+      return 'حين يكون تباعدك الاجتماعي ناتجاً عن ضغط العمل ومسؤوليات الأسرة والإرهاق، فالأولوية هي حماية طاقتك الاجتماعية وتقليل الالتزامات والمجاملات غير الضرورية دون أي شعور بالذنب، والاكتفاء بتواصل خفيف ومريح مع من تثق بهم.';
     }
-    if (/(علاقات سامة|مستنزفة|استنزاف|حدود اجتماعية|أقطع علاقة)/i.test(t)) {
+    if (/(علاقات سامة|مستنزفة|استنزاف|حدود اجتماعية|أقطع علاقة|مجاملات)/i.test(t)) {
       return 'حماية طاقتك النفسية حق مشروع؛ قلل مساحات التواجد والمجاملات تدريجياً وبطريقة هادئة، وركز طاقتك ووقتك على الدائرة القريبة التي تمنحك الأمان والتقدير.';
+    }
+    if (/(وحدة|وحيد|أصدقاء|اصدقاء|صحبة|عزلة|انطواء)/i.test(t)) {
+      return 'الاهتمام بجودة العلاقات يبدأ بخطوة هادئة تناسب طاقتك؛ ركّز على التواصل المريح والصادق مع شخص قريب تثق به بدلاً من إجهاد نفسك في كثرة اللقاءات.';
     }
   }
 
@@ -425,11 +437,11 @@ function computeClientAdvisorCore(
   // فحص ما إذا كان المستخدم يحدد خطوة والتزاماً صريحاً أو رغبة صريحة في الاعتماد (دون التقاط جمل الشكوى والنفي)
   const hasNegativePrefix = /(?:^|\s)(?:لا|ما|لم|لن|أفتقد|افتقد|أعاني|اعاني|مضغوط|تعبان|أنسى|انسى)\s+/i.test(msg);
   const isConcreteCommitment = !userWantsMoreDepth && !hasNegativePrefix && /(?:سأجرب|ساجرب|سوف\s*اجرب|سوف\s*احاول|ساحاول|سأحاول|سأخصص|ساخصص|سأبدأ|سابدا|سأوفر|ساوفر|سأدخر|سادخر|سأمشي|سامشي|سأقرأ|ساقرا)/i.test(msg);
-  const userAgreesToComplete = !userWantsMoreDepth && stationTurnCount >= 3 && /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي\s*بهذا|نكتفي|خلاص\s*اعتمد|المحطة التالية|ننتقل\s*للمحطة|جاهز\s*للمحطة)/i.test(msg);
+  const userAgreesToComplete = !userWantsMoreDepth && stationTurnCount >= 2 && /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|نكتفي\s*بهذا|نكتفي|خلاص\s*اعتمد|المحطة التالية|ننتقل\s*للمحطة|جاهز\s*للمحطة)/i.test(msg);
 
-  // إذا قدم المستفيد التزاماً محدداً وصريحاً في الجولة الرابعة فأكثر: عرض التقييم المرحلي دون إغلاق أو مدح معلب
+  // إذا قدم المستفيد التزاماً محدداً وصريحاً ابتداءً من الرسالة الثالثة: عرض التقييم المرحلي دون إغلاق أو مدح معلب
   const hasAcuteIsolationCtx = hasAcuteIsolationOrRejection([...historyTexts, text]);
-  if (isConcreteCommitment && stationTurnCount >= 3 && !userWantsMoreDepth) {
+  if (isConcreteCommitment && stationTurnCount >= 2 && !userWantsMoreDepth) {
     const isFin = advisor.id === 'financial';
     const scoreVal = isFin
       ? (isStudent ? 5.8 : 5.5)
@@ -485,7 +497,7 @@ function computeClientAdvisorCore(
       .join('\n');
 
     const suggestionReply =
-      stationTurnCount >= 3
+      stationTurnCount >= 2
         ? `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${advTitle}:\n\n${formattedList}\n\nبناءً على حوارنا حتى الآن، أقيّم وضعك الحالي بدرجة (${semanticScore.toFixed(1)}/10).\n\nهل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل تجربة أو تعديل أحد هذه الاقتراحات؟`
         : `إليك 3 اقتراحات عملية قصيرة تناسب واقعك في ${advTitle}:\n\n${formattedList}\n\nأيّ من هذه الخطوات الثلاث تشعر أنها الأقرب والأسهل لتجربتها هذا الأسبوع؟`;
 
@@ -495,7 +507,7 @@ function computeClientAdvisorCore(
       score: semanticScore,
       strengths: [`الوضوح في تحديد واقعك في ${advTitle} وطلب حلول عملية`],
       challenges: [concreteSuggestions[0] || `تطبيق خطوة عملية واضحة في ${advTitle}`],
-      reasoning: `تلبية طلب الاقتراحات المباشر للمستفيد ("${text}") عبر 3 خطوات متسقة مع الحوار${stationTurnCount >= 3 ? ' وعرض التقييم المرحلي' : ''}.`,
+      reasoning: `تلبية طلب الاقتراحات المباشر للمستفيد ("${text}") عبر 3 خطوات متسقة مع الحوار${stationTurnCount >= 2 ? ' وعرض التقييم المرحلي' : ''}.`,
       summary: `تقديم 3 اقتراحات عملية مخصصة في ${advTitle}.`,
       advice: synthesizeGoldenRecommendation({
         areaId: advisor.id,
@@ -561,11 +573,11 @@ function computeClientAdvisorCore(
     };
   }
 
-  // شروط مواصلة الحوار: إلزام الاستمرار في الحوار حتى الجولة الرابعة (stationTurnCount < 3) قبل عرض خيار التقييم
+  // شروط مواصلة الحوار: إلزام الاستمرار في الحوار حتى الرسالة الثالثة للمستخدم (stationTurnCount < 2) قبل عرض التقييم المبدئي
   const shouldContinue = !userAgreesToComplete && (
     isBareGreetingOnly ||
     userWantsMoreDepth ||
-    (stationTurnCount < 3 && Boolean(nextRawQuestion || directInquiryAnswer))
+    (stationTurnCount < 2 && Boolean(nextRawQuestion || directInquiryAnswer))
   );
 
   if (shouldContinue) {

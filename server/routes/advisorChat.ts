@@ -10,9 +10,13 @@ import {
   extractAskedQuestionsFromHistory,
   isQuestionAlreadyAsked,
   isQuestionContradictingHistory,
+  isDiagnosticTopicAlreadyAnswered,
   isRequestingAdvisorSuggestions,
   extractAnchorSelfRatingFromHistory,
   hasAcuteIsolationOrRejection,
+  extractEmergencyFundStatus,
+  hasDebtStatusAnswered,
+  extractExpenseCategoryFromAnswer,
   pickNextUnaskedQuestion,
   stripRepeatedOpeningGreeting,
 } from '../../src/utils/dialogueDeduplication';
@@ -28,6 +32,13 @@ import {
   sanitizeStrengths,
   sanitizeAdvisorReply,
 } from '../middleware/validation';
+import {
+  calculateUnifiedScore,
+  parseUnifiedMetricsPayload,
+  extractUnifiedMetricsFromSession,
+  formatUnifiedScoreConfirmationMessage,
+  UnifiedScoringMetrics,
+} from '../agents/unifiedScorer';
 
 export const advisorChatRouter = Router();
 
@@ -49,6 +60,171 @@ function extractCleanJson(text: string): any {
     }
     throw new Error('تعذر استخراج كائن JSON صالح من استجابة النموذج');
   }
+}
+
+const EIGHT_EVALUATION_DOMAINS = new Set([
+  'spiritual',
+  'financial',
+  'health',
+  'career',
+  'personal',
+  'learning',
+  'family',
+  'social',
+]);
+
+function stripAccidentalScoreMentions(text: string): string {
+  return (text || '')
+    .replace(/بعد\s*ما\s*شاركتني[\s\S]*?(?:أكثر\s*دقة\s*[؟?]|المحطة\s*التالية\s*[؟?]?)/gi, '')
+    .replace(/[^\n.]*(?:أقيّم|أقيم)\s*(?:وضعك|حالتك)[^\n.]*\d+(?:\.\d+)?\s*(?:\/|\s*من\s*)\s*10[^\n.]*[.!؟]?/gi, '')
+    .replace(/\(\s*\d+(?:\.\d+)?\s*(?:\/|\s*من\s*)\s*10\s*\)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+async function evaluateSessionMetricsWithTool(params: {
+  agentKey: string;
+  stationTitle: string;
+  sessionUserMessages: string[];
+  abortSignal: AbortSignal;
+}): Promise<{
+  score: number;
+  metrics: UnifiedScoringMetrics;
+  source: 'gemini-eval' | 'groq-eval' | 'local-eval';
+}> {
+  const { agentKey, stationTitle, sessionUserMessages, abortSignal } = params;
+  const fallbackMetrics = extractUnifiedMetricsFromSession(sessionUserMessages, agentKey);
+
+  if (sessionUserMessages.length === 0 || abortSignal.aborted) {
+    return {
+      score: calculateUnifiedScore(fallbackMetrics),
+      metrics: fallbackMetrics,
+      source: 'local-eval',
+    };
+  }
+
+  const isAcuteIso = hasAcuteIsolationOrRejection(sessionUserMessages);
+  const evalPrompt = `أنت أداة التقييم الموحدة الموضوعية في منصة وزان.
+مهمتك استخراج 3 مؤشرات رقمية دقيقة فقط (من 0 إلى 10) بصيغة JSON صارمة، استناداً حصرياً إلى رسائل المستخدم في الجلسة الحالية ضمن محطة "${stationTitle}" (دون وراثة أي درجة سابقة ودون تخمين).
+
+المؤشرات الثلاثة المطلوبة:
+1. "consistency" (0-10): الانتظام الفعلي والعادات المطبقة حالياً (النوايا المستقبلية لا ترفع المؤشر).
+2. "energyImpact" (0-10): أثر هذا الجانب على الطاقة والسكينة مقابل الإرهاق والاستنزاف.
+3. "controlBoundaries" (0-10): السيطرة والفاعلية الشخصية ووضوح الحدود الصحية.
+
+معايير المعايرة الموضوعية:
+- العزلة الحادة، رفض الآخرين، سوء المعاملة، أو الانهيار الحاد: (2.0 إلى 3.5).
+- التذبذب، الإرهاق، ضغط العمل والأسرة، أو قلة الانتظام: (4.0 إلى 5.5).
+- أساس إيجابي واضح مع تحدٍّ فرعي بسيط (كتشتت الهاتف): (6.5 إلى 7.5).
+- استقرار وانتظام واضحان، صفاء ذهني، أو احتياطي وأمان جيدان: (7.5 إلى 9.0).
+
+رسائل المستفيد في هذه الجلسة فقط:
+${sessionUserMessages.map((m, idx) => `${idx + 1}. "${m}"`).join('\n')}`;
+
+  if (GEMINI_API_KEY && !abortSignal.aborted) {
+    try {
+      const model = GEMINI_MODEL || 'gemini-3.5-flash-lite';
+      let timeoutHandle: any;
+      const apiPromise = ai.models.generateContent({
+        model,
+        contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
+        config: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              consistency: { type: Type.NUMBER },
+              energyImpact: { type: Type.NUMBER },
+              controlBoundaries: { type: Type.NUMBER },
+            },
+            required: ['consistency', 'energyImpact', 'controlBoundaries'],
+          },
+        },
+      });
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error('Evaluation tool Gemini timeout')), 4500);
+      });
+      const res = await Promise.race([apiPromise, timeoutPromise]);
+      clearTimeout(timeoutHandle);
+      const parsed = extractCleanJson(res?.text || '{}');
+      const validMetrics = parseUnifiedMetricsPayload(parsed);
+      if (validMetrics) {
+        const calibrated = isAcuteIso
+          ? {
+              consistency: Math.min(3.5, validMetrics.consistency),
+              energyImpact: Math.min(3.0, validMetrics.energyImpact),
+              controlBoundaries: Math.min(3.5, validMetrics.controlBoundaries),
+            }
+          : validMetrics;
+        return {
+          score: calculateUnifiedScore(calibrated),
+          metrics: calibrated,
+          source: 'gemini-eval',
+        };
+      }
+    } catch (err: any) {
+      console.warn('[Unified Scorer] تعذر استخراج المؤشرات عبر Gemini، التحقق من Groq/المحلي:', err?.message || err);
+    }
+  }
+
+  if (GROQ_API_KEY && !abortSignal.aborted) {
+    try {
+      const groqModel = GROQ_MODEL || 'llama-3.3-70b-versatile';
+      let groqTimeout: any;
+      const groqCall = fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        signal: abortSignal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: groqModel,
+          messages: [
+            {
+              role: 'system',
+              content: 'Output valid JSON ONLY with keys consistency, energyImpact, controlBoundaries (numbers 0-10).',
+            },
+            { role: 'user', content: evalPrompt },
+          ],
+          response_format: { type: 'json_object' },
+          temperature: 0.1,
+        }),
+      });
+      const groqTimeoutPromise = new Promise<never>((_, reject) => {
+        groqTimeout = setTimeout(() => reject(new Error('Evaluation tool Groq timeout')), 3500);
+      });
+      const groqRes = await Promise.race([groqCall, groqTimeoutPromise]);
+      clearTimeout(groqTimeout);
+      if (groqRes.ok) {
+        const groqData = await groqRes.json();
+        const parsed = extractCleanJson(groqData?.choices?.[0]?.message?.content || '{}');
+        const validMetrics = parseUnifiedMetricsPayload(parsed);
+        if (validMetrics) {
+          const calibrated = isAcuteIso
+            ? {
+                consistency: Math.min(3.5, validMetrics.consistency),
+                energyImpact: Math.min(3.0, validMetrics.energyImpact),
+                controlBoundaries: Math.min(3.5, validMetrics.controlBoundaries),
+              }
+            : validMetrics;
+          return {
+            score: calculateUnifiedScore(calibrated),
+            metrics: calibrated,
+            source: 'groq-eval',
+          };
+        }
+      }
+    } catch (err: any) {
+      console.warn('[Unified Scorer] تعذر استخراج المؤشرات عبر Groq، استخدام الاستخلاص المحلي:', err?.message || err);
+    }
+  }
+
+  return {
+    score: calculateUnifiedScore(fallbackMetrics),
+    metrics: fallbackMetrics,
+    source: 'local-eval',
+  };
 }
 
 // Endpoint: Advisor Chat
@@ -230,30 +406,50 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const historyMsgTexts = Array.isArray(history) ? history.map((h: any) => h.content || '') : [];
   const historyUserOnlyTexts = Array.isArray(history)
     ? history
-        .filter((h: any) => h && (h.role === 'user' || h.sender === 'user'))
-        .map((h: any) => String(h.content || h.text || '').trim())
-        .filter(Boolean)
+      .filter((h: any) => h && (h.role === 'user' || h.sender === 'user'))
+      .map((h: any) => String(h.content || h.text || '').trim())
+      .filter(Boolean)
     : [];
   const isAcuteIsolationContext = hasAcuteIsolationOrRejection([...historyUserOnlyTexts, message]);
+  const isEvaluationMode = Boolean(isEvaluationSession);
+  const isEarlyContinueIntent =
+    /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار|المزيد|فهم\s*أكثر|فهم\s*اكثر|تقييم\s*أدق|تقييم\s*ادق)/i.test(message) &&
+    !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل\s*للمحطة|ننتقل\s*للتالية|المحطة التالية)/i.test(message);
+  const isEarlyAdoptionIntent =
+    !isEarlyContinueIntent &&
+    /(اعتمد\s*التقييم|اعتمد|اعتماد|اعتمدها|كافي|نكتفي|المحطة التالية|خلاص|انتهينا|جاهز للمحطة|نعم اعتمد)/i.test(message);
+
   const parsedExplicitRating = extractExplicitRating(message);
   const anchorRatingFromHistory = extractAnchorSelfRatingFromHistory(Array.isArray(history) ? history : []);
   const explicitRatingInMsg = parsedExplicitRating !== null
     ? parsedExplicitRating
-    : (isAcuteIsolationContext
+    : (isAcuteIsolationContext || isEvaluationMode
       ? undefined
       : (anchorRatingFromHistory !== null
         ? undefined
         : (userScore && userScore > 0 ? userScore : undefined)));
 
-  // رابعاً: استخراج التقييم الذاتي للمستخدم لضبط الدرجة النهائية بدقة (بما في ذلك درجة البداية إن وُجدت)
+  // رابعاً: عند بدء أو إجراء استشارة تقييمية، يُحتسب التقييم من الصفر من رسائل الجلسة الحالية فقط دون وراثة درجة سابقة (مثل 4.5/10)
   let userSelfScore: number | undefined =
     parsedExplicitRating !== null
       ? parsedExplicitRating
       : (isAcuteIsolationContext ? undefined : (anchorRatingFromHistory ?? undefined));
-  if (userSelfScore === undefined && !isAcuteIsolationContext && typeof userScore === 'number' && userScore > 0) {
+  if (
+    userSelfScore === undefined &&
+    !isAcuteIsolationContext &&
+    (!isEvaluationMode || (isEarlyAdoptionIntent && historyUserOnlyTexts.length === 0)) &&
+    typeof userScore === 'number' &&
+    userScore > 0
+  ) {
     userSelfScore = userScore;
   }
-  if (userSelfScore === undefined && !isAcuteIsolationContext && effectiveAnswers && typeof effectiveAnswers === 'object') {
+  if (
+    userSelfScore === undefined &&
+    !isAcuteIsolationContext &&
+    !isEvaluationMode &&
+    effectiveAnswers &&
+    typeof effectiveAnswers === 'object'
+  ) {
     const areaAnswer = effectiveAnswers[req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'))];
     if (typeof areaAnswer === 'number') userSelfScore = areaAnswer;
     else if (areaAnswer && typeof areaAnswer === 'object') {
@@ -262,7 +458,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     }
   }
 
-  const semanticCalculated = calculateSemanticScore(message, historyMsgTexts, explicitRatingInMsg);
+  const semanticCalculated = calculateSemanticScore(message, historyUserOnlyTexts, explicitRatingInMsg);
   const effectiveScore = semanticCalculated;
 
   // استخدام اسم الوكيل أو افتراضياً الخبير المالي
@@ -284,6 +480,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     incomeStability: parsedCtx.incomeStability,
     currentFocus: parsedCtx.currentFocus,
     turn: stationTurnCount,
+    isEval: Boolean(isEvaluationSession),
     lastMsg: historyMsgTexts[historyMsgTexts.length - 1] || '',
     prevChips: prevChipsKey,
   });
@@ -333,8 +530,8 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   // فحص ما إذا كان المستخدم يوافق على الخطوة الميكروية المقترحة
   const isAcceptingMicroStep = !isContinueIntent && /(حسنا|سأجرب|ساجرب|سوف اجرب|سوف احاول|ساحاول|سأحاول|موافق|اتفقنا|بجرب|بحاول|وفر|أوفر|ادخر|أدخر|حصالة|50|100)/i.test(message);
 
-  // استخراج الدرجة المقترحة سابقاً إذا كان قصد المستفيد الاعتماد ولم يكتب رقماً
-  if (isAdoptionIntent && (userSelfScore === undefined || userSelfScore <= 0)) {
+  let offeredScoreFromLastAdvisor: number | null = null;
+  if (isAdoptionIntent) {
     const lastModelMsg = Array.isArray(history)
       ? [...history].reverse().find((h: any) => h.role === 'model' || h.role === 'advisor' || h.sender === 'advisor' || h.sender === 'model')
       : null;
@@ -345,15 +542,52 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     if (proposedMatch) {
       const extractedProposed = parseFloat(proposedMatch[1]);
       if (!isNaN(extractedProposed) && extractedProposed >= 1 && extractedProposed <= 10) {
-        userSelfScore = extractedProposed;
+        offeredScoreFromLastAdvisor = extractedProposed;
+        if (userSelfScore === undefined || userSelfScore <= 0) {
+          userSelfScore = extractedProposed;
+        }
       }
     }
   }
 
   const isUserAsking = (/[؟?]/.test(message) || /(^|\s)(كم|كيف|هل|ماذا|ليه|ليش|وش|شو|ايش|متى|ينفع|تنصحني)(\s|$)/i.test(message)) && !isMoveForwardOrCommitment;
-  // إغلاق المحطة غير مسموح به خلال أول 3 ردود للمستفيد (stationTurnCount < 3) ما لم يطلب الاعتماد صراحة
-  const forcedIncomplete = Boolean(isEvaluationSession) && !isAdoptionIntent && (stationTurnCount < 3);
+  // إغلاق المحطة غير مسموح به قبل الرسالة الثالثة للمستفيد (stationTurnCount < 2) ما لم يطلب الاعتماد صراحة
+  const forcedIncomplete = Boolean(isEvaluationSession) && !isAdoptionIntent && (stationTurnCount < 2);
   const completionPhrasesRegex = /(أتممنا|انتهت\s+(?:هذه\s+)?المحطة|انتهينا\s+من\s+(?:هذه\s+)?المحطة|اكتملت\s+(?:هذه\s+)?المحطة|أنهينا\s+(?:هذه\s+)?المحطة|ختمنا\s+(?:هذه\s+)?المحطة|اكتمل\s+تقييم|أكملنا\s+تقييم|أتممنا\s+هذا\s+الجانب|أنهينا\s+هذا\s+الجانب|المحطة\s+التالية|ننتقل\s+(?:الآن\s+)?(?:إلى|ل)المحطة|اكتملت\s+محطة|أنجزنا\s+هذه\s+المحطة|أكملنا\s+هذه\s+المحطة|انتهت\s+هذه\s+المحطة|اكتملت\s+هذه\s+المحطة|أتممنا\s+تقييم)/i;
+
+  const isEightDomain = EIGHT_EVALUATION_DOMAINS.has(agentKey);
+  const isSafetyOrCrisisMsg = /(انتحار|الانتحار|انتحر|أنتحر|قتل نفسي|أقتل نفسي|ايذاء النفس|إيذاء نفسي|الموت|بالموت|للموت|ودي أموت|ودي اموت|لا اشعر باي سلام|لا اشعر بأي سلام|أكره حياتي|كرهت حياتي)/i.test(message);
+  const isEarlyDialogueTurn = isEightDomain && stationTurnCount < 2 && !isAdoptionIntent && !isSafetyOrCrisisMsg;
+  const isThirdOrLaterTurn = isEightDomain && stationTurnCount >= 2 && !isSafetyOrCrisisMsg;
+
+  const sessionUserMessagesForEval = [...historyUserOnlyTexts, message]
+    .map((t) => String(t || '').trim())
+    .filter(
+      (t) =>
+        t.length > 0 &&
+        !/^(?:اعتمد\s*التقييم(?:\s*بدرجة.*)?|نعم\s*اعتمد|اعتماد|نكتفي|خلاص|انتهينا|أرغب في الاستمرار|حسناً?\s*نكمل)/i.test(
+          t
+        )
+    );
+
+  const evalToolPromise: Promise<{
+    score: number;
+    metrics: UnifiedScoringMetrics;
+    source: 'gemini-eval' | 'groq-eval' | 'local-eval' | 'adopted-offered';
+  }> | null = isThirdOrLaterTurn
+    ? isAdoptionIntent && offeredScoreFromLastAdvisor !== null
+      ? Promise.resolve({
+          score: offeredScoreFromLastAdvisor,
+          metrics: extractUnifiedMetricsFromSession(sessionUserMessagesForEval, agentKey),
+          source: 'adopted-offered' as const,
+        })
+      : evaluateSessionMetricsWithTool({
+          agentKey,
+          stationTitle,
+          sessionUserMessages: sessionUserMessagesForEval,
+          abortSignal: clientAbortController.signal,
+        })
+    : null;
 
   // سادساً: سياق المحطات - استخراج ملخص مقتضب (سطر أو سطران) لأهم ما ذكره المستخدم في المحطات السابقة
   const pastStationsSnippets: string[] = [];
@@ -445,7 +679,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 [ثانياً: جودة الأسئلة والتشخيص الرصين ❓]
 1. سؤال واحد فقط ومنع الحلقات اللانهائية:
    - اطرح سؤالاً واحداً فقط في كل رد، يكون محدداً، عميقاً، ومرتبطاً ارتباطاً مباشراً بآخر عبارة قالها المستخدم.
-   - في الجولات الثلاث الأولى (stationTurnCount < 3): استمر في التدرج الحواري التشخيصي وطرح سؤال واحد ذكي وعميق؛ ولا تتسرع في عرض اعتماد التقييم أو إنهاء المحطة. أما ابتداءً من الجولة الرابعة (stationTurnCount >= 3)، إذا اكتملت الصورة الواقعية فاعرض التقييم المرحلي وخياري الاعتماد أو الاستمرار.
+   - في أول رسالتين للمستفيد (stationTurnCount < 2): استمر في التدرج الحواري التشخيصي وطرح سؤال واحد ذكي وعميق؛ ولا تتسرع في عرض اعتماد التقييم أو إنهاء المحطة. أما ابتداءً من الرسالة الثالثة للمستخدم (stationTurnCount >= 2)، اعرض التقييم المبدئي (X/10) وخياري الاعتماد أو المواصلة تلقائياً.
 2. ممنوع التفسير النفسي غير المدعوم:
    - يُمنع منعاً باتاً تفسير مشاعر المستخدم أو افتراض أسباب نفسية باطنة لم يذكرها بلسانه (مثل: "خوفك من رؤية الحقيقة"، "صوت المثالية بداخلك"، "هروبك من الواقع").
    - اسأله بحياد تام: "ما الذي يجعلك تشعر بذلك؟" أو "كيف ينعكس هذا التحدي على يومك؟".
@@ -488,23 +722,25 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const scoringAndCompletionGuideline = `
 [رابعاً وخامساً: الدرجة ونقاط القوة وقاعدة الإجابة الخامسة والتقييم المرحلي 📊]
 1. الدرجة (score):
-   - التزم بأن تكون الدرجة قريبة من تقييم المستخدم الذاتي (بفارق أقصاه ±1.0) إلا إذا ذكر أدلة واضحة على ممارسة فعلية مستمرة أو مشكلة خطيرة واقعية.
+   - عند بدء استشارة جديدة لمحطة سبق تقييمها، ابدأ احتساب الدرجة من الصفر بناءً على رسائل الجلسة الحالية فقط، ولا ترث الدرجة السابقة (مثل 4.5/10) في التقييم المبدئي.
+   - معايرة التقييم المبدئي في جميع المحطات (وخاصة الجانب الشخصي والوعي بالذات - د. ليلى): الإجابات الإيجابية والمستقرة (مثل تخصيص وقت يومي ثابت للراحة، البعد عن الشاشات، صفاء ذهني، وحضور أعمق مع الأسرة) تبدأ من 7.5 إلى 9.0/10؛ أما الإجابات المتقلبة أو المرهقة فتبقى في نطاق 4.0 إلى 5.5/10.
+   - التزم بأن تكون الدرجة قريبة من تقييم المستخدم الذاتي في الجلسة الحالية (بفارق أقصاه ±1.0) إلا إذا ذكر أدلة واضحة على ممارسة فعلية مستمرة أو مشكلة خطيرة واقعية.
    - لا ترفع الدرجة بسبب نوايا أو خطط مستقبلية ("سأفعل"، "لن أجلد نفسي")؛ الخطط تُذكر كفرصة تطوير وليست دليل قدرة أو إنجاز قائم.
 2. نقاط القوة (strengths):
    - صياغة معتدلة مبنية حصراً على ممارسة أو وعي حقيقي ذكره المستخدم فعلاً في حديثه؛ لا تستخدم "عالية" أو "كامل" إلا بدليل صريح.
    - ⛔ يُمنع منعاً باتاً كتابة نقاط قوة تتعارض مع شكوى المستخدم (مثلاً: لا تكتب "حضور اجتماعي متوازن" إذا اشتكى من الفتور والانعزال، بل اكتب "الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل").
 3. التوصية العلاجية الذهبية (advice و actionSteps[0]):
-   - راجع سجل المحادثة الكامل لهذه المحطة؛ عند اكتمال المحطة أو اقتراح التوصية النهائية، صُغ في حقل "advice" خطوةً عملية واحدة مختصرة ومحددة بأسلوب المستشار المختص ومرتبطة بالتحدي والفكرة التي طرحها المستخدم، ⛔ ويُمنع منعاً باتاً نسخ رسالة المستخدم الخام حرفياً أو وضعها بين علامتي تنصيص.
+   - راجع سجل المحادثة الكامل لهذه المحطة؛ عند اكتمال المحطة أو اقتراح التوصية النهائية، صُغ في حقل "advice" خطوةً عملية واحدة مختصرة ومحددة بأسلوب المستشار المختص ومرتبطة بما طرحه المستخدم في الحوار: تعالج التحدي عند الدرجات المنخفضة أو المتوسطة، وتعكس فرص النمو والتوسع التي نوقشت في الحوار عند الدرجات المرتفعة (≥ 7.5/10 مثل استكمال صندوق الطوارئ من 4 إلى 6 أشهر وتوجيه جزء من الفائض لاستثمار طويل المدى)، ⛔ ويُمنع منعاً باتاً استخدام عبارات عامة معلبة مثل "البدء بخطوة عملية واحدة صغيرة ومحددة تعالج التحدي..." أو نسخ رسالة المستخدم الخام حرفياً.
 4. تجنب المدح المعلب والافتراضات غير المدعومة:
    - لا تفترض أعراضاً لم يذكرها المستفيد (مثل زيادة الوزن، حرق الدهون، أو ضعف الثقة) ولا تمدحه على التزام بعادة لم يقم بها فعلياً.
    - التزم في الردود الاستكشافية بالحياد والاعتراف بضغط المستخدم وطرح سؤال مفتوح يخص المحطة الحالية دون افتراضات مسبقة.
-5. قاعدة الجولات الأربع والتقييم المرحلي (إلزامية صارمة):
-   - خلال أول 3 ردود فعلية للمستفيد في المحطة (عندما stationTurnCount < 3):
+5. قاعدة التقييم المبدئي الموحدة بعد الرسالة الثالثة للمستخدم (إلزامية صارمة عبر جميع المحطات الثماني):
+   - خلال أول رسالتين فعليتين للمستفيد في المحطة (عندما stationTurnCount < 2):
      أ) ⛔ ممنوع منعاً باتاً إنهاء المحطة أو وضع station_completed: true، حتى لو ذكر رقماً أو التزاماً وقتياً (مثل 3 دقائق أو 30 ريال).
      ب) ⛔ ممنوع منعاً باتاً اقتراح إنهاء المحطة أو عرض نافذة اعتماد التقييم ("هل ترغب في اعتماد التقييم...").
      ج) استمر في الحوار بطرح أسئلة استكشافية متدرجة وذكية ومرتبطة بسياق المستفيد (طالب/موظف) لتعميق التشخيص.
-   - ابتداءً من الجولة الرابعة الفعلية (عندما stationTurnCount >= 3):
-     أ) قدّم تقييماً مرحلياً واضحاً من 10 درجات في حقل score بناءً على الأدلة المتاحة، مع توضيح أنه تقييم مبدئي.
+   - ابتداءً من الرسالة الثالثة الفعلية للمستخدم (عندما stationTurnCount >= 2):
+     أ) قدّم تقييماً مبدئياً واضحاً من 10 درجات في حقل score بناءً على الأدلة المتاحة في الجلسة الحالية، مع توضيح أنه تقييم مبدئي.
      ب) استخدم صيغة التخيير المعيارية الإلزامية في نص الرد (reply):
         «بعد ما شاركتني به حتى الآن، أقيّم وضعك الحالي بدرجة (X/10). هذا تقييم مبدئي مبني على المعلومات التي ذكرتها، وقد يتغير إذا واصلنا الاستكشاف.
         هل ترغب في اعتماد التقييم الحالي وإنهاء الاستشارة، أم تفضل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة؟»
@@ -519,15 +755,15 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 
   let evaluationSessionGuideline = '';
   if (isEvaluationSession) {
-    let stationStateGuideline = `المحطة في مرحلة الاستكشاف والتشخيص التدرجي (التبادل ${stationTurnCount + 1} من 4+)؛ ⛔ يُمنع إنهاء المحطة أو اقتراح الاعتماد قبل الجولة الرابعة، واطرح سؤالاً استكشافياً واحداً محدداً مرتبطاً بكلامه.`;
+    let stationStateGuideline = `المحطة في مرحلة الاستكشاف والتشخيص التدرجي (الرسالة ${stationTurnCount + 1} من 3+)؛ ⛔ يُمنع إنهاء المحطة أو اقتراح الاعتماد قبل الرسالة الثالثة، واطرح سؤالاً استكشافياً واحداً محدداً مرتبطاً بكلامه.`;
     if (isContinueIntent) {
       stationStateGuideline = `[المستفيد اختار صراحة مواصلة الحوار والتعمق ("${message}")]: المستفيد رفض إنهاء المحطة وفضّل مواصلة الحوار للحصول على فهم وتقييم أكثر دقة وإطالة الاستكشاف. ⛔ يُمنع منعاً باتاً إنهاء المحطة أو وضع "station_completed": true! اجعل "station_completed": false حتماً. رحب برغبته في الاستمرار في جملة دافئة، ثم اطرح سؤالاً تشخيصياً نوعياً جديداً في صميم اختصاصك (${stationTitle}) لتعميق فهم واقعه.`;
     } else if (isAdoptionIntent) {
       stationStateGuideline = `[طلب اعتماد صريح للمحطة!] المستفيد يطلب صراحة وبشكل مباشر اعتماد التقييم وإنهاء المحطة والانتقال ("${message}"). يجب إلزامياً وضع "station_completed": true، وتقديم الدرجة والملخص التشخيصي والنصيحة الختامية دون طرح أي سؤال على الإطلاق! (يُمنع منعاً باتاً طرح أي سؤال جديد).`;
-    } else if (stationTurnCount < 3) {
-      stationStateGuideline = `المستفيد في الجولة (${stationTurnCount + 1} من 4): ⛔ يُمنع منعاً باتاً إنهاء المحطة أو وضع station_completed: true، ويُمنع اقتراح إنهاء المحطة أو التخيير بالاعتماد حتى لو وافق على عادة أو خطوة أو ذكر رقماً. أكد على ما ذكره بذكاء واطرح سؤالاً استكشافياً تدرجياً جديداً في صميم واقعه.`;
-    } else if (stationTurnCount >= 3) {
-      stationStateGuideline = `بلغ المستفيد الجولة الرابعة؛ يجب تطبيق قاعدة التقييم المرحلي وعرض الدرجة وصيغة التخيير المعيارية لإنهاء المحطة أو الاستمرار، مع جعل station_completed: false ما لم يختر الاعتماد صراحة.`;
+    } else if (stationTurnCount < 2) {
+      stationStateGuideline = `المستفيد في الرسالة (${stationTurnCount + 1} من 3): ⛔ يُمنع منعاً باتاً إنهاء المحطة أو وضع station_completed: true، ويُمنع اقتراح إنهاء المحطة أو التخيير بالاعتماد حتى لو وافق على عادة أو خطوة أو ذكر رقماً. أكد على ما ذكره بذكاء واطرح سؤالاً استكشافياً تدرجياً جديداً في صميم واقعه.`;
+    } else if (stationTurnCount >= 2) {
+      stationStateGuideline = `بلغ المستفيد الرسالة الثالثة (أو أكثر)؛ يجب إلزامياً تطبيق قاعدة التقييم المبدئي الموحدة وعرض الدرجة (X/10) وصيغة التخيير المعيارية للاعتماد أو المواصلة، مع جعل station_completed: false ما لم يختر الاعتماد صراحة.`;
     }
 
     evaluationSessionGuideline = `
@@ -598,16 +834,42 @@ ${parsedCtx.currentFocus ? `- التركيز والتفاصيل الإضافية
 
   const domainSpecificContextGuideline = buildDomainContextDirectives(agentKey, parsedCtx);
 
+  const efStatusInDialogue = extractEmergencyFundStatus([...safeHistoryArray, message]);
+  const debtAnsweredInDialogue = hasDebtStatusAnswered(safeHistoryArray, message);
+  const expenseAnsweredInDialogue = [...historyUserOnlyTexts, message].some(
+    (u) => extractExpenseCategoryFromAnswer(u) !== null
+  );
+  const answeredDiagnosticFacts: string[] = [];
+  if (efStatusInDialogue.answered) {
+    answeredDiagnosticFacts.push(
+      efStatusInDialogue.hasFund
+        ? `- صندوق الطوارئ: أجاب المستفيد بالفعل بامتلاك صندوق/احتياطي طوارئ${efStatusInDialogue.monthsCovered ? ` يغطي ${efStatusInDialogue.monthsCovered} أشهر` : ''}. ⛔ يُمنع تماماً إعادة سؤال "هل لديك صندوق طوارئ؟" أو "كم شهراً يغطي؟" أو سؤاله عن تأسيسه من الصفر.`
+        : '- صندوق الطوارئ: أوضح المستفيد بالفعل عدم امتلاك صندوق طوارئ حالياً. ⛔ يُمنع إعادة سؤال هل لديك صندوق طوارئ.'
+    );
+  }
+  if (debtAnsweredInDialogue) {
+    answeredDiagnosticFacts.push(
+      '- الديون والأقساط: أوضح المستفيد بالفعل موقفه من الديون/الأقساط في رسائله السابقة. ⛔ يُمنع إعادة السؤال هل توجد عليك ديون أو أقساط.'
+    );
+  }
+  if (expenseAnsweredInDialogue) {
+    answeredDiagnosticFacts.push(
+      '- بنود الصرف والتسرب: حدّد المستفيد بالفعل بند الصرف الأساسي. ⛔ يُمنع إعادة سؤال ما البند الذي يستهلك دخلك.'
+    );
+  }
+
   const antiRepeatDialogueGuideline = `
 [قواعد حاسمة لمنع التكرار ومسار التعديل والاستئناف 🚫]:
-1. يُمنع منعاً باتاً إعادة طرح أي سؤال سبق طرحه أو أجاب عنه المستخدم في سجل المحادثة الحالية.
+1. يُمنع منعاً باتاً إعادة طرح أي سؤال سبق طرحه أو أجاب عنه المستخدم في سجل المحادثة الحالية، وخاصة سؤال صندوق الطوارئ أو أي سؤال تشخيصي ثابت تم توضيحه مسبقاً.
 ${askedQuestionsFromHistory.length > 0 ? `- أسئلة طُرحت سابقاً في هذه المحادثة (ممنوع تكرارها أو إعادة صياغتها):\n${askedQuestionsFromHistory.slice(-6).map((q) => `  * "${q}"`).join('\n')}` : '- لا توجد أسئلة سابقة مطروحة بعد.'}
-2. تعامل مع آخر رسالة كتبها المستفيد ("${String(message || '').slice(0, 120).replace(/"/g, "'")}") كإجابة مؤكدة ومباشرة على السؤال السابق، حتى لو بدأها بصيغة ظنية مثل "ممكن..." (مثال: "ممكن الاكل في المطاعم" هي إجابة فعلية عن بند الصرف وليس سؤالاً عاماً). اعترف بما ذكره مباشرة في أول جملة وابنِ عليه للانتقال إلى الخطوة المنطقية التالية (مثل التحقق من الالتزامات/الديون إن لم تُذكر، أو اقتراح خطوة ضبط عملية، أو عرض التقييم المرحلي).
+${answeredDiagnosticFacts.length > 0 ? `- حقائق تشخيصية أجاب عنها المستفيد بالفعل (ممنوع إعادة السؤال عنها):\n${answeredDiagnosticFacts.join('\n')}` : ''}
+2. تعامل مع آخر رسالة كتبها المستفيد ("${String(message || '').slice(0, 120).replace(/"/g, "'")}") كإجابة مؤكدة ومباشرة على السؤال السابق، حتى لو بدأها بصيغة ظنية مثل "ممكن..." (مثال: "ممكن الاكل في المطاعم" هي إجابة فعلية عن بند الصرف وليس سؤالاً عاماً). اعترف بما ذكره مباشرة في أول جملة وابنِ عليه للانتقال إلى الخطوة المنطقية التالية (مثل استكمال النمو أو اقتراح خطوة عملية أو عرض التقييم المرحلي).
 ${hasPriorConversation ? `3. ⛔ محظور في هذا الرد البدء بتحية افتتاحية متكررة (مثل: "أهلاً بك..." أو "مرحباً بك..." أو إعادة تقديم نفسك).${isEditedOrResent ? ' المستفيد أعاد إرسال/تعديل إجابته عبر "تراجع / تعديل"، فادخل مباشرة في الاعتراف بالإجابة والانتقال للخطوة التالية.' : ''}` : ''}
 4. ⛔ اتساق الدرجات والأسئلة مع البداية الإيجابية: إذا بدأ المستفيد بتقييم مرتفع (مثل 8/10) أو وصف إيجابي واضح (مثل منحه عائلته الكثير من الوقت)، لا تخفّض الدرجة إلى أقل من 5/10 لمجرد تحدٍّ فرعي (كتشتت الهاتف أو الخجل)، بل اجعلها متوازنة (6.5 إلى 7.5). ويُمنع طرح سؤال يناقض ما أثبته (كأن تسأله ما الذي يمنعه من قضاء وقت أطول مع عائلته بعد تأكيده منحه لهم الكثير من الوقت).
 5. إذا طلب المستفيد اقتراحات مباشرة (مثل "لا أدري أعطيني اقتراحاتك")، قدّم له 2-3 اقتراحات عملية قصيرة ومباشرة مبنية على حواره في نفس الرد قبل عرض درجة التقييم المبدئي.
 6. التوصية الذهبية (advice) عند الاكتمال يجب أن تلخص الإجراء العملي المتفق عليه في الحوار بأسلوب المستشار دون عبارات قالبية عامة ودون نسخ كلام المستفيد داخل علامات تنصيص.
 7. ⛔ عدالة التقييم عند السلبية الواضحة أو العزلة الحادة (خصوصاً في الجانب الشخصي): إذا عبّر المستفيد بصراحة واستمرار عن العزلة التامة أو رفض الجلوس مع الأسرة/الآخرين أو سوء المعاملة المستمر، امنحه درجة منخفضة واقعية (2.5 إلى 3.8 من 10) دون تجميل أو رفعها لنحو 4.8 بذريعة التوازن أو وجود نشاط فردي كالمشي منفرداً. ويُمنع افتراض شعوره بـ"التقصير تجاه معاليه" أو طرح أسئلة تفترض جلوسه معهم؛ احترم حدوده بهدوء وناقش أثر العزلة على توازنه الشخصي.
+8. ⛔ تخصيص "التوصية العلاجية الذهبية" للدرجات المرتفعة (≥ 7.5/10): عندما تكون الدرجة 7.5 فأعلى، صُغ حقل "advice" ليعكس فرص النمو والتوسع التي نوقشت في الحوار (مثل: استكمال صندوق الطوارئ من 4 إلى 6 أشهر وتوجيه جزء من الفائض لاستثمار طويل المدى)، ويُمنع استخدام عبارات عامة خاصة بمعالجة التحديات مثل "البدء بخطوة عملية واحدة صغيرة ومحددة تعالج التحدي...".
 `;
 
   const enforceAntiRepeatOnReply = (
@@ -629,29 +891,68 @@ ${hasPriorConversation ? `3. ⛔ محظور في هذا الرد البدء بت
         cleaned = `إليك 3 اقتراحات عملية قصيرة تناسب واقعك:\n\n${listBlock}\n\n${cleaned}`;
       }
     }
-    if (isCompleted || (askedQuestionsFromHistory.length === 0 && safeHistoryArray.length === 0)) {
+    if (isCompleted || (askedQuestionsFromHistory.length === 0 && safeHistoryArray.length === 0 && !message)) {
       return cleaned;
     }
 
+    const combinedHistoryForCheck = [...safeHistoryArray, message];
+    const domainPool = getDomainContextConfig(agentKey, parsedCtx).exploratoryQuestions;
     const questionMatches = cleaned.match(/[^.!؟?\n]+[؟?]/g) || [];
     if (questionMatches.length > 0) {
+      const buildSmartReplacement = (): string => {
+        const nextPick = pickNextUnaskedQuestion(domainPool, combinedHistoryForCheck, stationTurnCount);
+        if (nextPick.question) return nextPick.question;
+        if (stationTurnCount >= 2) {
+          return 'هل ترغب في اعتماد التقييم المبدئي الحالي والانتقال للمحطة التالية، أم تفضل مواصلة الحوار؟';
+        }
+        if (agentKey === 'financial' && (efStatusInDialogue.hasFund || reconciledScore >= 7.5)) {
+          if (
+            efStatusInDialogue.hasFund &&
+            efStatusInDialogue.monthsCovered !== null &&
+            efStatusInDialogue.monthsCovered >= 1 &&
+            efStatusInDialogue.monthsCovered < 6
+          ) {
+            return `بما أن صندوق طوارئك يغطي ${efStatusInDialogue.monthsCovered} أشهر حالياً، كيف تخطط لاستكماله إلى 6 أشهر وبالتوازي توجيه جزء من الفائض لاستثمار طويل المدى؟`;
+          }
+          return 'انطلاقاً من هذا الاستقرار المالي، أي مسار لنمو الفائض أو الاستثمار طويل المدى تود التركيز عليه في المرحلة القادمة؟';
+        }
+        return `ما الخطوة العملية البسيطة التي تراها مناسبة لتطبيقها في ${stationTitle} هذا الأسبوع؟`;
+      };
+
       const lastQ = questionMatches[questionMatches.length - 1].trim();
       if (
         isQuestionAlreadyAsked(lastQ, askedQuestionsFromHistory) ||
-        isQuestionContradictingHistory(lastQ, [...safeHistoryArray, message])
+        isQuestionContradictingHistory(lastQ, combinedHistoryForCheck) ||
+        isDiagnosticTopicAlreadyAnswered(lastQ, combinedHistoryForCheck)
       ) {
-        const domainPool = getDomainContextConfig(agentKey, parsedCtx).exploratoryQuestions;
-        const nextPick = pickNextUnaskedQuestion(domainPool, [...safeHistoryArray, message], stationTurnCount);
-        const replacementQuestion =
-          nextPick.question ||
-          (stationTurnCount >= 3
-            ? 'هل ترغب في اعتماد التقييم المرحلي الحالي والانتقال للمحطة التالية، أم تفضل إضافة تفصيل آخر؟'
-            : `ما الخطوة العملية البسيطة التي تراها مناسبة لتطبيقها في ${stationTitle} هذا الأسبوع؟`);
-        cleaned = cleaned.replace(lastQ, replacementQuestion).trim();
+        cleaned = cleaned.replace(lastQ, buildSmartReplacement()).trim();
       }
+    }
+    if (isEarlyDialogueTurn) {
+      return stripAccidentalScoreMentions(cleaned);
+    }
+    if (
+      Boolean(isEvaluationSession) &&
+      !isCompleted &&
+      !isContinueIntent &&
+      stationTurnCount >= 2 &&
+      !/(?:أقيّم\s+وضعك|أقيم\s+وضعك|تقييم\s*مبدئي|هل\s+ترغب\s+في\s+اعتماد|هل\s+نعتمد\s+هذا\s+التقييم)/i.test(cleaned)
+    ) {
+      cleaned = `${cleaned}\n\n${formatUnifiedScoreConfirmationMessage(reconciledScore)}`;
     }
     return cleaned;
   };
+
+  const earlyDialoguePersonaGuideline = `
+[طبقة الحوار التمهيدية الحصرية للجولتين 1 و 2 (Decoupled Conversational Layer) 🎯]
+- أنت الآن في الرسالة (${stationTurnCount + 1} من 2)؛ مهمتك الوحيدة والحصرية هي:
+  1. التعاطف الموجز والدافئ (جملة إلى جملتين) المرتبط مباشرة بالكلمات والتفاصيل التي ذكرها المستفيد فعلاً.
+  2. طرح سؤال تشخيصي واحد محدد ومرتبط ارتباطاً مباشراً بكلامه الحالي (دون تكرار سؤال سابق ودون تناقض).
+- ⛔ محظورات مطلقة في الجولتين 1 و 2:
+  - يُمنع منعاً باتاً كتابة أو حساب أي درجة رقمية (مثل X/10) أو عبارة "أقيّم وضعك".
+  - يُمنع اقتراح إنهاء المحطة أو اعتماد التقييم أو سرد قوائم نصائح/خطوات طويلة معلبة.
+  - في الجانب الاجتماعي (أ. سامي): إذا ذكر المستفيد ضغط العمل أو الأسرة أو الإرهاق، يُمنع تماماً افتراض "الوحدة أو الرهاب أو الارتباك في التجمعات أو صعوبة تكوين الصداقات".
+`;
 
   // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
   systemInstruction = `
@@ -669,7 +970,8 @@ ${clinicSpecialGuideline}
 ${roleBoundariesGuideline}
 ${questionQualityGuideline}
 ${styleAndToneGuideline}
-${scoringAndCompletionGuideline}
+${isEarlyDialogueTurn ? earlyDialoguePersonaGuideline : `${scoringAndCompletionGuideline}
+${isThirdOrLaterTurn ? '\n⛔ قاعدة الفصل الحواري (Turn 3+): لا تكتب أي درجة رقمية (مثل X/10) في نص الرد، فستتولى أداة التقييم الموحدة حساب الدرجة برمجياً وإرفاقها.\n' : ''}`}
 ${evaluationSessionGuideline}
 
 سياق المستفيد من منصة وزان:
@@ -680,7 +982,7 @@ ${parsedCtx.ageGroup ? `- الفئة العمرية: ${parsedCtx.ageGroup}` : ''
 ${parsedCtx.incomeSource ? `- مصدر الدخل: ${parsedCtx.incomeSource}` : ''}
 ${parsedCtx.incomeStability ? `- طبيعة الدخل: ${parsedCtx.incomeStability}` : ''}
 ${parsedCtx.currentFocus ? `- التركيز الحالي: ${parsedCtx.currentFocus}` : ''}
-- الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}
+${isEightDomain ? '' : `- الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}`}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
 - إجابات التقييم: ${JSON.stringify(effectiveAnswers)}
@@ -768,65 +1070,71 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       )
     );
 
+    const schemaProperties: Record<string, any> = {
+      agent_name: {
+        type: Type.STRING,
+        description: 'اسم الوكيل أو المستشار',
+      },
+      reasoning: {
+        type: Type.STRING,
+        description: 'تحليل عميق وخطوات تفكير منطقية مرتبطة بحالة المستخدم وأهدافه في عجلة الحياة',
+      },
+      ...(isEightDomain
+        ? {}
+        : {
+            score: {
+              type: Type.NUMBER,
+              description: 'درجة أو تقييم رقمي',
+            },
+          }),
+      summary: {
+        type: Type.STRING,
+        description: 'ملخص الوضع بناءً على البيانات',
+      },
+      advice: {
+        type: Type.STRING,
+        description: 'التوصية العلاجية الذهبية: عند اكتمال المحطة اذكر العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار وليس حكمة عامة',
+      },
+      reply: {
+        type: Type.STRING,
+        description: 'نص الرد التفصيلي والمشجع من المستشار المتحدث مباشرة للمستفيد',
+      },
+      actionSteps: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: 'خطوات إجرائية سريعة مستمدة من كلام المستخدم يمكن إضافتها لقائمة الأهداف',
+      },
+      reflectionQuestion: {
+        type: Type.STRING,
+        description: 'سؤال تأملي ذكي للمستفيد',
+      },
+      station_completed: {
+        type: Type.BOOLEAN,
+        description: 'true only if the user has provided clear, sufficient answers covering their real state and the doctor is ready to finalize this station; false if the user gave a greeting, vague response, or more diagnostic exploration is needed',
+      },
+      strengths: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: '1 to 3 realistic strengths strictly consistent with user complaints (never contradict complaints)',
+      },
+      challenges: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: '1 to 3 improvement opportunities/challenges extracted from what the user actually said in this session',
+      },
+      suggestedReplies: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: '3 to 4 concise, clickable quick replies (written in first person from the user perspective, < 65 chars each) tailored specifically to the latest advisor question, the user previous message, and current round number without repeating prior chips',
+      },
+    };
+
     const requestConfig = {
       systemInstruction,
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.OBJECT,
-        properties: {
-          agent_name: {
-            type: Type.STRING,
-            description: 'اسم الوكيل أو المستشار',
-          },
-          reasoning: {
-            type: Type.STRING,
-            description: 'تحليل عميق وخطوات تفكير منطقية مرتبطة بحالة المستخدم وأهدافه في عجلة الحياة',
-          },
-          score: {
-            type: Type.NUMBER,
-            description: 'درجة أو تقييم رقمي',
-          },
-          summary: {
-            type: Type.STRING,
-            description: 'ملخص الوضع بناءً على البيانات',
-          },
-          advice: {
-            type: Type.STRING,
-            description: 'التوصية العلاجية الذهبية: عند اكتمال المحطة اذكر العادة أو الخطة المحددة التي اقترحها المستخدم بنفسه خلال الحوار وليس حكمة عامة',
-          },
-          reply: {
-            type: Type.STRING,
-            description: 'نص الرد التفصيلي والمشجع من المستشار المتحدث مباشرة للمستفيد',
-          },
-          actionSteps: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: 'خطوات إجرائية سريعة مستمدة من كلام المستخدم يمكن إضافتها لقائمة الأهداف',
-          },
-          reflectionQuestion: {
-            type: Type.STRING,
-            description: 'سؤال تأملي ذكي للمستفيد',
-          },
-          station_completed: {
-            type: Type.BOOLEAN,
-            description: 'true only if the user has provided clear, sufficient answers covering their real state and the doctor is ready to finalize this station; false if the user gave a greeting, vague response, or more diagnostic exploration is needed',
-          },
-          strengths: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: '1 to 3 realistic strengths strictly consistent with user complaints (never contradict complaints)',
-          },
-          challenges: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: '1 to 3 improvement opportunities/challenges extracted from what the user actually said in this session',
-          },
-          suggestedReplies: {
-            type: Type.ARRAY,
-            items: { type: Type.STRING },
-            description: '3 to 4 concise, clickable quick replies (written in first person from the user perspective, < 65 chars each) tailored specifically to the latest advisor question, the user previous message, and current round number without repeating prior chips',
-          },
-        },
+        properties: schemaProperties,
         required: ['reasoning', 'advice', 'reply', 'actionSteps'],
       },
     };
@@ -1017,7 +1325,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
         const retryInstruction = `${systemInstruction}
 
 ⚠️ تنبيه إلزامي صارم بخصوص إعادة التوليد:
-الرد السابق الذي تم توليده احتوى خطأً على عبارة إنهاء للمحطة (مثل "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت")، بينما المحطة لم تكتمل بعد وما زلنا في مرحلة الاستكشاف والتشخيص الحواري التأسيسي (عدد التبادلات الحالية: ${stationTurnCount} من 5+).
+الرد السابق الذي تم توليده احتوى خطأً على عبارة إنهاء للمحطة (مثل "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت")، بينما المحطة لم تكتمل بعد وما زلنا في مرحلة الاستكشاف قبل الرسالة الثالثة (عدد التبادلات الحالية: ${stationTurnCount}).
 - لا تقل أبداً في ردك "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة" أو أي عبارة ختامية.
 - اجعل "station_completed": false حتماً.
 - إذا كان المستفيد قد طرح سؤالاً، أجب عليه باحتواء ووضوح أولاً.
@@ -1072,23 +1380,65 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       parsed.reply = parsed.advice || parsed.summary;
     }
 
-    // رابعاً وثالثاً وخامساً: معالجة الدرجة، وتطهير نقاط القوة والأسلوب
-    const rawModelScore = parsed.score !== undefined ? parsed.score : effectiveScore;
-    parsed.score = processAndReconcileScore(rawModelScore, userSelfScore, message, historyMsgTexts, effectiveScore);
-    parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyMsgTexts);
-    parsed.reply = enforceAntiRepeatOnReply(
-      sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
-      Boolean(parsed.station_completed),
-      parsed.score
-    );
-    if (parsed.station_completed) {
-      parsed.advice = synthesizeGoldenRecommendation({
-        areaId: agentKey,
-        userTexts: [...historyUserOnlyTexts, message],
-        userProfile: effectiveUserProfile,
-        score: parsed.score,
-        advisorCandidate: parsed.advice,
-      });
+    // رابعاً وثالثاً وخامساً: فصل الحوار عن التقييم الموحد
+    if (isEarlyDialogueTurn) {
+      parsed.station_completed = false;
+      parsed.strengths = [];
+      parsed.challenges = [];
+      parsed.score = null;
+      parsed.reply = stripAccidentalScoreMentions(
+        enforceAntiRepeatOnReply(
+          sanitizeAdvisorReply(parsed.reply || '', false),
+          false,
+          0
+        )
+      );
+    } else if (isThirdOrLaterTurn && evalToolPromise) {
+      const evalOutcome = await evalToolPromise;
+      parsed.score = evalOutcome.score;
+      parsed.evaluationMetrics = evalOutcome.metrics;
+      parsed.evaluationSource = evalOutcome.source;
+      parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
+      parsed.reply = enforceAntiRepeatOnReply(
+        sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
+        Boolean(parsed.station_completed),
+        parsed.score
+      );
+      if (
+        parsed.station_completed ||
+        parsed.score >= 7.5 ||
+        /(?:البدء\s*بخطوة\s*عملية\s*واحدة\s*(?:صغيرة|محددة)|تعالج\s*التحدي)/i.test(parsed.advice || '')
+      ) {
+        parsed.advice = synthesizeGoldenRecommendation({
+          areaId: agentKey,
+          userTexts: [...historyUserOnlyTexts, message],
+          userProfile: effectiveUserProfile,
+          score: parsed.score,
+          advisorCandidate: parsed.advice,
+        });
+      }
+    } else {
+      const rawModelScore = parsed.score !== undefined ? parsed.score : effectiveScore;
+      parsed.score = processAndReconcileScore(rawModelScore, userSelfScore, message, historyUserOnlyTexts, effectiveScore);
+      parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
+      parsed.reply = enforceAntiRepeatOnReply(
+        sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
+        Boolean(parsed.station_completed),
+        parsed.score
+      );
+      if (
+        parsed.station_completed ||
+        parsed.score >= 7.5 ||
+        /(?:البدء\s*بخطوة\s*عملية\s*واحدة\s*(?:صغيرة|محددة)|تعالج\s*التحدي)/i.test(parsed.advice || '')
+      ) {
+        parsed.advice = synthesizeGoldenRecommendation({
+          areaId: agentKey,
+          userTexts: [...historyUserOnlyTexts, message],
+          userProfile: effectiveUserProfile,
+          score: parsed.score,
+          advisorCandidate: parsed.advice,
+        });
+      }
     }
 
     if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
@@ -1133,8 +1483,7 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
 IMPORTANT: You must respond in valid JSON format with all text fields written strictly in Arabic (العربية الدافئة الواضحة) using the following fields:
 {
   "agent_name": "${advisorName}",
-  "reasoning": "تحليل واستبصار عميق وخطوات تفكير منطقية",
-  "score": ${effectiveScore},
+  "reasoning": "تحليل واستبصار عميق وخطوات تفكير منطقية",${isEightDomain ? '' : `\n  "score": ${effectiveScore},`}
   "summary": "ملخص الوضع",
   "advice": "نصيحة عملية سريعة وموجهة",
   "reply": "نص الرد الحواري المشخصن والتفاعلي المباشر من المستشار باللغة العربية",
@@ -1238,7 +1587,7 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
             retryGroqMessages.push({
               role: 'system',
               content: `⚠️ تنبيه تصحيحي إلزامي عاجل:
-الرد السابق احتوى خطأً على عبارة إنهاء للمحطة (مثل "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت") بينما المحطة لم تكتمل بعد وما زلنا في مرحلة الاستكشاف والتشخيص الحواري التأسيسي (عدد التبادلات الحالية: ${stationTurnCount} من 5+).
+الرد السابق احتوى خطأً على عبارة إنهاء للمحطة (مثل "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت") بينما المحطة لم تكتمل بعد وما زلنا في مرحلة الاستكشاف قبل الرسالة الثالثة (عدد التبادلات الحالية: ${stationTurnCount}).
 - لا تقل أبداً في ردك "أتممنا المحطة" أو "انتهت المحطة" أو "اكتملت المحطة".
 - اجعل "station_completed": false حتماً.
 - إذا سأل المستفيد أجب على سؤاله باحتواء أولاً.
@@ -1302,23 +1651,65 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
           parsed.reply = parsed.advice || parsed.summary;
         }
 
-        // رابعاً وثالثاً وخامساً: معالجة الدرجة، وتطهير نقاط القوة والأسلوب
-        const rawGroqScore = parsed.score !== undefined ? parsed.score : effectiveScore;
-        parsed.score = processAndReconcileScore(rawGroqScore, userSelfScore, message, historyMsgTexts, effectiveScore);
-        parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyMsgTexts);
-        parsed.reply = enforceAntiRepeatOnReply(
-          sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
-          Boolean(parsed.station_completed),
-          parsed.score
-        );
-        if (parsed.station_completed) {
-          parsed.advice = synthesizeGoldenRecommendation({
-            areaId: agentKey,
-            userTexts: [...historyUserOnlyTexts, message],
-            userProfile: effectiveUserProfile,
-            score: parsed.score,
-            advisorCandidate: parsed.advice,
-          });
+        // رابعاً وثالثاً وخامساً: فصل الحوار عن التقييم الموحد
+        if (isEarlyDialogueTurn) {
+          parsed.station_completed = false;
+          parsed.strengths = [];
+          parsed.challenges = [];
+          parsed.score = null;
+          parsed.reply = stripAccidentalScoreMentions(
+            enforceAntiRepeatOnReply(
+              sanitizeAdvisorReply(parsed.reply || '', false),
+              false,
+              0
+            )
+          );
+        } else if (isThirdOrLaterTurn && evalToolPromise) {
+          const evalOutcome = await evalToolPromise;
+          parsed.score = evalOutcome.score;
+          parsed.evaluationMetrics = evalOutcome.metrics;
+          parsed.evaluationSource = evalOutcome.source;
+          parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
+          parsed.reply = enforceAntiRepeatOnReply(
+            sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
+            Boolean(parsed.station_completed),
+            parsed.score
+          );
+          if (
+            parsed.station_completed ||
+            parsed.score >= 7.5 ||
+            /(?:البدء\s*بخطوة\s*عملية\s*واحدة\s*(?:صغيرة|محددة)|تعالج\s*التحدي)/i.test(parsed.advice || '')
+          ) {
+            parsed.advice = synthesizeGoldenRecommendation({
+              areaId: agentKey,
+              userTexts: [...historyUserOnlyTexts, message],
+              userProfile: effectiveUserProfile,
+              score: parsed.score,
+              advisorCandidate: parsed.advice,
+            });
+          }
+        } else {
+          const rawGroqScore = parsed.score !== undefined ? parsed.score : effectiveScore;
+          parsed.score = processAndReconcileScore(rawGroqScore, userSelfScore, message, historyUserOnlyTexts, effectiveScore);
+          parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
+          parsed.reply = enforceAntiRepeatOnReply(
+            sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
+            Boolean(parsed.station_completed),
+            parsed.score
+          );
+          if (
+            parsed.station_completed ||
+            parsed.score >= 7.5 ||
+            /(?:البدء\s*بخطوة\s*عملية\s*واحدة\s*(?:صغيرة|محددة)|تعالج\s*التحدي)/i.test(parsed.advice || '')
+          ) {
+            parsed.advice = synthesizeGoldenRecommendation({
+              areaId: agentKey,
+              userTexts: [...historyUserOnlyTexts, message],
+              userProfile: effectiveUserProfile,
+              score: parsed.score,
+              advisorCandidate: parsed.advice,
+            });
+          }
         }
 
         if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
@@ -1361,7 +1752,7 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
       message || '',
       effectiveUserProfile?.name || userName || 'عزيزي',
       advisor,
-      isAcuteIsolationContext ? effectiveScore : (userScore || effectiveScore || 5),
+      isEightDomain && !isAdoptionIntent ? 0 : (isEvaluationMode ? (userSelfScore ?? effectiveScore) : (isAcuteIsolationContext ? effectiveScore : (userScore || effectiveScore || 5))),
       isEvaluationSession,
       evaluationStep,
       evaluationQuestionTitle,
@@ -1370,8 +1761,14 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
       effectiveUserProfile,
       Array.isArray(req.body.previousSuggestions) ? req.body.previousSuggestions : [],
       historyMsgTexts,
-      Boolean(isEditedOrResent)
+      Boolean(isEditedOrResent),
+      historyUserOnlyTexts
     );
+    if (isEarlyDialogueTurn) {
+      (localFallback as any).score = null;
+    } else if (isAdoptionIntent && offeredScoreFromLastAdvisor !== null) {
+      (localFallback as any).score = offeredScoreFromLastAdvisor;
+    }
     // 3) إضافة حقل source: "local-fallback" (لا نُخزّن الردود الاحتياطية في الذاكرة المؤقتة حتى نُعطي Gemini الأولوية في المرة القادمة)
     (localFallback as any).source = 'local-fallback';
     return res.json(localFallback);
@@ -1561,8 +1958,9 @@ ${summaryCtx.incomeSource ? `- مصدر الدخل: ${summaryCtx.incomeSource}` 
 
 ⚠️ تعليمات صارمة وملزمة لا يجوز مخالفتها:
 1. التوصية العلاجية الذهبية (goldenRecommendation):
-   - استخلص الفكرة أو التحدي أو العادة التي وردت في حوار المستخدم، واصغها كخطوة عملية واحدة محددة ومختصرة بأسلوب "${advisorName}" (12 إلى 24 كلمة).
-   - يُمنع تماماً نسخ رسالة المستخدم حرفياً أو اقتباسها أو استخدام عبارة مثل "تطبيق الخطة التي اقترحتها في الحوار".
+   - استخلص الفكرة أو التحدي أو العادة أو فرصة النمو التي وردت في حوار المستخدم، واصغها كخطوة عملية واحدة محددة ومختصرة بأسلوب "${advisorName}" (12 إلى 24 كلمة).
+   - إذا كانت الدرجة المعتمدة مرتفعة (7.5 فأعلى)، فخصّص التوصية لتعكس فرص النمو والارتقاء التي نوقشت في الحوار (مثل استكمال صندوق الطوارئ من 4 إلى 6 أشهر وتوجيه جزء من الفائض لاستثمار طويل المدى) بدلاً من العبارات العامة الخاصة بمعالجة التحديات.
+   - يُمنع تماماً نسخ رسالة المستخدم حرفياً أو اقتباسها أو استخدام عبارة عامة مثل "البدء بخطوة عملية واحدة صغيرة ومحددة تعالج التحدي" أو "تطبيق الخطة التي اقترحتها في الحوار".
    - يجب أن تناسب الدرجة المعتمدة (${score ?? 'غير محددة'}/10) وسياق المستفيد (${summaryCtx.workStatus}).
 2. نقاط القوة (strengths - من 2 إلى 3 نقاط):
    - يجب أن تستند حصراً لما ذكره المستخدم بلسانه في الحوار.

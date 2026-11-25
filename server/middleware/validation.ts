@@ -50,6 +50,10 @@ export function calculateSemanticScore(
 
   const anchorRating = extractAnchorSelfRatingFromHistory(historyTexts);
   const allText = [text, ...historyTexts].join(' ').toLowerCase();
+  const cleanedForNegativeCheck = allText.replace(
+    /(?:بعيد[اً ]*عن|البعد\s*عن|إبعاد|ابعد|تجنب|دون|بدون|بلا|تخلصت\s*من|تجاوزت|لا\s*(?:أشعر|اشعر|يوجد|توجد)\s*(?:ب|ل)?)\s*(?:الشاشات|الهاتف|الجوال|التوتر|الضغط|القلق|الإرهاق|الارهاق|التشتت|السهر|اللوم|المقاطعات)/gi,
+    ' '
+  );
   const hasAcuteIsolation = hasAcuteIsolationOrRejection([text, ...historyTexts]);
 
   // 1. Severe breakdown & collapse (1.5 - 3.0)
@@ -57,27 +61,27 @@ export function calculateSemanticScore(
     /(مدمر|محطم|كارثي|كارثة|صفر|ضياع تام|ضائع كليا|لا املك شيء|مفلس تماما|غارق ديون|غرقان ديون|لا اصلي ابدا|تارك الصلاة|ما اصلي نهائيا|انعدام|طاقتي صفر|نومي مدمر|ما انام ابدا|فاشل جدا|اكره حياتي|مكتئب جدا|منهار|مخنوق تماما|مفيش امل|منعدم|مديونية خانقة|صفر ريال)/i
   ];
 
-  // 2. Strong negative & high struggle (2.5 - 3.8 for isolation/mistreatment, 2.8 - 3.8 overall)
+  // 2. Strong negative & high struggle (2.5 - 3.8 for isolation/mistreatment, 2.7 - 3.6 overall)
   const strongNegativePatterns = [
     /(سيء جدا|سلبي جدا|غير راض ابدا|ضياع|يضيع بسرعة|الوقت يضيع|ما في فايدة|ما اقدر|عاجز|مستنزف|قلق دائم|خوف مستمر|توتر شديد|سهر مستمر|ارق شديد|خمول مستمر|كسل شديد|تراكم|تسويف دائم|ديون كثيرة|راتب لا يكفي|ما اقدر اوفر|عزلة تامة|وحيد تماما|فجوة كبيرة|مشاكل مستمرة|نزاع دائم|تعبت من الوضع|مخنوق|تعبان كثير|فاقد السيطرة|بدون هدف|ما اصلي|اقصر بالصلاة|سلبي تماما|سلبي جدا|لا أجلس مع|لا اجلس مع|لا أريد الجلوس|لا اريد الجلوس|سوء معاملة|سوء المعاملة|لا أشعر بأي فائدة|لا فائدة من وجودهم)/i
   ];
 
-  // 3. Moderate negative & sub-challenges (4.5 - 5.6 alone, or 6.5-7.4 if paired with high anchor/positive baseline)
+  // 3. Moderate negative, fluctuation, & fatigue (4.0 - 5.5 alone, or 6.6-7.3 if paired with strong positive baseline)
   const moderateNegativePatterns = [
-    /(تشتت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|صعوبة|ضغط|مرهق|تعبان|متعب|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت|خجل)/i
+    /(تشتت|يشتت|تشتيت|تسويف|تأجيل|مشتت|فتور|تراجع|تذبذب|متذبذب|متقلب|تقلب|غير مستقر|غير منتظم|صعوبة|ضغط|مضغوط|مرهق|تعبان|متعب|إرهاق|ارهاق|استنزاف|مشغول|انشغال|قلق|توتر|تقصير|أقصر|اقصر|روتين|ملل|ما عندي وقت|سطحية|خمول|سهر|ضيق وقت|خجل|يوم .* ويوم|أحيانا ألتزم|مرة ألتزم|أغرق في الهاتف|انقطاع)/i
   ];
 
-  // 4. Moderate positive & improving (6.1 - 7.3)
+  // 4. Moderate positive & improving (6.1 - 7.1)
   const moderatePositivePatterns = [
     /(مقبول|جيد نوعا ما|احاول|أحاول|اتحسن|أتحسن|خطوة طيبة|وعي|راض نسبيا|ماشي الحال|استقرار متوسط|احيانا ملتزم|بديت اتعلم|علاقة طيبة|احسن من قبل|تطور بسيط|في تحسن|جيدة|مرتاح|قريب|نتفاهم)/i
   ];
 
-  // 5. Strong positive & balanced (7.6 - 8.8)
+  // 5. Strong positive & stable across all 8 domains (7.5 - 9.0)
   const strongPositivePatterns = [
-    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|نوم عميق|نشاط وحيوية|رياضة مستمرة|راحة بال|كثير من الوقت|الكثير من الوقت|وقت كبير|أمنحهم|أعطيهم وقت|دائماً معهم|نجلس معاً كثيراً|تواصل دافئ)/i
+    /(ممتاز|جيد جدا|سكينة|طمأنينة|ورد يومي|صلاة في وقتها|خشوع|انضباط مالي|ادخار منتظم|صندوق طوارئ|فائض شهري|راتبي مستقر|انجاز عالي|شغف|تطور مستمر|تصالح مع الذات|قراءة مستمرة|قراءة يومية|تعلم دائم|ترابط اسري|حوار دافئ|اصدقاء اوفياء|علاقات داعمة|نوم عميق|نوم منتظم|نوم مريح|نشاط وحيوية|رياضة مستمرة|رياضة يومية|راحة بال|كثير من الوقت|الكثير من الوقت|وقت كبير|أمنحهم|أعطيهم وقت|دائماً معهم|نجلس معاً كثيراً|تواصل دافئ|وقت\s*(?:يومي\s*)?ثابت|تخصيص\s*وقت|البعد\s*عن\s*الشاشات|بعيد[اً ]*عن\s*الشاشات|بدون\s*(?:هاتف|شاشات)|صفاء\s*(?:ذهني|الذهن|البال)|هدوء\s*(?:نفسي|داخلي|ذهني)|اتزان\s*(?:نفسي|داخلي)|توازن\s*(?:نفسي|داخلي|جيد|ممتاز)|راحة\s*ذهنية|مستقر\s*(?:نفسياً|داخلياً|ذهنياً)|استقرار\s*(?:نفسي|داخلي)|حضور\s*(?:أعمق|اعمق|ذهني|كامل|دافئ)|عمل\s*عميق|روتين\s*صحي|ألتزم\s*(?:يومياً|بانتظام)|بانتظام\s*يومياً)/i
   ];
 
-  // 6. Outstanding (8.9 - 9.7)
+  // 6. Outstanding (8.6 - 9.0 baseline, up to 9.4 for extraordinary)
   const outstandingPositivePatterns = [
     /(مثالي|استثنائي|فوق الممتاز|شغف عالي جدا|سلام داخلي عميق|استقلال مالي|حرية مالية|انتاجية استثنائية|ثقة مطلقة|عطاء ملهم|صحة حديدية|انجاز عظيم)/i
   ];
@@ -85,9 +89,9 @@ export function calculateSemanticScore(
   const charHash = allText.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
   const variance = (charHash % 9) * 0.1;
 
-  const hasSevere = severeNegativePatterns.some((p) => p.test(allText));
-  const hasStrongNeg = strongNegativePatterns.some((p) => p.test(allText));
-  const hasModerateNeg = moderateNegativePatterns.some((p) => p.test(allText));
+  const hasSevere = severeNegativePatterns.some((p) => p.test(cleanedForNegativeCheck));
+  const hasStrongNeg = strongNegativePatterns.some((p) => p.test(cleanedForNegativeCheck));
+  const hasModerateNeg = moderateNegativePatterns.some((p) => p.test(cleanedForNegativeCheck));
   const hasStrongPos = strongPositivePatterns.some((p) => p.test(allText));
   const hasOutstandingPos = outstandingPositivePatterns.some((p) => p.test(allText));
   const hasModeratePos = moderatePositivePatterns.some((p) => p.test(allText));
@@ -95,27 +99,29 @@ export function calculateSemanticScore(
   let calculated = 5.2;
 
   if (hasAcuteIsolation) {
-    // Acute isolation, ongoing mistreatment, or explicit rejection of others -> fair low range (2.6 - 3.6)
+    // Acute isolation, ongoing mistreatment, or explicit rejection of others -> fair low range (2.6 - 3.5)
     // Never inflate toward ~4.8 due to a minor solo coping activity (e.g. walking alone).
     calculated = 2.6 + (charHash % 10) * 0.1;
   } else if (anchorRating !== null && anchorRating >= 6.8 && !hasSevere && !hasStrongNeg) {
     // Preserve high starting anchor with only gentle moderation (6.5 - 7.8) for minor sub-challenges
     calculated = hasModerateNeg
       ? Math.max(6.5, Math.min(7.5, anchorRating - 0.8))
-      : Math.max(6.8, Math.min(8.8, anchorRating));
+      : Math.max(7.5, Math.min(9.0, anchorRating));
   } else if (hasSevere) {
     calculated = 1.8 + variance * 0.8;
   } else if (hasStrongNeg) {
     calculated = 2.7 + variance * 0.9;
   } else if ((hasStrongPos || hasOutstandingPos) && hasModerateNeg) {
-    // Positive foundation + minor sub-challenge (e.g. ample family time + phone distraction) -> balanced 6.5 - 7.5
-    calculated = 6.7 + (variance % 7) * 0.1;
+    // Positive foundation + minor sub-challenge (e.g. ample family time + phone distraction) -> balanced 6.6 - 7.3
+    calculated = 6.6 + (variance % 8) * 0.1;
   } else if (hasModerateNeg) {
-    calculated = 4.3 + variance * 0.9;
+    // Fluctuating, stressed, or exhausted -> 4.0 to 5.4
+    calculated = 4.0 + (charHash % 15) * 0.1;
   } else if (hasOutstandingPos) {
-    calculated = 9.0 + (variance % 6) * 0.12;
+    calculated = 8.6 + (charHash % 5) * 0.1;
   } else if (hasStrongPos) {
-    calculated = 7.7 + variance * 0.9;
+    // Positive & stable answers -> 7.6 to 9.0
+    calculated = 7.6 + (charHash % 15) * 0.1;
   } else if (hasModeratePos) {
     calculated = 6.2 + variance * 0.9;
   }
