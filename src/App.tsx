@@ -332,7 +332,7 @@ export default function App() {
     return commitSucceeded || true;
   };
 
-  // Handler: Reset a single advisor's station for re-evaluation
+  // Handler: Reset a single advisor's station for re-evaluation (strict session isolation)
   const handleResetAdvisorStation = (advisorId: LifeAreaId) => {
     setAppState((prev) => {
       const newCompleted = prev.completedAdvisors.filter((id) => id !== advisorId);
@@ -343,13 +343,31 @@ export default function App() {
       const newCompletedDates = { ...(prev.completedDates || {}) };
       delete newCompletedDates[advisorId];
 
-      return {
+      const cleanedAnswers: Record<string, any> = {};
+      for (const [key, val] of Object.entries(prev.answers || {})) {
+        if (key === advisorId || key.startsWith(`${advisorId}_`)) {
+          continue;
+        }
+        cleanedAnswers[key] = val;
+      }
+
+      const nextState: StoredAppState = {
         ...prev,
         completedAdvisors: newCompleted,
         scores: newScores,
+        answers: cleanedAnswers,
         completedDates: newCompletedDates,
       };
+      saveStoredState(nextState);
+      return nextState;
     });
+
+    try {
+      localStorage.removeItem('wazan_eval_chats');
+      localStorage.removeItem('wazan_eval_insights');
+    } catch {
+      // ignore
+    }
   };
 
   // Handler: Start a fresh new weekly assessment cycle
@@ -480,8 +498,9 @@ export default function App() {
     navigateTo('advisor_chat');
   };
 
-  // Jump into specific advisor's questionnaire
+  // Jump into specific advisor's evaluation for editing / re-evaluation with fresh isolated session
   const handleEditAdvisorEvaluation = (advisorId: LifeAreaId) => {
+    handleResetAdvisorStation(advisorId);
     setSelectedAdvisorId(advisorId);
     navigateTo('onboarding');
   };
@@ -678,6 +697,10 @@ export default function App() {
               goals={appState.goals}
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
+              onFinishAdvisor={handleFinishAdvisor}
+              onResetAdvisor={handleResetAdvisorStation}
+              onSaveAnswer={handleSaveAnswer}
+              onSaveStationGoals={handleSaveStationGoals}
               onNavigateToGoalsMatrix={() => setActiveScreen('goals_matrix')}
               onBackToDashboard={() => setActiveScreen('dashboard')}
               theme={theme}

@@ -69,11 +69,10 @@ export const ChatPromptInputBar: React.FC<ChatPromptInputBarProps> = ({
                     key={m.id}
                     type="button"
                     onClick={() => onSelectAiMode(m.id)}
-                    className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${
-                      isSelected
-                        ? 'bg-white dark:bg-[#0E1D24] shadow-xs'
-                        : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
-                    }`}
+                    className={`flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg text-[10px] font-black transition-all cursor-pointer ${isSelected
+                      ? 'bg-white dark:bg-[#0E1D24] shadow-xs'
+                      : 'text-[#475569] dark:text-[#94A3B8] hover:text-[#0F172A] dark:hover:text-[#F1F5F9]'
+                      }`}
                     style={isSelected ? { color: m.color } : {}}
                     title={m.desc}
                   >
@@ -103,7 +102,7 @@ export const ChatPromptInputBar: React.FC<ChatPromptInputBarProps> = ({
             onSubmit={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (!isLoading && inputMessage.trim()) {
+              if (!isLoading) {
                 onSendMessage();
               }
             }}
@@ -142,13 +141,13 @@ export const ChatPromptInputBar: React.FC<ChatPromptInputBarProps> = ({
           ) : (
             <button
               type="button"
-              disabled={!inputMessage.trim() || isLoading}
+              disabled={isLoading}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onSendMessage();
               }}
-              className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
+              className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer ${!inputMessage.trim() ? 'opacity-65' : ''}`}
               style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
               title="إرسال"
             >

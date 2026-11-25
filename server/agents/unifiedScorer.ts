@@ -50,7 +50,7 @@ export function calculateUnifiedScore(metrics: UnifiedScoringMetrics): number {
 
 /**
  * Strictly validates and extracts the 3 evaluation metrics from a parsed JSON object.
- * Returns null if any required metric is missing or non-numeric.
+ * Rejects missing, non-numeric, NaN, or out-of-range [0, 10] values as invalid schema.
  */
 export function parseUnifiedMetricsPayload(raw: any): UnifiedScoringMetrics | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -67,19 +67,108 @@ export function parseUnifiedMetricsPayload(raw: any): UnifiedScoringMetrics | nu
     return null;
   }
 
-  const c = Number(raw.consistency);
-  const e = Number(raw.energyImpact);
-  const b = Number(raw.controlBoundaries);
+  const c = typeof raw.consistency === 'boolean' ? NaN : Number(raw.consistency);
+  const e = typeof raw.energyImpact === 'boolean' ? NaN : Number(raw.energyImpact);
+  const b = typeof raw.controlBoundaries === 'boolean' ? NaN : Number(raw.controlBoundaries);
 
-  if (!Number.isFinite(c) || !Number.isFinite(e) || !Number.isFinite(b)) {
+  if (
+    !Number.isFinite(c) ||
+    !Number.isFinite(e) ||
+    !Number.isFinite(b) ||
+    c < 0 ||
+    c > 10 ||
+    e < 0 ||
+    e > 10 ||
+    b < 0 ||
+    b > 10
+  ) {
     return null;
   }
 
   return {
-    consistency: clampMetric(c),
-    energyImpact: clampMetric(e),
-    controlBoundaries: clampMetric(b),
+    consistency: c,
+    energyImpact: e,
+    controlBoundaries: b,
   };
+}
+
+export const EVALUATION_CLARIFICATION_FALLBACK_AR =
+  'أود التأكد من فهم تفاصيل واقعك بدقة قبل احتساب التقييم المبدئي؛ هل يمكنك توضيح مدى انتظامك الفعلي وأثر هذا الجانب على طاقتك بعبارات أوضح؟';
+
+function parseRawJsonSafely(text: string): any {
+  const trimmed = String(text || '').trim();
+  if (!trimmed) {
+    throw new Error('Empty JSON response');
+  }
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    const jsonMatch = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+    if (jsonMatch) {
+      return JSON.parse(jsonMatch[1]);
+    }
+    const braceStart = trimmed.indexOf('{');
+    const braceEnd = trimmed.lastIndexOf('}');
+    if (braceStart !== -1 && braceEnd !== -1 && braceEnd > braceStart) {
+      return JSON.parse(trimmed.slice(braceStart, braceEnd + 1));
+    }
+    throw new Error('Malformed JSON payload');
+  }
+}
+
+export type EvalRetryResult =
+  | { status: 'ok'; metrics: UnifiedScoringMetrics; score: number }
+  | { status: 'invalid_json'; fallbackMessage: string }
+  | { status: 'unavailable' };
+
+/**
+ * Executes an LLM JSON metrics extraction call with schema validation and a single automatic retry
+ * when JSON parsing or schema validation fails. Returns a polite Arabic clarification fallback if
+ * both attempts return malformed/invalid JSON instead of crashing or emitting a random score.
+ */
+export async function evaluateMetricsPayloadWithRetry(
+  fetchRawText: (attempt: number) => Promise<string | null>,
+  calibrate?: (metrics: UnifiedScoringMetrics) => UnifiedScoringMetrics
+): Promise<EvalRetryResult> {
+  let sawMalformedOutput = false;
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    let rawText: string | null = null;
+    try {
+      rawText = await fetchRawText(attempt);
+    } catch {
+      return { status: 'unavailable' };
+    }
+
+    if (rawText === null || rawText === undefined) {
+      return { status: 'unavailable' };
+    }
+
+    try {
+      const parsed = parseRawJsonSafely(rawText);
+      const valid = parseUnifiedMetricsPayload(parsed);
+      if (valid) {
+        const finalMetrics = calibrate ? calibrate(valid) : valid;
+        return {
+          status: 'ok',
+          metrics: finalMetrics,
+          score: calculateUnifiedScore(finalMetrics),
+        };
+      }
+      sawMalformedOutput = true;
+    } catch {
+      sawMalformedOutput = true;
+    }
+  }
+
+  if (sawMalformedOutput) {
+    return {
+      status: 'invalid_json',
+      fallbackMessage: EVALUATION_CLARIFICATION_FALLBACK_AR,
+    };
+  }
+
+  return { status: 'unavailable' };
 }
 
 /**

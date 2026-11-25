@@ -23,6 +23,8 @@ import {
   extractEmergencyFundStatus,
   extractAnchorSelfRatingFromHistory,
   hasAcuteIsolationOrRejection,
+  isEmptyOrMeaninglessInput,
+  MEANINGLESS_INPUT_PROMPT_AR,
 } from '../../src/utils/dialogueDeduplication';
 
 // مصفوفة من 4 ردود استكشافية محايدة ومختلفة لكل محطة من المحطات الثماني لمنع التكرار عند اللجوء للمحرك المحلي
@@ -331,6 +333,7 @@ export function generateLocalAgentResponse(
     strengths?: string[];
     challenges?: string[];
     suggestedReplies?: string[];
+    skipTurnIncrement?: boolean;
   }) => {
     const finalName = data.agent_name || advName;
     let finalReply = data.reply || data.advice || data.summary || 'أنا معك في كل خطوة نحو الاتزان والنمو.';
@@ -427,19 +430,34 @@ export function generateLocalAgentResponse(
     return {
       agent_name: finalName,
       reasoning: finalReasoning,
-      score: isEarlyConversationalTurn ? 0 : computedScore,
+      score: isEarlyConversationalTurn || data.skipTurnIncrement ? 0 : computedScore,
       summary: finalSummary,
       advice: finalAdvice,
       reply: finalReply,
       actionSteps: data.actionSteps || [finalAdvice],
       reflectionQuestion: safeReflectionQ || (isCompletedEval ? '' : 'ما هي الخطوة البسيطة التي ستبدأ بها اليوم؟'),
-      station_completed: isEarlyConversationalTurn ? false : Boolean(isEvaluationSession) && Boolean(data.station_completed),
+      station_completed: isEarlyConversationalTurn || data.skipTurnIncrement ? false : Boolean(isEvaluationSession) && Boolean(data.station_completed),
       strengths: data.strengths || [],
       challenges: data.challenges || [],
       suggestedReplies: dynamicSuggestedReplies,
+      skipTurnIncrement: Boolean(data.skipTurnIncrement),
       source: 'local-fallback' as const,
     };
   };
+
+  if (isEmptyOrMeaninglessInput(message)) {
+    return formatAgentOutput({
+      reasoning: `حماية جودة المدخلات (Input Guardrail): الرسالة المستلمة ("${message}") فارغة أو غير واضحة ولا تحتوي على معطيات تشخيصية. تم طلب التوضيح بلطف بالعربية دون احتساب درجة أو احتساب جولة حوارية.`,
+      summary: 'طلب توضيح لطيف لرسالة فارغة أو غير واضحة دون احتساب جولة.',
+      advice: 'اكتب وصفاً موجزاً وواضحاً لوضعك أو شعورك في هذا الجانب لنتمكن من مساعدتك بدقة.',
+      reply: MEANINGLESS_INPUT_PROMPT_AR,
+      score: 0,
+      station_completed: false,
+      actionSteps: [],
+      reflectionQuestion: 'ما الذي تصفه الآن حول وضعك في هذا الجانب؟',
+      skipTurnIncrement: true,
+    });
+  }
 
   // أولوية الطوارئ الإنسانية 0 (Safety & Empathy Override): حماية الحياة واحتواء الأزمات الحادة فوراً
   if (isCrisisOrDeath) {

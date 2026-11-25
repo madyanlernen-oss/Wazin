@@ -190,44 +190,43 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
 
         {/* Suggested Clinical & Rapid Context Responses - Wrapped cleanly so no chip is ever clipped on the left */}
         <div className="flex items-center gap-1.5 flex-wrap">
-            {/* Quick Adopt Chip when an offered score is available */}
-            {!isCompleted && offeredScore !== undefined && offeredScore !== null && offeredScore > 0 && (
-              <button
-                type="button"
-                disabled={isAdvisorReplying}
-                onClick={() => {
-                  if (onAdoptScoreAndComplete) {
-                    onAdoptScoreAndComplete(offeredScore);
-                  } else {
-                    onSendAnswer(`اعتمد التقييم بدرجة ${offeredScore}`);
-                  }
-                }}
-                className="flex-shrink-0 px-3.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
-              >
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>اعتماد تقييم المستشار ({offeredScore.toFixed(1)} من 10)</span>
-              </button>
-            )}
+          {/* Quick Adopt Chip when an offered score is available */}
+          {!isCompleted && offeredScore !== undefined && offeredScore !== null && offeredScore > 0 && (
+            <button
+              type="button"
+              disabled={isAdvisorReplying}
+              onClick={() => {
+                if (onAdoptScoreAndComplete) {
+                  onAdoptScoreAndComplete(offeredScore);
+                } else {
+                  onSendAnswer(`اعتمد التقييم بدرجة ${offeredScore}`);
+                }
+              }}
+              className="flex-shrink-0 px-3.5 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-black transition-all shadow-xs cursor-pointer flex items-center gap-1.5 disabled:opacity-40"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>اعتماد تقييم المستشار ({offeredScore.toFixed(1)} من 10)</span>
+            </button>
+          )}
 
-            {/* Dynamic Round- and Context-Aware Quick Suggestions (تتجدد كل جولة حسب إجابة المستخدم) */}
-            {(quickSuggestions && quickSuggestions.length > 0
-              ? quickSuggestions
-              : (currentStationConfig.consultation?.suggestedResponses || currentStationConfig.initialDiagnostic?.suggestedResponses || [])
-            ).map((chip, idx) => (
-              <button
-                key={`${stationTurnCount}_${idx}_${chip.slice(0, 12)}`}
-                type="button"
-                disabled={isAdvisorReplying}
-                onClick={() => onSendAnswer(chip)}
-                className={`flex-shrink-0 px-3 py-1 rounded-full border text-[11px] font-semibold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:pointer-events-none ${
-                  idx === 0 && stationTurnCount === 0
-                    ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 font-bold hover:bg-teal-100/70 dark:hover:bg-teal-900/60'
-                    : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
+          {/* Dynamic Round- and Context-Aware Quick Suggestions (تتجدد كل جولة حسب إجابة المستخدم) */}
+          {(quickSuggestions && quickSuggestions.length > 0
+            ? quickSuggestions
+            : (currentStationConfig.consultation?.suggestedResponses || currentStationConfig.initialDiagnostic?.suggestedResponses || [])
+          ).map((chip, idx) => (
+            <button
+              key={`${stationTurnCount}_${idx}_${chip.slice(0, 12)}`}
+              type="button"
+              disabled={isAdvisorReplying}
+              onClick={() => onSendAnswer(chip)}
+              className={`flex-shrink-0 px-3 py-1 rounded-full border text-[11px] font-semibold transition-all shadow-xs cursor-pointer disabled:opacity-40 disabled:pointer-events-none ${idx === 0 && stationTurnCount === 0
+                ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-300 dark:border-teal-700 text-[#0F6E6E] dark:text-cyan-300 font-bold hover:bg-teal-100/70 dark:hover:bg-teal-900/60'
+                : 'bg-white dark:bg-[#0E1D24] border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
                 }`}
-              >
-                {isolateNumbersInText(chip)}
-              </button>
-            ))}
+            >
+              {isolateNumbersInText(chip)}
+            </button>
+          ))}
         </div>
       </div>
 
@@ -248,7 +247,7 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
             onSubmit={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              if (!isAdvisorReplying && inputText.trim()) {
+              if (!isAdvisorReplying) {
                 onSendAnswer();
               }
             }}
@@ -287,13 +286,13 @@ export const AssessmentInputBar: React.FC<AssessmentInputBarProps> = ({
           ) : (
             <button
               type="button"
-              disabled={!inputText.trim() || isAdvisorReplying}
+              disabled={isAdvisorReplying}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onSendAnswer();
               }}
-              className="w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer"
+              className={`w-12 h-12 rounded-2xl text-white flex items-center justify-center transition-all shadow-xs disabled:opacity-40 disabled:pointer-events-none flex-shrink-0 hover:opacity-95 cursor-pointer ${!inputText.trim() ? 'opacity-65' : ''}`}
               style={{ backgroundColor: currentAdvisor.themeColor || '#0F6E6E' }}
               title="إرسال"
             >

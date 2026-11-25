@@ -682,3 +682,70 @@ export function extractExpenseCategoryFromAnswer(text: string): string | null {
   }
   return null;
 }
+
+export const MEANINGLESS_INPUT_PROMPT_AR =
+  'أود أن أفهم وضعك بدقة حتى أتمكن من مساعدتك؛ يبدو أن رسالتك غير واضحة أو غير مكتملة. هل يمكنك كتابة بضع كلمات تصف بها حالك أو ما يدور في بالك الآن؟';
+
+/**
+ * Detects empty, whitespace-only, punctuation-only ("...", "؟!"), repeated-char,
+ * or keyboard-mash/gibberish messages without falsely rejecting brief valid Arabic replies
+ * (e.g., "نعم", "لا", "تمام", "متعب", "8/10", "تقييمي 8 من 10").
+ */
+export function isEmptyOrMeaninglessInput(text: string): boolean {
+  if (typeof text !== 'string') return true;
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return true;
+
+  // Explicit rating syntax or standalone 1-10 number is valid
+  if (
+    /\b(?:[1-9]|10)(?:\.\d+)?\s*(?:من|\/)\s*10\b/i.test(trimmed) ||
+    /^(?:[1-9]|10)$/.test(trimmed)
+  ) {
+    return false;
+  }
+
+  // Strip punctuation, symbols, and whitespace (keep Unicode letters & numbers)
+  const stripped = trimmed.replace(/[^\p{L}\p{N}]/gu, '');
+  if (stripped.length < 2) {
+    return true;
+  }
+
+  // Single character repeated identically across the entire message (e.g. "ااااا", "هههه", "xxxx", "1111")
+  if (/^(.)\1+$/u.test(stripped)) {
+    return true;
+  }
+
+  // Repeated 2-3 char meaningless syllables filling the entire string (e.g. "شسيشسي", "اباباب", "abcabc")
+  if (stripped.length >= 4 && /^(.{2,3})\1+$/iu.test(stripped)) {
+    return true;
+  }
+
+  const lower = stripped.toLowerCase();
+  const hasArabic = /[\u0600-\u06FF]/.test(trimmed);
+
+  // Keyboard mash sequences (Arabic or Latin keyboard rows)
+  const keyboardMashPattern =
+    /(ضصثق|ثقفغ|فغعه|غعهخ|شسيب|سيبل|يبلات|بلاتن|ئءؤر|ءؤرلا|رلاى|asdf|qwer|zxcv|hjkl|fghj|tyui|uiop|asdfgh|qwerty)/i;
+  if (keyboardMashPattern.test(lower) && trimmed.split(/\s+/).length <= 3) {
+    return true;
+  }
+
+  // Long random consonant clusters in Latin without vowels or any Arabic words
+  if (!hasArabic && /[bcdfghjklmnpqrstvwxz]{5,}/i.test(lower)) {
+    return true;
+  }
+
+  // Short Latin gibberish with no Arabic letters and not a known short word/number
+  if (!hasArabic && !/^\d+$/.test(stripped)) {
+    const knownShortLatin = /^(?:ok|okay|hi|hello|hey|yes|no|good|bad|fine|test|help|thanks|thx|done|skip|next)$/i;
+    const words = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
+    if (words.every((w) => !knownShortLatin.test(w)) && words.length <= 2 && stripped.length <= 12) {
+      // Check if vowels are missing or repeated noise
+      if (!/[aeiouy]/i.test(lower) || /(.)\1{2,}/i.test(lower)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}

@@ -147,6 +147,8 @@ export interface ChatMessage {
   advice?: string;
   isCrisis?: boolean;
   suggestedReplies?: string[];
+  offeredScore?: number | null;
+  ignoredForTurnCount?: boolean;
   source?: 'gemini' | 'groq' | 'local-fallback';
 }
 

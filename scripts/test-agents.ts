@@ -4,6 +4,13 @@ import { resolve } from 'path';
 import { GEMINI_API_KEY, GEMINI_MODEL, GROQ_API_KEY, GROQ_MODEL } from '../server/config/env';
 import { generateLocalAgentResponse, resetLocalFallbackTracker } from '../server/agents/localAdvisorEngine';
 import {
+  calculateUnifiedScore,
+  parseUnifiedMetricsPayload,
+  evaluateMetricsPayloadWithRetry,
+  EVALUATION_CLARIFICATION_FALLBACK_AR,
+} from '../server/agents/unifiedScorer';
+import { isEmptyOrMeaninglessInput } from '../src/utils/dialogueDeduplication';
+import {
   extractExplicitRating as extractServerExplicitRating,
   sanitizeStrengths,
   calculateSemanticScore as calculateServerSemanticScore,
@@ -693,8 +700,8 @@ async function testAgentBehaviors() {
     );
     assert(
       !stationSummary.goldenRecommendation.includes('تطبيق الخطة التي اقترحتها في الحوار') &&
-        !isVerbatimUserCopy(stationSummary.goldenRecommendation, ['سأخصص مساء كل خميس للقاء أصدقائي المقربين لمدة ساعة واحدة']) &&
-        /(لقاء|صديق|تواصل|أسبوعي|مكالمة|أقرب)/.test(stationSummary.goldenRecommendation),
+      !isVerbatimUserCopy(stationSummary.goldenRecommendation, ['سأخصص مساء كل خميس للقاء أصدقائي المقربين لمدة ساعة واحدة']) &&
+      /(لقاء|صديق|تواصل|أسبوعي|مكالمة|أقرب)/.test(stationSummary.goldenRecommendation),
       `Golden recommendation must synthesize social action in advisor voice without verbatim copying; got: ${stationSummary.goldenRecommendation}`
     );
     assert(
@@ -1381,8 +1388,8 @@ async function testAgentBehaviors() {
     });
     assert(
       hR3.length >= 3 &&
-        !hR3.some((c) => [...hR1, ...hR2Sleep].map(normalizeSuggestionText).includes(normalizeSuggestionText(c))) &&
-        hR3.some((c) => /(شاشات|نوم|غرفة النوم|سهر|استيقاظ)/.test(c)),
+      !hR3.some((c) => [...hR1, ...hR2Sleep].map(normalizeSuggestionText).includes(normalizeSuggestionText(c))) &&
+      hR3.some((c) => /(شاشات|نوم|غرفة النوم|سهر|استيقاظ)/.test(c)),
       'Health Round 3 chips MUST react to Round 2 screen/sleep answer with zero overlap against Rounds 1 & 2'
     );
     const hR4Client = getClientAdvisorResponse(
@@ -1397,7 +1404,7 @@ async function testAgentBehaviors() {
     ).suggestedReplies;
     assert(
       hR4Client.length >= 3 &&
-        !hR4Client.some((c) => [...hR1, ...hR2Sleep, ...hR3].map(normalizeSuggestionText).includes(normalizeSuggestionText(c))),
+      !hR4Client.some((c) => [...hR1, ...hR2Sleep, ...hR3].map(normalizeSuggestionText).includes(normalizeSuggestionText(c))),
       'Health Round 4 chips MUST remain non-empty and never repeat Rounds 1-3 chips'
     );
 
@@ -2272,9 +2279,9 @@ async function testDemoModeStateAndIsolation() {
     const scoredCards = getPrioritizedScoredDomains(liveScores);
     assert(
       scoredCards.length === 3 &&
-        scoredCards[0].score === 4.5 &&
-        scoredCards[1].score === 4.7 &&
-        scoredCards[2].score === 5.0,
+      scoredCards[0].score === 4.5 &&
+      scoredCards[1].score === 4.7 &&
+      scoredCards[2].score === 5.0,
       'Prioritized card list must match ascending scores 4.5, 4.7, 5.0'
     );
 
@@ -2436,7 +2443,7 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       !summaryRes.goldenRecommendation.includes('خلاص سكر الموضوع') &&
-        !summaryRes.goldenRecommendation.includes('بصراحة جربت'),
+      !summaryRes.goldenRecommendation.includes('بصراحة جربت'),
       'Station summary goldenRecommendation must NOT quote user colloquial prose verbatim'
     );
     assert(
@@ -2475,7 +2482,7 @@ async function testGoldenRecommendationSynthesis() {
     assert(clientAdopted.station_completed === true, 'Client explicit adoption must complete station');
     assert(
       !isVerbatimUserCopy(clientAdopted.advice, [spiritualRaw]) &&
-        !clientAdopted.advice.includes('تطبيق الخطة التي اقترحتها'),
+      !clientAdopted.advice.includes('تطبيق الخطة التي اقترحتها'),
       'Client adoption advice must be synthesized in advisor voice, not verbatim user text'
     );
 
@@ -2500,7 +2507,7 @@ async function testGoldenRecommendationSynthesis() {
     assert(localAdopted.station_completed === true, 'Local engine explicit adoption must complete station');
     assert(
       !isVerbatimUserCopy(localAdopted.advice, [debtMsg]) &&
-        /(التزام|دين|ديون|قسط|أقساط|مصروف|ميزانية|ادخار|سيولة)/.test(localAdopted.advice),
+      /(التزام|دين|ديون|قسط|أقساط|مصروف|ميزانية|ادخار|سيولة)/.test(localAdopted.advice),
       `Local engine financial adoption advice must address debt/cashflow reality in advisor voice; got: ${localAdopted.advice}`
     );
 
@@ -2523,9 +2530,9 @@ async function testGoldenRecommendationSynthesis() {
     const bidiSample = isolateNumbersForPlainText('المعدل 5.8 / 10 واليوم 12 / 30 والنسبة 40% والفترة 1 - 7 من 15 دقيقة');
     assert(
       bidiSample.includes('\u20665.8 / 10\u2069') &&
-        bidiSample.includes('\u206612 / 30\u2069') &&
-        bidiSample.includes('\u206640%\u2069') &&
-        bidiSample.includes('\u20661 - 7\u2069'),
+      bidiSample.includes('\u206612 / 30\u2069') &&
+      bidiSample.includes('\u206640%\u2069') &&
+      bidiSample.includes('\u20661 - 7\u2069'),
       `Export bidi helper must isolate fractions, percentages, and ranges; got: ${bidiSample}`
     );
 
@@ -2546,7 +2553,7 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       serializedDirector.includes('الجانب المهني والوظيفي') &&
-        serializedDirector.includes('الجانب الصحي والبدني'),
+      serializedDirector.includes('الجانب الصحي والبدني'),
       'Fallback director report must use approved Arabic domain names'
     );
     const sanitizedLegacy = sanitizeDirectorReportArabic({
@@ -2566,8 +2573,8 @@ async function testGoldenRecommendationSynthesis() {
     const sanitizedJson = JSON.stringify(sanitizedLegacy);
     assert(
       !/(career|health|spiritual|Demo Mode|Deep Work|Micro-habit|Keystone Habits)/i.test(sanitizedJson) &&
-        getDomainArabicName('career') === 'الجانب المهني والوظيفي' &&
-        localizeDomainText('فجوة health').includes('الجانب الصحي والبدني'),
+      getDomainArabicName('career') === 'الجانب المهني والوظيفي' &&
+      localizeDomainText('فجوة health').includes('الجانب الصحي والبدني'),
       `sanitizeDirectorReportArabic must eliminate raw English keys and jargon; got: ${sanitizedJson}`
     );
 
@@ -2581,8 +2588,8 @@ async function testGoldenRecommendationSynthesis() {
     });
     assert(
       !bannerCompleted.headlineSuffix.includes('بانتظار') &&
-        !bannerCompleted.detail.includes('المستشار الروحي لإكمال') &&
-        bannerCompleted.headlineSuffix.includes('8 / 8'),
+      !bannerCompleted.detail.includes('المستشار الروحي لإكمال') &&
+      bannerCompleted.headlineSuffix.includes('8 / 8'),
       `Completed demo banner must reflect 8/8 completion instead of pending station 1; got: ${bannerCompleted.headlineSuffix}`
     );
 
@@ -2595,15 +2602,15 @@ async function testGoldenRecommendationSynthesis() {
     });
     assert(
       bannerPlanCompleted.headlineSuffix.includes('30 يوماً') &&
-        bannerPlanCompleted.headlineSuffix.includes('8 / 8'),
+      bannerPlanCompleted.headlineSuffix.includes('8 / 8'),
       `30-day plan completed demo banner must reflect plan & 8/8 state; got: ${bannerPlanCompleted.headlineSuffix}`
     );
 
     assert(
       prefixLamArabic('الجانب الصحي والبدني') === 'للجانب الصحي والبدني' &&
-        localizeDomainText('عادة مخصصة لـ الجانب الأسرى لمدة (10) دقائق في (المربع (2))') ===
-          'عادة مخصصة للجانب الأسري لمدة 10 دقائق في (المربع 2)' &&
-        localizeDomainText('عنوان بدون قوس مفتوح)') === 'عنوان بدون قوس مفتوح',
+      localizeDomainText('عادة مخصصة لـ الجانب الأسرى لمدة (10) دقائق في (المربع (2))') ===
+      'عادة مخصصة للجانب الأسري لمدة 10 دقائق في (المربع 2)' &&
+      localizeDomainText('عنوان بدون قوس مفتوح)') === 'عنوان بدون قوس مفتوح',
       'Arabic normalizer must fix detached lam, الأسرى typo, and broken/unbalanced parentheses'
     );
 
@@ -2629,7 +2636,7 @@ async function testGoldenRecommendationSynthesis() {
     // Anti-repeat & edit/undo ("تراجع / تعديل") checks across server local engine and client engine
     assert(
       !isGenuineUserQuestion('ممكن الاكل في المطاعم') &&
-        isGenuineUserQuestion('ممكن توضح لي كيف أبدأ؟'),
+      isGenuineUserQuestion('ممكن توضح لي كيف أبدأ؟'),
       'isGenuineUserQuestion must treat "ممكن الاكل في المطاعم" as a tentative answer, not a question'
     );
 
@@ -2661,8 +2668,8 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       !/^(?:أهلاً|مرحباً)/.test(localEditReply.reply.trim()) &&
-        localEditReply.reply.includes('المطاعم') &&
-        !isQuestionAlreadyAsked(priorFinQuestion, [localEditReply.reply]),
+      localEditReply.reply.includes('المطاعم') &&
+      !isQuestionAlreadyAsked(priorFinQuestion, [localEditReply.reply]),
       `Local engine after edit/undo must acknowledge restaurant answer directly without repeated greeting or re-asking prior question; got: ${localEditReply.reply}`
     );
 
@@ -2687,10 +2694,10 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       !/^(?:أهلاً|مرحباً)/.test(clientEditReply.reply.trim()) &&
-        clientEditReply.reply.includes('المطاعم') &&
-        !isQuestionAlreadyAsked(priorFinQuestion, [clientEditReply.reply]) &&
-        stripRepeatedOpeningGreeting('أهلاً بك يا سعود! خطوة ممتازة في ضبط الميزانية.', true) ===
-          'خطوة ممتازة في ضبط الميزانية.',
+      clientEditReply.reply.includes('المطاعم') &&
+      !isQuestionAlreadyAsked(priorFinQuestion, [clientEditReply.reply]) &&
+      stripRepeatedOpeningGreeting('أهلاً بك يا سعود! خطوة ممتازة في ضبط الميزانية.', true) ===
+      'خطوة ممتازة في ضبط الميزانية.',
       `Client engine after edit/undo must acknowledge answer without repeated greeting or repeating prior question; got: ${clientEditReply.reply}`
     );
 
@@ -2757,9 +2764,9 @@ async function testGoldenRecommendationSynthesis() {
     });
     assert(
       finPiggyRec.includes('حصالة') &&
-        !finPiggyRec.includes('البدء بخطوة عملية واحدة صغيرة') &&
-        learnPhoneRec.includes('الهاتف') &&
-        learnPhoneRec.includes('المذاكرة'),
+      !finPiggyRec.includes('البدء بخطوة عملية واحدة صغيرة') &&
+      learnPhoneRec.includes('الهاتف') &&
+      learnPhoneRec.includes('المذاكرة'),
       `Golden recommendation must synthesize specific agreed action and reject generic filler; fin="${finPiggyRec}", learn="${learnPhoneRec}"`
     );
 
@@ -2789,7 +2796,7 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       /(?:1\.|2\.)/.test(round4SuggestionsReply.reply) &&
-        /(?:أقيّم|اقيم).*\d+(?:\.\d+)?\s*\/\s*10/.test(round4SuggestionsReply.reply),
+      /(?:أقيّم|اقيم).*\d+(?:\.\d+)?\s*\/\s*10/.test(round4SuggestionsReply.reply),
       `Round 4 "لا أدري أعطيني اقتراحاتك" must provide 2-3 numbered suggestions BEFORE interim rating; got: ${round4SuggestionsReply.reply}`
     );
 
@@ -2799,18 +2806,18 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       !/\b(financial|health|career|Keystone|Deep\s+Study)\b/i.test(messyArabic) &&
-        !messyArabic.includes('(المربع (2)') &&
-        !messyArabic.includes('الأسرى') &&
-        !messyArabic.includes('لـ الجانب') &&
-        messyArabic.includes('الجانب المالي والاستقلال') &&
-        messyArabic.includes('الجانب الصحي والبدني') &&
-        messyArabic.includes('الجانب المهني والوظيفي') &&
-        messyArabic.includes('العادات المحورية') &&
-        messyArabic.includes('المذاكرة العميقة') &&
-        messyArabic.includes('المربع 2') &&
-        messyArabic.includes('للجانب الأسري') &&
-        (messyArabic.includes('الأهداف') || messyArabic.includes('أهداف')) &&
-        messyArabic.includes('الاستقرار'),
+      !messyArabic.includes('(المربع (2)') &&
+      !messyArabic.includes('الأسرى') &&
+      !messyArabic.includes('لـ الجانب') &&
+      messyArabic.includes('الجانب المالي والاستقلال') &&
+      messyArabic.includes('الجانب الصحي والبدني') &&
+      messyArabic.includes('الجانب المهني والوظيفي') &&
+      messyArabic.includes('العادات المحورية') &&
+      messyArabic.includes('المذاكرة العميقة') &&
+      messyArabic.includes('المربع 2') &&
+      messyArabic.includes('للجانب الأسري') &&
+      (messyArabic.includes('الأهداف') || messyArabic.includes('أهداف')) &&
+      messyArabic.includes('الاستقرار'),
       `Arabization & parent/hamza normalization failed: "${messyArabic}"`
     );
 
@@ -2854,9 +2861,9 @@ async function testGoldenRecommendationSynthesis() {
     const serializedReport = JSON.stringify(reconciledModerateReport);
     assert(
       !/\b(career|health|financial|learning|Keystone|Deep\s+Study)\b/i.test(serializedReport) &&
-        !serializedReport.includes('استثناءً مطلقاً') &&
-        !serializedReport.includes('استثنائية مطلقة') &&
-        reconciledModerateReport.criticalBottleneck.domain === 'الجانب الصحي والبدني',
+      !serializedReport.includes('استثناءً مطلقاً') &&
+      !serializedReport.includes('استثنائية مطلقة') &&
+      reconciledModerateReport.criticalBottleneck.domain === 'الجانب الصحي والبدني',
       `Director reconciliation must localize all English keys, avoid 6.5 exaggeration, and align bottleneck to health (4.5); got: ${serializedReport}`
     );
 
@@ -2872,9 +2879,9 @@ async function testGoldenRecommendationSynthesis() {
     });
     assert(
       ascendingPriority.length === 3 &&
-        ascendingPriority[0].score === 4.5 &&
-        ascendingPriority[1].score === 4.8 &&
-        ascendingPriority[2].score === 6.0,
+      ascendingPriority[0].score === 4.5 &&
+      ascendingPriority[1].score === 4.8 &&
+      ascendingPriority[2].score === 6.0,
       `30-day priority domains must sort strictly ascending (4.5 -> 4.8 -> 6.0); got: ${JSON.stringify(ascendingPriority)}`
     );
 
@@ -2889,8 +2896,8 @@ async function testGoldenRecommendationSynthesis() {
     const reconciledIso = processAndReconcileScore(4.8, 4.8, soloWalkMsg, isolationHistory, srvIsoScore);
     assert(
       srvIsoScore >= 2.5 && srvIsoScore <= 3.8 &&
-        cliIsoScore >= 2.5 && cliIsoScore <= 3.8 &&
-        reconciledIso >= 2.5 && reconciledIso <= 3.8,
+      cliIsoScore >= 2.5 && cliIsoScore <= 3.8 &&
+      reconciledIso >= 2.5 && reconciledIso <= 3.8,
       `Acute isolation + solo walk must score fairly in [2.5, 3.8] (not ~4.8); got server=${srvIsoScore}, client=${cliIsoScore}, reconciled=${reconciledIso}`
     );
 
@@ -2944,16 +2951,16 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       localIsoReply.score >= 2.5 && localIsoReply.score <= 3.8 &&
-        clientIsoReply.score >= 2.5 && clientIsoReply.score <= 3.8 &&
-        localIsoAdopt.score >= 2.5 && localIsoAdopt.score <= 3.8 &&
-        localIsoAdopt.station_completed === true,
+      clientIsoReply.score >= 2.5 && clientIsoReply.score <= 3.8 &&
+      localIsoAdopt.score >= 2.5 && localIsoAdopt.score <= 3.8 &&
+      localIsoAdopt.station_completed === true,
       `Local & client Personal replies under acute isolation must keep score in [2.5, 3.8]; got local=${localIsoReply.score}, client=${clientIsoReply.score}, adopt=${localIsoAdopt.score}`
     );
     assert(
       !/التقصير\s*تجاه\s*معاليك|تأنيب\s*ضمير|تخصص\s*وقت[اً ]*للجلوس\s*مع\s*أسرتك/.test(localIsoReply.reply) &&
-        !/التقصير\s*تجاه\s*معاليك|تأنيب\s*ضمير|تخصص\s*وقت[اً ]*للجلوس\s*مع\s*أسرتك/.test(clientIsoReply.reply) &&
-        isQuestionContradictingHistory('هل تستطيع أخذ 20 دقيقة دون أن تشعر بالتقصير تجاه معاليك؟', isolationHistory) &&
-        isQuestionContradictingHistory('متى يمكنك الجلوس مع أسرتك للتفاهم معهم؟', isolationHistory),
+      !/التقصير\s*تجاه\s*معاليك|تأنيب\s*ضمير|تخصص\s*وقت[اً ]*للجلوس\s*مع\s*أسرتك/.test(clientIsoReply.reply) &&
+      isQuestionContradictingHistory('هل تستطيع أخذ 20 دقيقة دون أن تشعر بالتقصير تجاه معاليك؟', isolationHistory) &&
+      isQuestionContradictingHistory('متى يمكنك الجلوس مع أسرتك للتفاهم معهم؟', isolationHistory),
       `Personal station & contradiction detector must block guilt/dependents-sitting assumptions under acute isolation; got local="${localIsoReply.reply}"`
     );
 
@@ -2966,14 +2973,14 @@ async function testGoldenRecommendationSynthesis() {
     ];
     assert(
       isDiagnosticTopicAlreadyAnswered('هل لديك صندوق طوارئ يغطي مصاريفك؟', highFinHistory) &&
-        isQuestionContradictingHistory(
-          'بناءً على التزاماتك الحالية، كم يتبقى لك فعلياً من الراتب بعد المصاريف الحتمية، وهل يكفي لتأمين احتياطي طوارئ أم تتأكل السيولة قبل نهاية الشهر؟',
-          highFinHistory
-        ) &&
-        isQuestionContradictingHistory(
-          'أولاً وقبل الحديث عن أتمتة الادخار: هل يقتطع من راتبك الشهري أي أقساط قروض شخصية أو بطاقات ائتمانية؟',
-          highFinHistory
-        ),
+      isQuestionContradictingHistory(
+        'بناءً على التزاماتك الحالية، كم يتبقى لك فعلياً من الراتب بعد المصاريف الحتمية، وهل يكفي لتأمين احتياطي طوارئ أم تتأكل السيولة قبل نهاية الشهر؟',
+        highFinHistory
+      ) &&
+      isQuestionContradictingHistory(
+        'أولاً وقبل الحديث عن أتمتة الادخار: هل يقتطع من راتبك الشهري أي أقساط قروض شخصية أو بطاقات ائتمانية؟',
+        highFinHistory
+      ),
       'Must block repeating emergency fund and debt diagnostic questions once answered by user'
     );
 
@@ -3034,12 +3041,12 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       !highFinGolden.includes('تعالج التحدي') &&
-        highFinGolden.includes('4') &&
-        highFinGolden.includes('6') &&
-        /استثمار\s*طويل/i.test(highFinGolden) &&
-        !highFinAdopt.advice.includes('تعالج التحدي') &&
-        /استثمار\s*طويل/i.test(highFinAdopt.advice) &&
-        /6\s*أشهر/.test(highFinSummary.goldenRecommendation),
+      highFinGolden.includes('4') &&
+      highFinGolden.includes('6') &&
+      /استثمار\s*طويل/i.test(highFinGolden) &&
+      !highFinAdopt.advice.includes('تعالج التحدي') &&
+      /استثمار\s*طويل/i.test(highFinAdopt.advice) &&
+      /6\s*أشهر/.test(highFinSummary.goldenRecommendation),
       `High-score (>=7.5) golden recommendation must reflect 4->6 months & surplus investment, never generic challenge filler; got golden="${highFinGolden}", adopt="${highFinAdopt.advice}", summary="${highFinSummary.goldenRecommendation}"`
     );
 
@@ -3054,12 +3061,12 @@ async function testGoldenRecommendationSynthesis() {
     const cliFluctPersonal = calculateSemanticScore(fluctuatingPersonalMsg, []);
     assert(
       srvStablePersonal >= 7.5 && srvStablePersonal <= 9.0 &&
-        cliStablePersonal >= 7.5 && cliStablePersonal <= 9.0,
+      cliStablePersonal >= 7.5 && cliStablePersonal <= 9.0,
       `Positive & stable Personal answers must score in [7.5, 9.0]; got server=${srvStablePersonal}, client=${cliStablePersonal}`
     );
     assert(
       srvFluctPersonal >= 4.0 && srvFluctPersonal <= 5.5 &&
-        cliFluctPersonal >= 4.0 && cliFluctPersonal <= 5.5,
+      cliFluctPersonal >= 4.0 && cliFluctPersonal <= 5.5,
       `Fluctuating/exhausted Personal answers must score in [4.0, 5.5]; got server=${srvFluctPersonal}, client=${cliFluctPersonal}`
     );
 
@@ -3096,7 +3103,7 @@ async function testGoldenRecommendationSynthesis() {
     );
     assert(
       freshPersonalPositiveTurn.score >= 7.5 && freshPersonalPositiveTurn.score <= 9.0 &&
-        freshPersonalFluctTurn.score >= 4.0 && freshPersonalFluctTurn.score <= 5.5,
+      freshPersonalFluctTurn.score >= 4.0 && freshPersonalFluctTurn.score <= 5.5,
       `Fresh consultation must ignore stale prior score (4.5 or 8.5) and score strictly from current session messages; got positive=${freshPersonalPositiveTurn.score}, fluctuating=${freshPersonalFluctTurn.score}`
     );
 
@@ -3133,8 +3140,8 @@ async function testGoldenRecommendationSynthesis() {
       !/الخوف\s*والارتباك\s*وسط\s*التجمعات|تكوين\s*الصداقات|نوادي\s*قراءة|لست\s*منبوذاً|الانضمام\s*لمجتمع/.test(
         socialOverloadR1.reply
       ) &&
-        !/الانضمام\s*لمجتمع|نواد/.test(socialOverloadClient.reply) &&
-        /(?:طاقة|الالتزامات|ذنب|ضغط\s*العمل|الأسرة)/.test(socialOverloadR1.reply),
+      !/الانضمام\s*لمجتمع|نواد/.test(socialOverloadClient.reply) &&
+      /(?:طاقة|الالتزامات|ذنب|ضغط\s*العمل|الأسرة)/.test(socialOverloadR1.reply),
       `Social advisor must avoid canned gathering-fear/clubs templates and focus on social energy & obligations without guilt; got="${socialOverloadR1.reply}"`
     );
 
@@ -3176,12 +3183,12 @@ async function testGoldenRecommendationSynthesis() {
       );
       assert(
         msg3Local.station_completed === false &&
-          msg3Local.score >= 1 &&
-          /(?:\/10|من 10)/.test(msg3Local.reply) &&
-          /اعتماد/.test(msg3Local.reply) &&
-          msg3Client.station_completed === false &&
-          /(?:\/10|من 10)/.test(msg3Client.reply) &&
-          /اعتماد/.test(msg3Client.reply),
+        msg3Local.score >= 1 &&
+        /(?:\/10|من 10)/.test(msg3Local.reply) &&
+        /اعتماد/.test(msg3Local.reply) &&
+        msg3Client.station_completed === false &&
+        /(?:\/10|من 10)/.test(msg3Client.reply) &&
+        /اعتماد/.test(msg3Client.reply),
         `Station "${dom}" MUST offer provisional (X/10) + adopt/continue automatically after user's 3rd message (stationTurnCount=2); got local="${msg3Local.reply}", client="${msg3Client.reply}"`
       );
     }
@@ -3201,6 +3208,116 @@ async function testGoldenRecommendationSynthesis() {
       name: 'Golden Recommendation Advisor Synthesis & Zero Verbatim Copy',
       passed: false,
       durationMs: Date.now() - goldenStart,
+      message: err.message,
+    });
+  }
+}
+
+async function testStep2GuardrailsAndSessionIsolation() {
+  const s2Start = Date.now();
+  try {
+    assert(calculateUnifiedScore({ consistency: 10, energyImpact: 10, controlBoundaries: 10 }) === 9.5, 'Upper clamp 9.5');
+    assert(calculateUnifiedScore({ consistency: 0, energyImpact: 0, controlBoundaries: 0 }) === 1.5, 'Lower clamp 1.5');
+    assert(calculateUnifiedScore({ consistency: 8, energyImpact: 6, controlBoundaries: 7 }) === 7.0, 'Weighted 0.35/0.35/0.30');
+
+    assert(parseUnifiedMetricsPayload({ consistency: 7, energyImpact: 8, controlBoundaries: 12 }) === null, 'Out-of-range schema rejected');
+    assert(parseUnifiedMetricsPayload({ consistency: 7, energyImpact: 'abc', controlBoundaries: 6 }) === null, 'Non-numeric schema rejected');
+
+    let retryCount = 0;
+    const recovered = await evaluateMetricsPayloadWithRetry(async (attempt) => {
+      retryCount++;
+      return attempt === 0
+        ? '{not-valid-json'
+        : JSON.stringify({ consistency: 8, energyImpact: 8, controlBoundaries: 7 });
+    });
+    assert(retryCount === 2 && recovered.status === 'ok' && recovered.score === 7.5, 'Retry-once recovers valid JSON score 7.5');
+
+    let doubleFailCount = 0;
+    const failedTwice = await evaluateMetricsPayloadWithRetry(async () => {
+      doubleFailCount++;
+      return JSON.stringify({ consistency: 99, energyImpact: null });
+    });
+    assert(
+      doubleFailCount === 2 &&
+        failedTwice.status === 'invalid_json' &&
+        failedTwice.fallbackMessage === EVALUATION_CLARIFICATION_FALLBACK_AR,
+      'Double schema failure returns polite Arabic fallback instead of random score'
+    );
+
+    assert(isEmptyOrMeaninglessInput('') === true, 'Empty string detected');
+    assert(isEmptyOrMeaninglessInput('   ') === true, 'Whitespace detected');
+    assert(isEmptyOrMeaninglessInput('...') === true, 'Ellipsis detected');
+    assert(isEmptyOrMeaninglessInput('asdfgh') === true, 'Latin gibberish detected');
+    assert(isEmptyOrMeaninglessInput('شسيشسي') === true, 'Arabic keyboard mash detected');
+    assert(isEmptyOrMeaninglessInput('الحمد لله وضعي مستقر') === false, 'Valid Arabic kept');
+    assert(isEmptyOrMeaninglessInput('متعب') === false, 'Short valid Arabic kept');
+    assert(isEmptyOrMeaninglessInput('8/10') === false, 'Explicit score kept');
+
+    const personalAdv = ADVISORS_LIST.find((a) => a.id === 'personal')!;
+    const guardrailTurn = generateLocalAgentResponse(
+      'personal',
+      '...',
+      'سعود',
+      personalAdv,
+      4.5,
+      true,
+      5,
+      undefined,
+      'weekly_checkin',
+      1,
+      { name: 'سعود', employmentStatus: 'موظف', ageGroup: '30 - 39 سنة', hasDependents: 'نعم' },
+      [],
+      [],
+      false,
+      ['أشعر بضغط بسيط']
+    );
+    assert(
+      guardrailTurn.skipTurnIncrement === true && guardrailTurn.score === 0 && guardrailTurn.station_completed === false,
+      'Meaningless message triggers guardrail without advancing turn or scoring'
+    );
+
+    const freshPersonalMsgs = [
+      'أخصص كل يوم وقتاً ثابتاً للراحة والهدوء',
+      'أبتعد عن الشاشات في المساء لأحافظ على صفاء ذهني',
+      'أشعر باستقرار نفسي وحضور أعمق مع أسرتي ولله الحمد',
+    ];
+    const isolatedTurn3 = generateLocalAgentResponse(
+      'personal',
+      freshPersonalMsgs[2],
+      'سعود',
+      personalAdv,
+      4.5,
+      true,
+      5,
+      undefined,
+      'weekly_checkin',
+      2,
+      { name: 'سعود', employmentStatus: 'موظف', ageGroup: '30 - 39 سنة', hasDependents: 'نعم' },
+      [],
+      [],
+      false,
+      freshPersonalMsgs.slice(0, 2)
+    );
+    assert(
+      isolatedTurn3.score >= 7.5 && isolatedTurn3.score <= 9.0,
+      `Isolated Turn 3 personal score must be >=7.5 instead of stale 4.5, got ${isolatedTurn3.score}`
+    );
+
+    results.push({
+      suite: 'Step 2 Guardrails',
+      domain: 'All 8',
+      name: 'JSON Schema Retry, Empty Guardrail & Isolated Scoring',
+      passed: true,
+      durationMs: Date.now() - s2Start,
+      details: `Retry recovered=${recovered.status === 'ok' ? recovered.score : 'none'}, Personal Turn3 isolated score=${isolatedTurn3.score}`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite: 'Step 2 Guardrails',
+      domain: 'All 8',
+      name: 'JSON Schema Retry, Empty Guardrail & Isolated Scoring',
+      passed: false,
+      durationMs: Date.now() - s2Start,
       message: err.message,
     });
   }
@@ -3263,6 +3380,7 @@ async function main() {
   await testEisenhowerMatrixOperations();
   await testDemoModeStateAndIsolation();
   await testGoldenRecommendationSynthesis();
+  await testStep2GuardrailsAndSessionIsolation();
 
   if (isLiveMode) {
     await testLiveGeminiScenarios();

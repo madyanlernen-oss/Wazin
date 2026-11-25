@@ -19,6 +19,8 @@ import {
   extractExpenseCategoryFromAnswer,
   pickNextUnaskedQuestion,
   stripRepeatedOpeningGreeting,
+  isEmptyOrMeaninglessInput,
+  MEANINGLESS_INPUT_PROMPT_AR,
 } from '../../src/utils/dialogueDeduplication';
 import {
   generateRealisticAreaGoals,
@@ -34,7 +36,7 @@ import {
 } from '../middleware/validation';
 import {
   calculateUnifiedScore,
-  parseUnifiedMetricsPayload,
+  evaluateMetricsPayloadWithRetry,
   extractUnifiedMetricsFromSession,
   formatUnifiedScoreConfirmationMessage,
   UnifiedScoringMetrics,
@@ -88,8 +90,10 @@ async function evaluateSessionMetricsWithTool(params: {
   sessionUserMessages: string[];
   abortSignal: AbortSignal;
 }): Promise<{
-  score: number;
-  metrics: UnifiedScoringMetrics;
+  score: number | null;
+  metrics: UnifiedScoringMetrics | null;
+  needsClarification?: boolean;
+  fallbackMessage?: string;
   source: 'gemini-eval' | 'groq-eval' | 'local-eval';
 }> {
   const { agentKey, stationTitle, sessionUserMessages, abortSignal } = params;
@@ -104,6 +108,15 @@ async function evaluateSessionMetricsWithTool(params: {
   }
 
   const isAcuteIso = hasAcuteIsolationOrRejection(sessionUserMessages);
+  const calibrate = (validMetrics: UnifiedScoringMetrics): UnifiedScoringMetrics =>
+    isAcuteIso
+      ? {
+          consistency: Math.min(3.5, validMetrics.consistency),
+          energyImpact: Math.min(3.0, validMetrics.energyImpact),
+          controlBoundaries: Math.min(3.5, validMetrics.controlBoundaries),
+        }
+      : validMetrics;
+
   const evalPrompt = `أنت أداة التقييم الموحدة الموضوعية في منصة وزان.
 مهمتك استخراج 3 مؤشرات رقمية دقيقة فقط (من 0 إلى 10) بصيغة JSON صارمة، استناداً حصرياً إلى رسائل المستخدم في الجلسة الحالية ضمن محطة "${stationTitle}" (دون وراثة أي درجة سابقة ودون تخمين).
 
@@ -122,13 +135,19 @@ async function evaluateSessionMetricsWithTool(params: {
 ${sessionUserMessages.map((m, idx) => `${idx + 1}. "${m}"`).join('\n')}`;
 
   if (GEMINI_API_KEY && !abortSignal.aborted) {
-    try {
-      const model = GEMINI_MODEL || 'gemini-3.5-flash-lite';
+    const model = GEMINI_MODEL || 'gemini-3.5-flash-lite';
+    const geminiRetryResult = await evaluateMetricsPayloadWithRetry(async (attempt) => {
+      if (abortSignal.aborted) return null;
       let timeoutHandle: any;
+      const attemptPrompt =
+        attempt === 0
+          ? evalPrompt
+          : `${evalPrompt}\n\nتنبيه: أخرج كائن JSON صالحاً فقط يحتوي الحقول consistency و energyImpact و controlBoundaries بأرقام بين 0 و 10 بدون أي نص إضافي.`;
       const apiPromise = ai.models.generateContent({
         model,
-        contents: [{ role: 'user', parts: [{ text: evalPrompt }] }],
+        contents: [{ role: 'user', parts: [{ text: attemptPrompt }] }],
         config: {
+          temperature: 0.1,
           responseMimeType: 'application/json',
           responseSchema: {
             type: Type.OBJECT,
@@ -144,33 +163,44 @@ ${sessionUserMessages.map((m, idx) => `${idx + 1}. "${m}"`).join('\n')}`;
       const timeoutPromise = new Promise<never>((_, reject) => {
         timeoutHandle = setTimeout(() => reject(new Error('Evaluation tool Gemini timeout')), 4500);
       });
-      const res = await Promise.race([apiPromise, timeoutPromise]);
-      clearTimeout(timeoutHandle);
-      const parsed = extractCleanJson(res?.text || '{}');
-      const validMetrics = parseUnifiedMetricsPayload(parsed);
-      if (validMetrics) {
-        const calibrated = isAcuteIso
-          ? {
-              consistency: Math.min(3.5, validMetrics.consistency),
-              energyImpact: Math.min(3.0, validMetrics.energyImpact),
-              controlBoundaries: Math.min(3.5, validMetrics.controlBoundaries),
-            }
-          : validMetrics;
-        return {
-          score: calculateUnifiedScore(calibrated),
-          metrics: calibrated,
-          source: 'gemini-eval',
-        };
+      try {
+        const res = await Promise.race([apiPromise, timeoutPromise]);
+        clearTimeout(timeoutHandle);
+        return res?.text || '';
+      } catch (err: any) {
+        clearTimeout(timeoutHandle);
+        console.warn('[Unified Scorer] تعذر استخراج المؤشرات عبر Gemini:', err?.message || err);
+        throw err;
       }
-    } catch (err: any) {
-      console.warn('[Unified Scorer] تعذر استخراج المؤشرات عبر Gemini، التحقق من Groq/المحلي:', err?.message || err);
+    }, calibrate);
+
+    if (geminiRetryResult.status === 'ok') {
+      return {
+        score: geminiRetryResult.score,
+        metrics: geminiRetryResult.metrics,
+        source: 'gemini-eval',
+      };
+    }
+    if (geminiRetryResult.status === 'invalid_json') {
+      return {
+        score: null,
+        metrics: null,
+        needsClarification: true,
+        fallbackMessage: geminiRetryResult.fallbackMessage,
+        source: 'gemini-eval',
+      };
     }
   }
 
   if (GROQ_API_KEY && !abortSignal.aborted) {
-    try {
-      const groqModel = GROQ_MODEL || 'llama-3.3-70b-versatile';
+    const groqModel = GROQ_MODEL || 'llama-3.3-70b-versatile';
+    const groqRetryResult = await evaluateMetricsPayloadWithRetry(async (attempt) => {
+      if (abortSignal.aborted) return null;
       let groqTimeout: any;
+      const attemptPrompt =
+        attempt === 0
+          ? evalPrompt
+          : `${evalPrompt}\n\nReturn strictly valid JSON with numeric fields consistency, energyImpact, and controlBoundaries (0-10).`;
       const groqCall = fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         signal: abortSignal,
@@ -185,7 +215,7 @@ ${sessionUserMessages.map((m, idx) => `${idx + 1}. "${m}"`).join('\n')}`;
               role: 'system',
               content: 'Output valid JSON ONLY with keys consistency, energyImpact, controlBoundaries (numbers 0-10).',
             },
-            { role: 'user', content: evalPrompt },
+            { role: 'user', content: attemptPrompt },
           ],
           response_format: { type: 'json_object' },
           temperature: 0.1,
@@ -194,29 +224,36 @@ ${sessionUserMessages.map((m, idx) => `${idx + 1}. "${m}"`).join('\n')}`;
       const groqTimeoutPromise = new Promise<never>((_, reject) => {
         groqTimeout = setTimeout(() => reject(new Error('Evaluation tool Groq timeout')), 3500);
       });
-      const groqRes = await Promise.race([groqCall, groqTimeoutPromise]);
-      clearTimeout(groqTimeout);
-      if (groqRes.ok) {
-        const groqData = await groqRes.json();
-        const parsed = extractCleanJson(groqData?.choices?.[0]?.message?.content || '{}');
-        const validMetrics = parseUnifiedMetricsPayload(parsed);
-        if (validMetrics) {
-          const calibrated = isAcuteIso
-            ? {
-                consistency: Math.min(3.5, validMetrics.consistency),
-                energyImpact: Math.min(3.0, validMetrics.energyImpact),
-                controlBoundaries: Math.min(3.5, validMetrics.controlBoundaries),
-              }
-            : validMetrics;
-          return {
-            score: calculateUnifiedScore(calibrated),
-            metrics: calibrated,
-            source: 'groq-eval',
-          };
+      try {
+        const groqRes = await Promise.race([groqCall, groqTimeoutPromise]);
+        clearTimeout(groqTimeout);
+        if (!groqRes.ok) {
+          throw new Error(`Groq eval HTTP ${groqRes.status}`);
         }
+        const groqData = await groqRes.json();
+        return groqData?.choices?.[0]?.message?.content || '';
+      } catch (err: any) {
+        clearTimeout(groqTimeout);
+        console.warn('[Unified Scorer] تعذر استخراج المؤشرات عبر Groq:', err?.message || err);
+        throw err;
       }
-    } catch (err: any) {
-      console.warn('[Unified Scorer] تعذر استخراج المؤشرات عبر Groq، استخدام الاستخلاص المحلي:', err?.message || err);
+    }, calibrate);
+
+    if (groqRetryResult.status === 'ok') {
+      return {
+        score: groqRetryResult.score,
+        metrics: groqRetryResult.metrics,
+        source: 'groq-eval',
+      };
+    }
+    if (groqRetryResult.status === 'invalid_json') {
+      return {
+        score: null,
+        metrics: null,
+        needsClarification: true,
+        fallbackMessage: groqRetryResult.fallbackMessage,
+        source: 'groq-eval',
+      };
     }
   }
 
@@ -263,10 +300,10 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     isEditedOrResent = false,
   } = req.body;
 
-  // 1) التحقق من صحة حقل message (نص بطول بين 1 و 2000 حرف)
-  if (typeof message !== 'string' || message.trim().length < 1 || message.length > 2000) {
+  // 1) التحقق من صحة حقل message (نص لا يتجاوز 2000 حرف، وتمرير الفارغ أو غير المفهوم لطبقة حماية المدخلات)
+  if (typeof message !== 'string' || message.length > 2000) {
     return res.status(400).json({
-      error: 'حقل الرسالة (message) مطلوب ويجب أن يكون نصاً بطول يتراوح بين 1 و2000 حرف.',
+      error: 'حقل الرسالة (message) مطلوب ويجب أن يكون نصاً لا يتجاوز 2000 حرف.',
     });
   }
 
@@ -394,6 +431,48 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
         error: 'حقل حالة العمل (employmentStatus) إلزامي في سياق المستفيد لتخصيص الاستشارة.',
       });
     }
+  }
+
+  // حماية المدخلات الفارغة أو غير المفهومة (مثل "..." أو حروف عشوائية) قبل احتساب الجولة أو استدعاء النموذج
+  if (isEmptyOrMeaninglessInput(message)) {
+    const earlyAgentKey =
+      rawAgentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'));
+    const earlyMeta = AGENT_INFO_MAP[earlyAgentKey] || {
+      name: 'مستشار وزان',
+      role: 'مستشار الحياة',
+    };
+    const earlyAdvisorName =
+      advisor && typeof advisor === 'object' && advisor.name ? advisor.name : earlyMeta.name;
+    const prevChips = Array.isArray(req.body.previousSuggestions)
+      ? req.body.previousSuggestions
+      : [];
+    return res.json({
+      agent_name: earlyAdvisorName,
+      reasoning:
+        'تم تفعيل حماية جودة المدخلات: الرسالة فارغة أو غير واضحة، لذا لم تُحتسب كجولة جديدة ولم يُصدر أي تقييم.',
+      score: null,
+      summary: 'طلب توضيح لطيف من المستفيد دون تقدم في عداد الجولات.',
+      advice: 'شاركنا جملة قصيرة وواضحة تصف واقعك الحالي في هذا الجانب.',
+      reply: MEANINGLESS_INPUT_PROMPT_AR,
+      actionSteps: [],
+      reflectionQuestion: 'ما الذي تود مشاركته بوضوح حول واقعك في هذا الجانب؟',
+      station_completed: false,
+      strengths: [],
+      challenges: [],
+      suggestedReplies: generateDynamicQuickSuggestions({
+        domainId: earlyAgentKey,
+        roundNumber: Math.max(1, (typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 1),
+        lastUserMessage: '',
+        advisorReply: MEANINGLESS_INPUT_PROMPT_AR,
+        userProfile: effectiveUserProfile,
+        previousChips: prevChips,
+        userHistory: [],
+      }),
+      skipTurnIncrement: true,
+      turnIncremented: false,
+      needsClarification: true,
+      source: 'input-guardrail',
+    });
   }
 
   const parsedCtx = parseUserContext({ ...effectiveUserProfile, employmentStatus: workStatus }, userName);
@@ -565,14 +644,18 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     .filter(
       (t) =>
         t.length > 0 &&
+        !isEmptyOrMeaninglessInput(t) &&
         !/^(?:اعتمد\s*التقييم(?:\s*بدرجة.*)?|نعم\s*اعتمد|اعتماد|نكتفي|خلاص|انتهينا|أرغب في الاستمرار|حسناً?\s*نكمل)/i.test(
           t
         )
-    );
+    )
+    .slice(-3);
 
   const evalToolPromise: Promise<{
-    score: number;
-    metrics: UnifiedScoringMetrics;
+    score: number | null;
+    metrics: UnifiedScoringMetrics | null;
+    needsClarification?: boolean;
+    fallbackMessage?: string;
     source: 'gemini-eval' | 'groq-eval' | 'local-eval' | 'adopted-offered';
   }> | null = isThirdOrLaterTurn
     ? isAdoptionIntent && offeredScoreFromLastAdvisor !== null
@@ -589,6 +672,27 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
         })
     : null;
 
+  // عزل سياق التقييم: منع تسريب أي درجات سابقة أو إجابات المحطة الحالية السابقة إلى موجه الـ LLM أثناء التقييم أو إعادة التقييم
+  const sanitizedAnswersForPrompt: Record<string, any> = {};
+  if (effectiveAnswers && typeof effectiveAnswers === 'object') {
+    for (const [k, v] of Object.entries(effectiveAnswers)) {
+      if (/(?:^|_)(?:score|self_rating)$/i.test(k)) continue;
+      if (isEvaluationMode && (k === agentKey || k.startsWith(`${agentKey}_`))) continue;
+      if (v && typeof v === 'object' && !Array.isArray(v)) {
+        const cleanedObj: Record<string, any> = {};
+        for (const [subK, subV] of Object.entries(v)) {
+          if (/(?:^|_)(?:score|self_rating|rating)$/i.test(subK)) continue;
+          cleanedObj[subK] = subV;
+        }
+        if (Object.keys(cleanedObj).length > 0) {
+          sanitizedAnswersForPrompt[k] = cleanedObj;
+        }
+      } else {
+        sanitizedAnswersForPrompt[k] = v;
+      }
+    }
+  }
+
   // سادساً: سياق المحطات - استخراج ملخص مقتضب (سطر أو سطران) لأهم ما ذكره المستخدم في المحطات السابقة
   const pastStationsSnippets: string[] = [];
   if (effectiveAnswers && typeof effectiveAnswers === 'object') {
@@ -604,7 +708,13 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     };
 
     for (const [key, val] of Object.entries(effectiveAnswers)) {
-      if (key === agentKey) continue;
+      if (
+        key === agentKey ||
+        key.startsWith(`${agentKey}_`) ||
+        /(?:^|_)(?:score|self_rating)$/i.test(key)
+      ) {
+        continue;
+      }
       const label = areaNames[key] || '';
       let userSnippet = '';
       if (typeof val === 'string' && val.trim().length > 5) {
@@ -982,10 +1092,10 @@ ${parsedCtx.ageGroup ? `- الفئة العمرية: ${parsedCtx.ageGroup}` : ''
 ${parsedCtx.incomeSource ? `- مصدر الدخل: ${parsedCtx.incomeSource}` : ''}
 ${parsedCtx.incomeStability ? `- طبيعة الدخل: ${parsedCtx.incomeStability}` : ''}
 ${parsedCtx.currentFocus ? `- التركيز الحالي: ${parsedCtx.currentFocus}` : ''}
-${isEightDomain ? '' : `- الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}`}
+${isEightDomain || isEvaluationMode ? '' : `- الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}`}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
-- إجابات التقييم: ${JSON.stringify(effectiveAnswers)}
+${Object.keys(sanitizedAnswersForPrompt).length > 0 ? `- إجابات مساعدة من سياق المستفيد (دون درجات): ${JSON.stringify(sanitizedAnswersForPrompt)}` : ''}
 ${pastStationsContextText}${stationSummaryContextText}
 [تذكير ختامي ملزم حول عدد التبادلات والمحطة]:
 - عدد التبادلات الحالية التي تمت في هذه المحطة (stationTurnCount): ${stationTurnCount}.
@@ -1395,6 +1505,18 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       );
     } else if (isThirdOrLaterTurn && evalToolPromise) {
       const evalOutcome = await evalToolPromise;
+      if (evalOutcome.needsClarification || evalOutcome.score === null) {
+        parsed.score = null;
+        parsed.station_completed = false;
+        parsed.needsClarification = true;
+        parsed.turnIncremented = false;
+        parsed.evaluationSource = evalOutcome.source;
+        parsed.reply = evalOutcome.fallbackMessage || MEANINGLESS_INPUT_PROMPT_AR;
+        parsed.strengths = [];
+        parsed.challenges = [];
+        parsed.source = 'gemini';
+        return res.json(parsed);
+      }
       parsed.score = evalOutcome.score;
       parsed.evaluationMetrics = evalOutcome.metrics;
       parsed.evaluationSource = evalOutcome.source;
@@ -1666,6 +1788,18 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
           );
         } else if (isThirdOrLaterTurn && evalToolPromise) {
           const evalOutcome = await evalToolPromise;
+          if (evalOutcome.needsClarification || evalOutcome.score === null) {
+            parsed.score = null;
+            parsed.station_completed = false;
+            parsed.needsClarification = true;
+            parsed.turnIncremented = false;
+            parsed.evaluationSource = evalOutcome.source;
+            parsed.reply = evalOutcome.fallbackMessage || MEANINGLESS_INPUT_PROMPT_AR;
+            parsed.strengths = [];
+            parsed.challenges = [];
+            parsed.source = 'groq';
+            return res.json(parsed);
+          }
           parsed.score = evalOutcome.score;
           parsed.evaluationMetrics = evalOutcome.metrics;
           parsed.evaluationSource = evalOutcome.source;
@@ -1764,7 +1898,7 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
       Boolean(isEditedOrResent),
       historyUserOnlyTexts
     );
-    if (isEarlyDialogueTurn) {
+    if (isEarlyDialogueTurn || (localFallback as any).skipTurnIncrement) {
       (localFallback as any).score = null;
     } else if (isAdoptionIntent && offeredScoreFromLastAdvisor !== null) {
       (localFallback as any).score = offeredScoreFromLastAdvisor;

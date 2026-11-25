@@ -10,6 +10,10 @@ import {
 import { parseUserContext, getDomainContextConfig } from '../utils/contextPersonalization';
 import { generateDynamicQuickSuggestions } from '../utils/dynamicSuggestions';
 import {
+  isEmptyOrMeaninglessInput,
+  MEANINGLESS_INPUT_PROMPT_AR,
+} from '../utils/dialogueDeduplication';
+import {
   generateRealisticAreaGoals,
   extractUserDialogueTextsForArea,
   synthesizeGoldenRecommendation,
@@ -305,15 +309,10 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     const icon = iconByArea[advisor.id] || '🌿';
 
     const openingQuestion = domainCtx.openingQuestion || consult?.title;
-    const existingScoreRaw = Number(answers?.[`${advisor.id}_score`]);
-    const hasRecordedScore = Number.isFinite(existingScoreRaw) && existingScoreRaw >= 1 && existingScoreRaw <= 10;
-    const scoreContextLine = hasRecordedScore
-      ? `\n📊 التقييم المسجل حالياً لهذا الجانب: (${existingScoreRaw.toFixed(1)} من 10).`
-      : '';
     const text = `أهلاً بك يا ${userDisplayName} في محطة ${advisor.title} ${icon}
 
 أنا **${advisor.name}**، ${advisor.role}.
-${domainCtx.contextIntro}${scoreContextLine}
+${domainCtx.contextIntro}
 
 📌 **سؤال الاستشارة والتشخيص (المحطة ${stationNum} من 8):**
 ${openingQuestion}
@@ -395,14 +394,17 @@ ${openingQuestion}
     if (isNewSession) {
       prevSessionIdRef.current = assessmentSessionId;
       resetToFirstStation();
-      return;
     }
-    if (completedAdvisors.length === 0) {
-      resetToFirstStation();
-    }
-  }, [completedAdvisors.length, assessmentSessionId]);
+  }, [assessmentSessionId]);
 
-  // تحديث رسائل الافتتاح في كافة المحطات التي لم تبدأ فيها المحادثة بعد عند اكتمال أو تعديل سياق المستفيد أو الدرجات
+  useEffect(() => {
+    const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
+    if (idx >= 0) {
+      setCurrentAdvisorIndex(idx);
+    }
+  }, [initialAdvisorId]);
+
+  // تحديث رسائل الافتتاح في كافة المحطات التي لم تبدأ فيها المحادثة بعد عند اكتمال أو تعديل سياق المستفيد
   useEffect(() => {
     setChatMessages((prev) => {
       let changed = false;
@@ -429,7 +431,6 @@ ${openingQuestion}
     userProfile?.incomeStability,
     userProfile?.ageGroup,
     userProfile?.currentFocus,
-    answers?.[`${currentAdvisor.id}_score`],
   ]);
 
   // 1) Initialize welcoming message for station
@@ -469,6 +470,11 @@ ${openingQuestion}
     lastSentAdvisorIdRef.current = '';
     setDraftsByAdvisor((prev) => ({ ...prev, [advisorKey]: '' }));
     setIsEditResendByAdvisor((prev) => ({ ...prev, [advisorKey]: false }));
+    setDismissedChoiceTurns((prev) => {
+      const copy = { ...prev };
+      delete copy[advisorKey];
+      return copy;
+    });
     setStationTurnCount((prev) => ({ ...prev, [advisorKey]: 0 }));
     const openingMsg = getOpeningMessage(currentAdvisor, currentStationConfig, stationNumber);
     setChatMessages((prev) => ({ ...prev, [advisorKey]: [openingMsg] }));
@@ -509,15 +515,62 @@ ${openingQuestion}
 
   // Handle user answer: Only completes when AI advisor explicitly returns station_completed === true!
   const handleSendAnswer = async (textToSend?: string) => {
-    const text = (textToSend || inputText).trim();
-    if (!text || isAdvisorReplying) return;
+    if (isAdvisorReplying) return;
+    const rawText = textToSend !== undefined ? textToSend : inputText;
+    const text = rawText.trim();
+    const advisorKey = currentAdvisor.id;
+    const currentList = chatMessages[advisorKey] || [];
+    const currentTurns = stationTurnCount[advisorKey] || 0;
+
+    // Input Guardrail: empty or meaningless input prompts gently in Arabic without advancing turn counter
+    if (isEmptyOrMeaninglessInput(rawText)) {
+      const userOnlyHist = currentList.filter((m) => m.sender === 'user').map((m) => m.text);
+      const prevSuggs = currentList
+        .filter((m) => m.sender === 'advisor')
+        .slice(-3)
+        .flatMap((m) => m.suggestedReplies || []);
+      const politeMsg: EvaluationChatMessage = {
+        id: `guardrail_${Date.now()}`,
+        sender: 'advisor',
+        text: MEANINGLESS_INPUT_PROMPT_AR,
+        suggestedReplies: generateDynamicQuickSuggestions({
+          domainId: advisorKey,
+          roundNumber: Math.max(1, currentTurns + 1),
+          lastUserMessage: '',
+          advisorReply: MEANINGLESS_INPUT_PROMPT_AR,
+          userProfile,
+          previousChips: prevSuggs,
+          userHistory: userOnlyHist,
+        }),
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        source: 'local-fallback',
+      };
+      setDraftsByAdvisor((prev) => ({ ...prev, [advisorKey]: '' }));
+      setChatMessages((prev) => ({
+        ...prev,
+        [advisorKey]: [
+          ...(prev[advisorKey] || []),
+          ...(text
+            ? [
+                {
+                  id: `usr_${Date.now()}`,
+                  sender: 'user' as const,
+                  text,
+                  timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                },
+              ]
+            : []),
+          politeMsg,
+        ],
+      }));
+      return;
+    }
 
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     const controller = new AbortController();
     abortControllerRef.current = controller;
-    const advisorKey = currentAdvisor.id;
     const reqId = `${advisorKey}_${Date.now()}`;
     currentRequestIdRef.current = reqId;
     lastSentUserTextRef.current = text;
@@ -532,8 +585,6 @@ ${openingQuestion}
     lastSentMsgIdRef.current = userMsg.id;
 
     setDraftsByAdvisor((prev) => ({ ...prev, [advisorKey]: '' }));
-    const currentList = chatMessages[advisorKey] || [];
-    const currentTurns = stationTurnCount[advisorKey] || 0;
     const isEditedOrResent = Boolean(isEditResendByAdvisor[advisorKey]);
     if (isEditedOrResent) {
       setIsEditResendByAdvisor((prev) => ({ ...prev, [advisorKey]: false }));
@@ -628,6 +679,18 @@ ${openingQuestion}
           ...(userProfile?.currentFocus?.trim() ? { currentFocus: userProfile.currentFocus.trim() } : {}),
         };
 
+        const isolatedAnswers: Record<string, any> = {};
+        for (const [k, v] of Object.entries(answers || {})) {
+          if (
+            k === currentAdvisor.id ||
+            k.startsWith(`${currentAdvisor.id}_`) ||
+            /(?:^|_)(?:score|self_rating)$/i.test(k)
+          ) {
+            continue;
+          }
+          isolatedAnswers[k] = v;
+        }
+
         const res = await fetch('/api/gemini/advisor-chat', {
           method: 'POST',
           signal: controller.signal,
@@ -638,8 +701,8 @@ ${openingQuestion}
             userProfile: cleanUserProfile,
             message: text,
             history,
-            answers,
-            userScore: earnedScore,
+            answers: isolatedAnswers,
+            userScore: isExplicitAdoption && pendingOfferedScore !== null ? pendingOfferedScore : 0,
             aiMode,
             isEvaluationSession: true,
             evaluationStep: stationNumber,
@@ -666,9 +729,15 @@ ${openingQuestion}
           replyContent = data.reply || adviceContent || summaryContent || '';
           isStationCompleted = Boolean(data.station_completed);
 
-          if (data.score !== undefined && !isNaN(Number(data.score))) {
+          if (data.skipTurnIncrement || data.needsClarification) {
+            setStationTurnCount((prev) => ({ ...prev, [advisorKey]: currentTurns }));
+            isStationCompleted = false;
+            earnedScore = 0;
+          } else if (data.score !== undefined && data.score !== null && !isNaN(Number(data.score))) {
             const raw = Number(data.score);
             earnedScore = raw > 10 ? Math.round(raw / 10) : raw;
+          } else if (currentTurns < 2) {
+            earnedScore = 0;
           }
           if (Array.isArray(data.strengths) && data.strengths.length > 0) {
             dynamicStrengths = data.strengths;
@@ -1011,7 +1080,14 @@ ${openingQuestion}
   const currentStationTurns = stationTurnCount[currentAdvisor.id] || 0;
   // شريط التقييم المقترح مع زرّي (اعتماد التقييم / الاستمرار في الحوار) يظهر بمجرد أن يطرح المستشار تقييماً أولياً أو ابتداءً من الجولة الرابعة
   const isAdvisorReadyForScoring = !isCompleted && (lastOfferedScore !== null || currentStationTurns >= 4);
-  const effectiveOfferedScore = lastOfferedScore ?? (currentAdvisorScore > 0 ? currentAdvisorScore : (currentAdvisor.id === 'financial' ? 5.5 : 6.0));
+  const effectiveOfferedScore =
+    lastOfferedScore ??
+    (currentStationTurns >= 3
+      ? calculateSemanticScore(
+          activeConversation.filter((m) => m.sender === 'user').slice(-1)[0]?.text || '',
+          activeConversation.filter((m) => m.sender === 'user').map((m) => m.text)
+        )
+      : (currentAdvisor.id === 'financial' ? 5.5 : 6.0));
   const isChoiceTemporarilyDismissed = dismissedChoiceTurns[currentAdvisor.id] === currentStationTurns && lastOfferedScore === null;
 
   const userMessagesInStation = activeConversation.filter((m) => m.sender === 'user').map((m) => m.text);
