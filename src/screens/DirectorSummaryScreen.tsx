@@ -20,6 +20,7 @@ import {
 import { isolateNumbersInText, isolateNumbersForPlainText } from '../components/FormattedChatMessage';
 import {
   reconcileDirectorReportWithScores,
+  formatDirectorReportForArabicPdf,
   prefixLamArabic,
   getDomainArabicName,
 } from '../utils/arabicDomainLabels';
@@ -213,7 +214,10 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
     }
   };
 
-  const localizedReport = report ? reconcileDirectorReportWithScores(report, scores) : null;
+  const pdfReportPayload = report
+    ? formatDirectorReportForArabicPdf(report, scores, userProfile?.name)
+    : null;
+  const localizedReport = (pdfReportPayload?.report || null) as DirectorSummaryReport | null;
 
   const handleCopy = () => {
     if (!localizedReport) return;
@@ -349,7 +353,37 @@ ${localizedReport.criticalBottleneck.title}: ${localizedReport.criticalBottlenec
 
       {/* Main Report Body */}
       {localizedReport ? (
-        <div className="space-y-8">
+        <div className="space-y-8" dir="rtl">
+          {/* Printable Arabic PDF Summary Header & 8-Domain Table (hidden on screen) */}
+          {pdfReportPayload && (
+            <div className="hidden print:block border-b-2 border-slate-300 pb-4 space-y-3 text-right">
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-black text-[#0F172A]">
+                  منصة وزان — تقرير المنسق العام للتوازن الذكي
+                </h2>
+                <span className="text-xs font-bold text-slate-600">
+                  التاريخ: {pdfReportPayload.generatedDateAr}
+                </span>
+              </div>
+              <p className="text-xs font-bold text-[#0F6E6E]">
+                المستفيد: {pdfReportPayload.userName} • المؤشر العام: {localizedReport.balanceIndexLabel}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                {pdfReportPayload.domainScores.map((ds) => (
+                  <div
+                    key={ds.id}
+                    className="p-2 rounded-lg border border-slate-300 text-xs flex items-center justify-between"
+                  >
+                    <span className="font-bold text-[#0F172A]">{ds.label}</span>
+                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-black text-[#0F6E6E]">
+                      {ds.score > 0 ? `${ds.score.toFixed(1)} / 10` : 'غير مقيّم'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Section 1: Strategic Diagnosis */}
           <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs space-y-4 transition-colors">
             <h2 className="text-lg font-black text-[#0F172A] dark:text-[#F1F5F9] flex items-center gap-2">
@@ -383,7 +417,7 @@ ${localizedReport.criticalBottleneck.title}: ${localizedReport.criticalBottlenec
                     key={i}
                     className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800"
                   >
-                    {dom}
+                    {getDomainArabicName(dom)}
                   </span>
                 ))}
               </div>
@@ -451,7 +485,7 @@ ${localizedReport.criticalBottleneck.title}: ${localizedReport.criticalBottlenec
                         key={dIdx}
                         className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-white dark:bg-[#0E1D24] text-[#334155] dark:text-slate-300 border border-[#E2E8F0] dark:border-[#1E343F]"
                       >
-                        {dom}
+                        {getDomainArabicName(dom)}
                       </span>
                     ))}
                   </div>

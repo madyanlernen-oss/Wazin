@@ -16,7 +16,11 @@ import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
 import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
 import { ThirtyDayPlanScreen } from './screens/ThirtyDayPlanScreen';
-import { clearThirtyDayPlanFromStorage } from './utils/thirtyDayPlanGenerator';
+import {
+  clearThirtyDayPlanFromStorage,
+  getStoredThirtyDayPlan,
+  syncThirtyDayPlanWithScores,
+} from './utils/thirtyDayPlanGenerator';
 import { DemoModeBanner } from './components/DemoModeBanner';
 import { Menu, Sun, Moon } from 'lucide-react';
 import { ADVISORS_LIST } from './data/advisorsData';
@@ -321,6 +325,10 @@ export default function App() {
 
       try {
         saveStoredState(nextState);
+        const existingPlan = getStoredThirtyDayPlan();
+        if (existingPlan) {
+          syncThirtyDayPlanWithScores(existingPlan, newScores);
+        }
         commitSucceeded = true;
       } catch {
         commitSucceeded = false;
@@ -359,6 +367,10 @@ export default function App() {
         completedDates: newCompletedDates,
       };
       saveStoredState(nextState);
+      const existingPlan = getStoredThirtyDayPlan();
+      if (existingPlan) {
+        syncThirtyDayPlanWithScores(existingPlan, newScores);
+      }
       return nextState;
     });
 

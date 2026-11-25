@@ -33,6 +33,10 @@ import {
   DOMAIN_META,
   WEEK_INFO,
 } from '../utils/thirtyDayPlanGenerator';
+import {
+  formatThirtyDayPlanForArabicPdf,
+  getDomainArabicName,
+} from '../utils/arabicDomainLabels';
 import { ADVISORS_LIST } from '../data/advisorsData';
 
 interface ThirtyDayPlanScreenProps {
@@ -234,17 +238,21 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     setTimeout(() => setCopiedToast(false), 2500);
   };
 
-  // Single source of truth for prioritized domains sorted strictly ascending (lowest evaluated score first: e.g. 4.5 -> 4.8 -> 6.0)
+  // Single source of truth for prioritized domains sorted strictly ascending (lowest evaluated score first, excluding unrated domains)
   const lowestDomains = getPrioritizedScoredDomains(scores);
-  const sortedFocusDomains: LifeAreaId[] = plan
-    ? [...plan.focusDomains].sort((a, b) => {
-      const sa = Number(scores?.[a]) || 0;
-      const sb = Number(scores?.[b]) || 0;
-      if (sa <= 0 && sb > 0) return 1;
-      if (sb <= 0 && sa > 0) return -1;
-      return sa - sb;
-    })
-    : [];
+  const sortedFocusDomains: LifeAreaId[] =
+    lowestDomains.length > 0
+      ? lowestDomains.map((d) => d.id)
+      : plan
+        ? [...plan.focusDomains].sort((a, b) => {
+            const sa = Number(scores?.[a]) || 0;
+            const sb = Number(scores?.[b]) || 0;
+            if (sa <= 0 && sb > 0) return 1;
+            if (sb <= 0 && sa > 0) return -1;
+            return sa - sb;
+          })
+        : [];
+  const pdfPlanPayload = plan ? formatThirtyDayPlanForArabicPdf(plan, scores) : null;
 
   return (
     <div className="min-h-screen bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 transition-colors duration-300">
@@ -457,8 +465,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                       key={id}
                       className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-[#0F6E6E] dark:text-cyan-300 border border-teal-200/80 dark:border-teal-800/40 text-xs font-bold"
                     >
-                      <span>{DOMAIN_META[id]?.icon}</span>
-                      <span>{DOMAIN_META[id]?.title}</span>
+                      <span>{DOMAIN_META[id]?.icon || '🎯'}</span>
+                      <span>{getDomainArabicName(id)}</span>
                       {scoreVal > 0 && (
                         <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-[11px] opacity-85">
                           ({scoreVal.toFixed(1)} / 10)
@@ -555,8 +563,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
       </div>
     </div>
 
-          {/* Main Plan Area: Two Columns (Left: Task Card with 3 Suggestions + Custom, Right: Weeks & Days) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          {/* Main Plan Area: Two Columns (Interactive on screen; full 30-day Arabic table rendered cleanly in PDF print) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:hidden">
             {/* Left Card: مهمتك لهذا اليوم (5 Columns on Desktop) - WITH USER'S REQUESTED 3 SUGGESTIONS + CUSTOM OPTION */}
             <div className="lg:col-span-5 bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm sticky top-6">
               {/* Day & Domain Header */}
@@ -577,8 +585,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                     ) : null}
                   </div>
                   <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
-                    <span>{currentTask?.domainIcon}</span>
-                    <span>{currentTask?.domainTitle}</span>
+                    <span>{currentTask?.domainIcon || '🎯'}</span>
+                    <span>{currentTask ? getDomainArabicName(currentTask.domainId || currentTask.domainTitle) : ''}</span>
                   </span>
                 </div>
 
@@ -869,8 +877,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                   {scoreVal.toFixed(1)} / 10
                 </span>
                 <span className="flex items-center gap-1.5 text-[#0F172A] dark:text-white">
-                  <span>{DOMAIN_META[id]?.title}</span>
-                  <span>{DOMAIN_META[id]?.icon}</span>
+                  <span>{getDomainArabicName(id)}</span>
+                  <span>{DOMAIN_META[id]?.icon || '🎯'}</span>
                 </span>
               </div>
 
@@ -885,6 +893,51 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
         })}
       </div>
     </div>
+
+    {/* Printable Full 30-Day Arabic PDF Schedule (hidden on screen, shown in PDF / print) */}
+    {pdfPlanPayload && (
+      <div className="hidden print:block space-y-4 text-right" dir="rtl">
+        <div className="border-b-2 border-slate-300 pb-3">
+          <h2 className="text-xl font-black text-[#0F172A]">
+            منصة وزان — خطة التوازن الذكية لمدة 30 يوماً
+          </h2>
+          <p className="text-xs text-slate-600 mt-1">
+            موعد البدء: {pdfPlanPayload.startDateStr} • نسبة الإنجاز: {pdfPlanPayload.completedCount} / 30 ({pdfPlanPayload.progressPercent}%)
+          </p>
+          <p className="text-xs font-bold text-[#0F6E6E] mt-1">
+            مجالات التركيز (الأدنى درجة):{' '}
+            {pdfPlanPayload.focusDomains
+              .map((d) => (d.score > 0 ? `${d.label} (${d.score.toFixed(1)}/10)` : d.label))
+              .join(' • ')}
+          </p>
+        </div>
+
+        <table className="w-full border-collapse text-xs">
+          <thead>
+            <tr className="bg-slate-100 border-b border-slate-300">
+              <th className="p-2 text-right font-black border border-slate-300 w-16">اليوم</th>
+              <th className="p-2 text-right font-black border border-slate-300 w-44">المجال</th>
+              <th className="p-2 text-right font-black border border-slate-300">المهمة اليومية</th>
+              <th className="p-2 text-right font-black border border-slate-300 w-24">الحالة</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pdfPlanPayload.days.map((day) => (
+              <tr key={day.dayNumber} className="border-b border-slate-200 print-avoid-break">
+                <td className="p-2 border border-slate-200 font-bold">يوم {day.dayNumber}</td>
+                <td className="p-2 border border-slate-200 font-bold text-[#0F6E6E]">
+                  {day.domainLabel}
+                </td>
+                <td className="p-2 border border-slate-200">{isolateNumbersInText(day.taskText)}</td>
+                <td className="p-2 border border-slate-200 font-bold">
+                  {day.isCompleted ? 'منجز ✓' : 'قيد التنفيذ'}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
   </div>
       )}
 

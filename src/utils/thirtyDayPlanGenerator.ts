@@ -1,18 +1,22 @@
 import { LifeAreaId, DayPlanTask, ThirtyDayPlanState } from '../types/lifeBalance';
-import { ADVISORS_LIST } from '../data/advisorsData';
+import {
+  DOMAIN_ARABIC_NAMES,
+  getDomainArabicName,
+  localizeDomainText,
+} from './arabicDomainLabels';
 
 const PLAN_STORAGE_KEY = 'wazan_30day_plan_v1';
 
-// أسماء وأيقونات المجالات
+// أسماء وأيقونات المجالات (مرتبطة بالقاموس العربي الموحد لضمان عدم تسرب أي مفتاح إنجليزي)
 export const DOMAIN_META: Record<LifeAreaId, { title: string; icon: string; color: string }> = {
-  health: { title: 'الصحي', icon: '🌿', color: 'emerald' },
-  financial: { title: 'المالي', icon: '💰', color: 'amber' },
-  career: { title: 'المهني', icon: '💼', color: 'blue' },
-  spiritual: { title: 'الروحي', icon: '🕊️', color: 'teal' },
-  personal: { title: 'تطوير الذات', icon: '🧠', color: 'purple' },
-  family: { title: 'الأسري', icon: '🏡', color: 'rose' },
-  social: { title: 'الاجتماعي', icon: '🤝', color: 'cyan' },
-  learning: { title: 'التعليمي والمعرفي', icon: '📚', color: 'indigo' },
+  health: { title: DOMAIN_ARABIC_NAMES.health, icon: '🌿', color: 'emerald' },
+  financial: { title: DOMAIN_ARABIC_NAMES.financial, icon: '💰', color: 'amber' },
+  career: { title: DOMAIN_ARABIC_NAMES.career, icon: '💼', color: 'blue' },
+  spiritual: { title: DOMAIN_ARABIC_NAMES.spiritual, icon: '🕊️', color: 'teal' },
+  personal: { title: DOMAIN_ARABIC_NAMES.personal, icon: '🧠', color: 'purple' },
+  family: { title: DOMAIN_ARABIC_NAMES.family, icon: '🏡', color: 'rose' },
+  social: { title: DOMAIN_ARABIC_NAMES.social, icon: '🤝', color: 'cyan' },
+  learning: { title: DOMAIN_ARABIC_NAMES.learning, icon: '📚', color: 'indigo' },
 };
 
 export const WEEK_INFO: Record<number, { title: string; subtitle: string }> = {
@@ -277,53 +281,49 @@ export interface PrioritizedDomainItem {
 }
 
 /**
- * استخراج المجالات الثلاثة الأكثر حاجة للتركيز بناءً على تقييمات عجلة الحياة
- * (الترتيب تصاعدياً من أدنى درجة معتمدة > 0 إلى الأعلى، دون أي تجاوز لمجال أعلى درجة)
+ * استخراج المجالات الثلاثة الأكثر حاجة للتركيز بناءً على تقييمات عجلة الحياة الفعلية فقط:
+ * - استبعاد أي مجال غير مقيّم (null / undefined / NaN / <= 0).
+ * - ترتيب المجالات المقيّمة تصاعدياً من الأدنى درجة إلى الأعلى واختيار حتى 3 مجالات.
+ * - لا يُدرج أبداً مجال غير مقيّم أو مجال مرتفع الدرجة (مثل 8.5) مع وجود درجات أدنى (مثل 2.5 أو 3.5).
  */
-export function extractPriorityDomains(scores: Record<string, number>): LifeAreaId[] {
+export function extractPriorityDomains(scores: Record<string, number | null | undefined> | null | undefined): LifeAreaId[] {
+  if (!scores || typeof scores !== 'object') {
+    return [];
+  }
+
   const scored = ALL_CANONICAL_DOMAINS
     .map((id) => {
-      const num = Number(scores?.[id]);
+      const raw = scores[id];
+      if (raw === null || raw === undefined) return { id, score: 0 };
+      const num = Number(raw);
       return {
         id,
-        score: Number.isFinite(num) ? num : 0,
+        score: Number.isFinite(num) && num > 0 ? num : 0,
       };
     })
-    .filter((item) => item.score > 0) // استبعاد المجالات غير المقيّمة (صفر)
+    .filter((item) => item.score > 0)
     .sort((a, b) => a.score - b.score);
 
-  if (scored.length >= 3) {
-    return [scored[0].id, scored[1].id, scored[2].id];
-  }
-
-  // إذا كانت التقييمات المسجلة أقل من 3، نُبقي المقيّمة مرتبة تصاعدياً أولاً ثم نُكمل من الأساسيات
-  const chosen: LifeAreaId[] = scored.map((s) => s.id);
-  const fallbacks: LifeAreaId[] = ['health', 'financial', 'spiritual', 'learning', 'career', 'personal', 'family', 'social'];
-  for (const f of fallbacks) {
-    if (chosen.length >= 3) break;
-    if (!chosen.includes(f)) chosen.push(f);
-  }
-
-  return chosen.slice(0, 3);
+  return scored.slice(0, 3).map((s) => s.id);
 }
 
 /**
- * إرجاع قائمة موحدة للمجالات الثلاثة المختارة مع درجاتها الحقيقية،
+ * إرجاع قائمة موحدة للمجالات المختارة (بحد أقصى 3 من أدنى الدرجات المقيّمة فعلياً) مع تسميتها العربية المعتمدة،
  * لضمان تطابق بطاقة "مجالات التركيز" وخطة الـ 30 يوماً وقسم "لماذا هذه المجالات؟"
  */
 export function getPrioritizedScoredDomains(
-  scores: Record<string, number>
+  scores: Record<string, number | null | undefined> | null | undefined
 ): PrioritizedDomainItem[] {
   const priorityIds = extractPriorityDomains(scores);
   return priorityIds.map((id) => {
     const rawScore = Number(scores?.[id]);
-    const validScore = Number.isFinite(rawScore) ? rawScore : 0;
-    const meta = DOMAIN_META[id] || { title: id, icon: '🎯', color: 'teal' };
+    const validScore = Number.isFinite(rawScore) && rawScore > 0 ? rawScore : 0;
+    const meta = DOMAIN_META[id];
     return {
       id,
       score: validScore,
-      title: meta.title,
-      icon: meta.icon,
+      title: meta?.title || getDomainArabicName(id),
+      icon: meta?.icon || '🎯',
     };
   });
 }
@@ -332,6 +332,10 @@ function buildDaysForFocusDomains(
   focusDomains: LifeAreaId[],
   existingDays?: DayPlanTask[]
 ): DayPlanTask[] {
+  const activeDomains: LifeAreaId[] =
+    Array.isArray(focusDomains) && focusDomains.length > 0
+      ? focusDomains
+      : ['health', 'financial', 'spiritual'];
   const days: DayPlanTask[] = [];
 
   for (let dayNum = 1; dayNum <= 30; dayNum++) {
@@ -343,9 +347,11 @@ function buildDaysForFocusDomains(
     else weekNumber = 5;
 
     const weekTitle = WEEK_INFO[weekNumber]?.title || 'خطوة جديدة';
-    const domainIdx = (dayNum - 1) % focusDomains.length;
-    const domainId = focusDomains[domainIdx];
-    const meta = DOMAIN_META[domainId] || { title: 'توازن الحياة', icon: '🎯', color: 'teal' };
+    const domainIdx = (dayNum - 1) % activeDomains.length;
+    const domainId = activeDomains[domainIdx];
+    const meta = DOMAIN_META[domainId];
+    const canonicalTitle = meta?.title || getDomainArabicName(domainId);
+    const domainIcon = meta?.icon || '🎯';
 
     const suggestionsPool = DOMAIN_WEEKLY_SUGGESTIONS[domainId]?.[weekNumber] || [
       'خطوة يومية بسيطة تركز على هذا الجانب.',
@@ -359,12 +365,12 @@ function buildDaysForFocusDomains(
     days.push({
       dayNumber: dayNum,
       domainId,
-      domainTitle: meta.title,
-      domainIcon: meta.icon,
+      domainTitle: canonicalTitle,
+      domainIcon,
       weekNumber,
       weekTitle,
       defaultSuggestions: [suggestionsPool[0], suggestionsPool[1], suggestionsPool[2]],
-      selectedTask: sameDomain ? prevDay.selectedTask : suggestionsPool[0],
+      selectedTask: sameDomain ? localizeDomainText(prevDay.selectedTask) : suggestionsPool[0],
       customTask: sameDomain ? (prevDay.customTask || '') : '',
       isCustomSelected: sameDomain ? Boolean(prevDay.isCustomSelected) : false,
       isCompleted: sameDomain ? Boolean(prevDay.isCompleted) : false,
@@ -377,10 +383,12 @@ function buildDaysForFocusDomains(
 }
 
 /**
- * توليد خطة ذكية متكاملة لـ 30 يوماً
+ * توليد خطة ذكية متكاملة لـ 30 يوماً من أدنى المجالات المقيّمة فعلياً
  */
-export function generateThirtyDayPlan(scores: Record<string, number>): ThirtyDayPlanState {
-  const focusDomains = extractPriorityDomains(scores);
+export function generateThirtyDayPlan(scores: Record<string, number | null | undefined>): ThirtyDayPlanState {
+  const evaluatedFocus = extractPriorityDomains(scores);
+  const focusDomains: LifeAreaId[] =
+    evaluatedFocus.length > 0 ? evaluatedFocus : ['health', 'financial', 'spiritual'];
   const days = buildDaysForFocusDomains(focusDomains);
 
   // تاريخ اليوم بتنسيق عربي جميل
@@ -454,7 +462,7 @@ export function syncThirtyDayPlanWithScores(
     existingPlan.days.length === 30 &&
     existingPlan.days.every((d) => {
       const expectedDomain = liveFocusDomains[(d.dayNumber - 1) % liveFocusDomains.length];
-      return d.domainId === expectedDomain;
+      return d.domainId === expectedDomain && d.domainTitle === getDomainArabicName(expectedDomain);
     });
 
   if (isFocusSame && areDaysSynced) {
@@ -507,24 +515,26 @@ export function getStoredThirtyDayPlan(): ThirtyDayPlanState | null {
 }
 
 /**
- * تصدير الخطة كنص كامل للمشاركة أو النسخ
+ * تصدير الخطة كنص كامل للمشاركة أو النسخ بتسميات عربية موحدة بدون مفاتيح إنجليزية
  */
 export function exportPlanAsText(plan: ThirtyDayPlanState): string {
   const completedCount = plan.days.filter((d) => d.isCompleted).length;
   const pct = Math.round((completedCount / 30) * 100);
   let text = `🌟 خطتي الذكية لـ \u206630\u2069 يوماً من منصة وزان\n`;
   text += `📅 موعد البدء: \u2066${plan.startDateStr}\u2069\n`;
-  text += `🎯 مجالات التركيز: ${plan.focusDomains.map((id) => DOMAIN_META[id]?.title || id).join('، ')}\n`;
+  text += `🎯 مجالات التركيز: ${plan.focusDomains.map((id) => getDomainArabicName(id)).join('، ')}\n`;
   text += `📊 نسبة الإنجاز: \u2066${completedCount} / 30\u2069 (\u2066${pct}%\u2069)\n`;
   text += `=====================================\n\n`;
 
   plan.days.forEach((day) => {
     const status = day.isCompleted ? '✅ منجز' : '⏳ قيد الانتظار';
-    const taskWithBidi = day.selectedTask.replace(
+    const domainArabicTitle = getDomainArabicName(day.domainId || day.domainTitle);
+    const cleanTask = localizeDomainText(day.selectedTask);
+    const taskWithBidi = cleanTask.replace(
       /(\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?%|\d+(?:\.\d+)?)/g,
       (m) => `\u2066${m}\u2069`
     );
-    text += `[اليوم \u2066${day.dayNumber} / 30\u2069] (${day.domainTitle}) - ${status}\n`;
+    text += `[اليوم \u2066${day.dayNumber} / 30\u2069] (${domainArabicTitle}) - ${status}\n`;
     text += `📌 المهمة: ${taskWithBidi}\n\n`;
   });
 

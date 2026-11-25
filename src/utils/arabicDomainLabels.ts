@@ -9,6 +9,28 @@ export const DOMAIN_ARABIC_NAMES: Record<string, string> = {
   health: 'الجانب الصحي والبدني',
 };
 
+const DOMAIN_KEY_ALIASES: Record<string, string> = {
+  spiritual: DOMAIN_ARABIC_NAMES.spiritual,
+  spirituality: DOMAIN_ARABIC_NAMES.spiritual,
+  financial: DOMAIN_ARABIC_NAMES.financial,
+  finance: DOMAIN_ARABIC_NAMES.financial,
+  money: DOMAIN_ARABIC_NAMES.financial,
+  career: DOMAIN_ARABIC_NAMES.career,
+  work: DOMAIN_ARABIC_NAMES.career,
+  academic: DOMAIN_ARABIC_NAMES.career,
+  personal: DOMAIN_ARABIC_NAMES.personal,
+  self: DOMAIN_ARABIC_NAMES.personal,
+  learning: DOMAIN_ARABIC_NAMES.learning,
+  education: DOMAIN_ARABIC_NAMES.learning,
+  knowledge: DOMAIN_ARABIC_NAMES.learning,
+  family: DOMAIN_ARABIC_NAMES.family,
+  social: DOMAIN_ARABIC_NAMES.social,
+  relationships: DOMAIN_ARABIC_NAMES.social,
+  health: DOMAIN_ARABIC_NAMES.health,
+  physical: DOMAIN_ARABIC_NAMES.health,
+  wellness: DOMAIN_ARABIC_NAMES.health,
+};
+
 const ENGLISH_JARGON_REPLACEMENTS: Array<[RegExp, string]> = [
   [/\(\s*Interactive\s+Life\s+Wheel\s*\)/gi, ''],
   [/\(\s*Critical\s+Bottleneck\s*\)/gi, ''],
@@ -133,15 +155,32 @@ export function normalizeArabicText(text: string): string {
 }
 
 /**
- * Converts a canonical domain key (e.g. 'career', 'health') into its approved Arabic display title.
+ * Converts a canonical domain key (e.g. 'career', 'health', 'financial_score') into its approved Arabic display title.
+ * Guarantees no raw English internal identifiers or unknown keys leak into UI or PDF exports.
  */
 export function getDomainArabicName(keyOrName: string): string {
   if (!keyOrName || typeof keyOrName !== 'string') return 'الجانب الحياتي';
-  const normalized = keyOrName.trim().toLowerCase();
+  const trimmed = keyOrName.trim();
+  if (!trimmed) return 'الجانب الحياتي';
+
+  const normalized = trimmed
+    .toLowerCase()
+    .replace(/[-_](?:domain|area|score|rating|level)$/i, '')
+    .trim();
+
   if (DOMAIN_ARABIC_NAMES[normalized]) {
     return DOMAIN_ARABIC_NAMES[normalized];
   }
-  return localizeDomainText(keyOrName.trim());
+  if (DOMAIN_KEY_ALIASES[normalized]) {
+    return DOMAIN_KEY_ALIASES[normalized];
+  }
+
+  const localized = localizeDomainText(trimmed);
+  if (localized && /[\u0600-\u06FF]/.test(localized)) {
+    return localized;
+  }
+
+  return 'الجانب الحياتي';
 }
 
 /**
@@ -156,7 +195,7 @@ export function localizeDomainText(text: string): string {
   for (const [key, arabicName] of Object.entries(DOMAIN_ARABIC_NAMES)) {
     const shortRoot = arabicName.replace(/\s+و.*$/, '');
     const duplicateAfterArabic = new RegExp(
-      `(?:${arabicName}|${shortRoot})\\s*\\(\\s*${key}\\s*\\)`,
+      `(?:${arabicName}|${shortRoot})\\s*\\(\\s*${key}(?:[-_](?:domain|area|score))?\\s*\\)`,
       'gi'
     );
     result = result.replace(duplicateAfterArabic, arabicName);
@@ -167,10 +206,16 @@ export function localizeDomainText(text: string): string {
   }
 
   for (const [key, arabicName] of Object.entries(DOMAIN_ARABIC_NAMES)) {
-    const parenKeyRegex = new RegExp(`\\(\\s*${key}\\s*\\)`, 'gi');
+    const parenKeyRegex = new RegExp(`\\(\\s*${key}(?:[-_](?:domain|area|score))?\\s*\\)`, 'gi');
     result = result.replace(parenKeyRegex, arabicName);
-    const keyRegex = new RegExp(`\\b${key}\\b`, 'gi');
+    const keyRegex = new RegExp(`(?<![A-Za-z])${key}(?:[-_](?:domain|area|score|level))?(?![A-Za-z])`, 'gi');
     result = result.replace(keyRegex, arabicName);
+  }
+
+  for (const [alias, arabicName] of Object.entries(DOMAIN_KEY_ALIASES)) {
+    if (DOMAIN_ARABIC_NAMES[alias]) continue;
+    const aliasRegex = new RegExp(`(?<![A-Za-z])${alias}(?:[-_](?:domain|area|score|level))?(?![A-Za-z])`, 'gi');
+    result = result.replace(aliasRegex, arabicName);
   }
 
   return normalizeArabicText(result);
@@ -390,5 +435,132 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
           })),
         }
       : {}),
+  };
+}
+
+export interface ArabicPdfDirectorPayload {
+  userName: string;
+  generatedDateAr: string;
+  domainScores: Array<{ id: string; label: string; score: number }>;
+  report: Record<string, any>;
+}
+
+/**
+ * Formats the holistic Director Summary report and all 8 Life Wheel scores into a clean,
+ * RTL-safe Arabic payload ready for PDF/print export with zero raw English domain keys.
+ */
+export function formatDirectorReportForArabicPdf<T extends Record<string, any>>(
+  report: T,
+  scores: Record<string, number> | null | undefined,
+  userName?: string
+): ArabicPdfDirectorPayload {
+  const reconciled = reconcileDirectorReportWithScores(report, scores);
+  const safeScores = scores || {};
+  const domainScores = Object.keys(DOMAIN_ARABIC_NAMES).map((id) => {
+    const num = Number(safeScores[id]);
+    return {
+      id,
+      label: getDomainArabicName(id),
+      score: Number.isFinite(num) && num > 0 ? Number(num.toFixed(1)) : 0,
+    };
+  });
+
+  const cleanTargetDomains = (list: any) =>
+    (Array.isArray(list) ? list : []).map((d) => getDomainArabicName(String(d || '')));
+
+  const cleanReport = {
+    ...reconciled,
+    strongestSynergy: reconciled?.strongestSynergy
+      ? {
+          ...reconciled.strongestSynergy,
+          domainsInvolved: cleanTargetDomains(reconciled.strongestSynergy.domainsInvolved),
+        }
+      : reconciled?.strongestSynergy,
+    criticalBottleneck: reconciled?.criticalBottleneck
+      ? {
+          ...reconciled.criticalBottleneck,
+          domain: getDomainArabicName(reconciled.criticalBottleneck.domain || ''),
+        }
+      : reconciled?.criticalBottleneck,
+    keystoneHabits: Array.isArray(reconciled?.keystoneHabits)
+      ? reconciled.keystoneHabits.map((h: any) => ({
+          ...h,
+          targetDomains: cleanTargetDomains(h?.targetDomains),
+        }))
+      : [],
+  };
+
+  return {
+    userName: (userName || '').trim() || 'المستفيد',
+    generatedDateAr: new Intl.DateTimeFormat('ar-SA', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    }).format(new Date()),
+    domainScores,
+    report: cleanReport,
+  };
+}
+
+export interface ArabicPdfThirtyDayPayload {
+  startDateStr: string;
+  completedCount: number;
+  progressPercent: number;
+  focusDomains: Array<{ id: string; label: string; score: number }>;
+  days: Array<{
+    dayNumber: number;
+    weekNumber: number;
+    domainLabel: string;
+    taskText: string;
+    isCompleted: boolean;
+  }>;
+}
+
+/**
+ * Formats a 30-day plan into canonical Arabic RTL data for PDF/print export with zero raw English keys.
+ */
+export function formatThirtyDayPlanForArabicPdf(
+  plan: {
+    startDateStr: string;
+    focusDomains: string[];
+    days: Array<{
+      dayNumber: number;
+      weekNumber: number;
+      domainId: string;
+      domainTitle?: string;
+      selectedTask: string;
+      isCompleted: boolean;
+    }>;
+  },
+  scores?: Record<string, number> | null
+): ArabicPdfThirtyDayPayload {
+  const daysList = Array.isArray(plan?.days) ? plan.days : [];
+  const completedCount = daysList.filter((d) => d.isCompleted).length;
+  const progressPercent = daysList.length > 0 ? Math.round((completedCount / daysList.length) * 100) : 0;
+
+  const focusDomains = (Array.isArray(plan?.focusDomains) ? plan.focusDomains : [])
+    .map((id) => {
+      const val = Number(scores?.[id]);
+      return {
+        id,
+        label: getDomainArabicName(id),
+        score: Number.isFinite(val) && val > 0 ? Number(val.toFixed(1)) : 0,
+      };
+    })
+    .filter((item) => item.score > 0 || !scores || Object.values(scores).every((v) => !v || v <= 0))
+    .sort((a, b) => a.score - b.score);
+
+  return {
+    startDateStr: localizeDomainText(plan?.startDateStr || ''),
+    completedCount,
+    progressPercent,
+    focusDomains,
+    days: daysList.map((d) => ({
+      dayNumber: d.dayNumber,
+      weekNumber: d.weekNumber,
+      domainLabel: getDomainArabicName(d.domainId || d.domainTitle || ''),
+      taskText: localizeDomainText(d.selectedTask || ''),
+      isCompleted: Boolean(d.isCompleted),
+    })),
   };
 }

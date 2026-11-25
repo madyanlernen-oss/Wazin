@@ -58,6 +58,8 @@ import {
   prefixLamArabic,
   reconcileDirectorReportWithScores,
   sanitizeDirectorReportArabic,
+  formatDirectorReportForArabicPdf,
+  formatThirtyDayPlanForArabicPdf,
 } from '../src/utils/arabicDomainLabels';
 import { getDemoBannerCopy } from '../src/components/DemoModeBanner';
 import {
@@ -3239,8 +3241,8 @@ async function testStep2GuardrailsAndSessionIsolation() {
     });
     assert(
       doubleFailCount === 2 &&
-        failedTwice.status === 'invalid_json' &&
-        failedTwice.fallbackMessage === EVALUATION_CLARIFICATION_FALLBACK_AR,
+      failedTwice.status === 'invalid_json' &&
+      failedTwice.fallbackMessage === EVALUATION_CLARIFICATION_FALLBACK_AR,
       'Double schema failure returns polite Arabic fallback instead of random score'
     );
 
@@ -3323,6 +3325,148 @@ async function testStep2GuardrailsAndSessionIsolation() {
   }
 }
 
+async function testStep3PlanAndArabicPdfExport() {
+  const s3Start = Date.now();
+  try {
+    // 1. Unrated domains excluded (0 / null / undefined), high score 8.5 excluded when lower scores exist
+    const partialScores: Record<string, any> = {
+      spiritual: 0,
+      financial: 2.5,
+      career: 8.5,
+      personal: null,
+      learning: 3.5,
+      family: undefined,
+      social: 8.0,
+      health: 4.0,
+    };
+    const picked3 = extractPriorityDomains(partialScores);
+    assert(
+      picked3.length === 3 &&
+        picked3[0] === 'financial' &&
+        picked3[1] === 'learning' &&
+        picked3[2] === 'health' &&
+        !picked3.includes('career') &&
+        !picked3.includes('spiritual'),
+      `Must select lowest 3 scored domains [financial(2.5), learning(3.5), health(4.0)], got: ${picked3.join(',')}`
+    );
+
+    // Fewer than 3 evaluated domains -> do NOT pad with unscored domains
+    const onlyTwoEvaluated: Record<string, any> = {
+      spiritual: 0,
+      financial: 8.5,
+      career: 0,
+      personal: 0,
+      learning: 3.0,
+      family: 0,
+      social: 0,
+      health: 0,
+    };
+    const picked2 = extractPriorityDomains(onlyTwoEvaluated);
+    assert(
+      picked2.length === 2 && picked2[0] === 'learning' && picked2[1] === 'financial',
+      `Must exclude unscored domains when < 3 evaluated, got: ${picked2.join(',')}`
+    );
+
+    // 2. Preserve user custom task edits across sync when domain remains in top-3 lowest
+    const initialPlan = generateThirtyDayPlan(partialScores);
+    initialPlan.days[0].customTask = 'كتابة مصاريف اليوم بدقة في دفتري';
+    initialPlan.days[0].selectedTask = 'كتابة مصاريف اليوم بدقة في دفتري';
+    initialPlan.days[0].isCustomSelected = true;
+    initialPlan.days[0].isCompleted = true;
+
+    const updatedScores = { ...partialScores, health: 3.0, social: 4.2 };
+    const { plan: syncedWithCustom, didUpdate } = syncThirtyDayPlanWithScores(initialPlan, updatedScores);
+    assert(
+      didUpdate === true &&
+        syncedWithCustom.focusDomains[0] === 'financial' &&
+        syncedWithCustom.focusDomains[1] === 'health' &&
+        syncedWithCustom.focusDomains[2] === 'learning' &&
+        syncedWithCustom.days[0].customTask === 'كتابة مصاريف اليوم بدقة في دفتري' &&
+        syncedWithCustom.days[0].isCustomSelected === true &&
+        syncedWithCustom.days[0].isCompleted === true,
+      'Score sync must re-sort lowest-3 domains while keeping custom edited day task intact'
+    );
+
+    // 3. Arabic localization & clean PDF formatting payloads (zero raw English domain keys)
+    const pdfPlan = formatThirtyDayPlanForArabicPdf(syncedWithCustom, updatedScores);
+    const exportedText = exportPlanAsText(syncedWithCustom);
+    const pdfDirector = formatDirectorReportForArabicPdf(
+      {
+        overallDiagnosis: 'توازن نسبي مع تحدي (financial) و (learning)',
+        balanceIndexLabel: 'توازن متوسط',
+        strongestSynergy: {
+          title: 'استقرار career',
+          description: 'وضوح في career و social',
+          domainsInvolved: ['career', 'social'],
+        },
+        criticalBottleneck: {
+          title: 'تحدي financial',
+          impact: 'ضغط على financial',
+          recommendation: 'ابدأ في financial',
+          domain: 'financial',
+        },
+        keystoneHabits: [
+          {
+            name: 'عادة يومية',
+            triggerTime: 'صباحاً',
+            targetDomains: ['health', 'learning', 'personal', 'family'],
+            expectedImpact: 'أثر إيجابي',
+          },
+        ],
+        thirtyDayRoadmap: [
+          {
+            weekNumber: 1,
+            weekTitle: 'أسبوع financial و learning',
+            coreFocus: 'التركيز على spiritual و health',
+            actions: ['مراجعة financial يومياً'],
+          },
+        ],
+        directorGoldenRule: 'الاستمرارية تصنع الفرق.',
+      },
+      updatedScores,
+      'سعود'
+    );
+
+    const serializedAll = JSON.stringify({ pdfPlan, exportedText, pdfDirector });
+    const leakedKeyRegex = /"(?:financial|learning|spiritual|health|career|personal|family|social)"/;
+    const leakedProseRegex = /(?:^|[\s(«])(?:financial|learning|spiritual|health|career|personal|family|social)(?:$|[\s)».,])/i;
+    // Strip legitimate JSON `id` field names before checking values
+    const sanitizedCheck = JSON.stringify({
+      focusLabels: pdfPlan.focusDomains.map((f) => f.label),
+      dayLabels: pdfPlan.days.map((d) => d.domainLabel),
+      domainScoreLabels: pdfDirector.domainScores.map((d) => d.label),
+      report: pdfDirector.report,
+      exportedText,
+    });
+    assert(
+      !leakedKeyRegex.test(sanitizedCheck) &&
+        !leakedProseRegex.test(sanitizedCheck) &&
+        pdfPlan.focusDomains[0].label === 'الجانب المالي والاستقلال' &&
+        pdfDirector.domainScores.length === 8 &&
+        !serializedAll.includes('undefined'),
+      `PDF & text exports must render 100% Arabic labels without raw English keys: ${sanitizedCheck.slice(0, 220)}`
+    );
+
+    results.push({
+      suite: 'Step 3 Plan & PDF',
+      domain: 'All 8',
+      name: 'Lowest-3 Scored Selection & Clean Arabic PDF Export',
+      passed: true,
+      durationMs: Date.now() - s3Start,
+      details: `Picked=${picked3.join('/')}; PDF labels verified Arabic with 0 English key leaks`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite: 'Step 3 Plan & PDF',
+      domain: 'All 8',
+      name: 'Lowest-3 Scored Selection & Clean Arabic PDF Export',
+      passed: false,
+      durationMs: Date.now() - s3Start,
+      message: err.message,
+    });
+  }
+}
+
 // ==========================================
 // 7. CLI Table Report Formatter
 // ==========================================
@@ -3381,6 +3525,7 @@ async function main() {
   await testDemoModeStateAndIsolation();
   await testGoldenRecommendationSynthesis();
   await testStep2GuardrailsAndSessionIsolation();
+  await testStep3PlanAndArabicPdfExport();
 
   if (isLiveMode) {
     await testLiveGeminiScenarios();
