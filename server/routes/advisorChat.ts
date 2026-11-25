@@ -4,6 +4,7 @@ import { GEMINI_API_KEY, GROQ_API_KEY, GROQ_MODEL, GEMINI_MODEL } from '../confi
 import { AGENT_INFO_MAP } from '../config/constants';
 import { loadAgentPrompt } from '../agents/agentLoader';
 import { generateLocalAgentResponse } from '../agents/localAdvisorEngine';
+import { parseUserContext, buildDomainContextDirectives } from '../../src/utils/contextPersonalization';
 import {
   calculateSemanticScore,
   extractExplicitRating,
@@ -156,10 +157,23 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   if (req.body.incomeStability !== undefined && req.body.incomeStability !== null && typeof req.body.incomeStability !== 'string') {
     return res.status(400).json({ error: 'نوع حقل incomeStability غير صالح، يجب أن يكون نصاً.' });
   }
+  if (req.body.currentFocus !== undefined && req.body.currentFocus !== null && typeof req.body.currentFocus !== 'string') {
+    return res.status(400).json({ error: 'نوع حقل currentFocus غير صالح، يجب أن يكون نصاً.' });
+  }
 
-  const effectiveUserProfile = userProfile || { name: userName || 'عزيزي' };
+  const effectiveUserProfile = {
+    name: userName || 'عزيزي',
+    ...(userProfile || {}),
+    ...(req.body.ageGroup ? { ageGroup: req.body.ageGroup } : {}),
+    ...(req.body.hasDependents !== undefined ? { hasDependents: req.body.hasDependents } : {}),
+    ...(req.body.incomeSource ? { incomeSource: req.body.incomeSource } : {}),
+    ...(req.body.incomeStability ? { incomeStability: req.body.incomeStability } : {}),
+    ...(req.body.currentFocus ? { currentFocus: req.body.currentFocus } : {}),
+    ...(req.body.workStatus && !userProfile?.employmentStatus ? { workStatus: req.body.workStatus } : {}),
+    ...(req.body.employmentStatus ? { employmentStatus: req.body.employmentStatus } : {}),
+  };
 
-  // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون، الدخل)
+  // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون، الدخل، والاهتمام الحالي)
   let workStatus = (
     effectiveUserProfile?.employmentStatus ||
     effectiveUserProfile?.workStatus ||
@@ -185,6 +199,8 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
       });
     }
   }
+
+  const parsedCtx = parseUserContext({ ...effectiveUserProfile, employmentStatus: workStatus }, userName);
 
   let systemInstruction = '';
   let advisorName = 'مستشار وزان';
@@ -218,11 +234,17 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const agentKey = req.body.agentKey || (typeof advisor === 'string' ? advisor : (advisor?.id || 'financial'));
   const defaultMeta = AGENT_INFO_MAP[agentKey] || { name: 'مستشار وزان', role: 'مستشار الحياة' };
 
-  // Fast In-Memory Cache (TTL 30s) for rapid sub-second repeated queries
+  // Fast In-Memory Cache (TTL 30s) for rapid sub-second repeated queries (scoped strictly to full user context)
   const chatCacheKey = JSON.stringify({
     agentKey,
     msg: message.trim(),
-    workStatus,
+    name: parsedCtx.name,
+    workStatus: parsedCtx.workStatus,
+    ageGroup: parsedCtx.ageGroup,
+    dependents: parsedCtx.dependentsLabel,
+    incomeSource: parsedCtx.incomeSource,
+    incomeStability: parsedCtx.incomeStability,
+    currentFocus: parsedCtx.currentFocus,
     turn: stationTurnCount,
     lastMsg: historyMsgTexts[historyMsgTexts.length - 1] || '',
   });
@@ -387,7 +409,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   const styleAndToneGuideline = `
 [ثالثاً: الأسلوب ونبرة الصوت والارتباط بالسياق 🌿]
 1. سياسة استخدام اسم المستخدم:
-   - يجوز استخدام اسم الحساب «سعود المنصور» عند ملاءمة السياق بصورة طبيعية ومتباعدة فقط.
+   - يجوز استخدام اسم الحساب «${parsedCtx.name}» عند ملاءمة السياق بصورة طبيعية ومتباعدة فقط.
    - لا تجعل ذكر الاسم افتتاحية إلزامية لكل رد، ولا تكرره في كل رسالة، ولا تخترع أسماء أو ألقاباً أخرى.
 2. تنويع الافتتاحية وتجنب التكرار:
    - نوّع الجملة الافتتاحية دائماً؛ ولا تبدأ أبداً ردين متتاليين بنفس العبارة (يُمنع تكرار "أحييك على..." أو أي قالب جاهز متكرر).
@@ -474,49 +496,19 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 `;
   }
 
-  // استخراج سياق المستفيد وخلفيته الحياتية (حالة العمل، الفئة العمرية، المعالون، ومصادر الدخل)
-  const ageGroup = (
-    effectiveUserProfile?.ageGroup ||
-    req.body?.ageGroup ||
-    ''
-  ).trim();
-
-  const rawDependents =
-    effectiveUserProfile?.hasDependents ??
-    req.body?.hasDependents;
-
-  let dependentsText = '';
-  if (rawDependents === 'نعم' || rawDependents === true || rawDependents === 'yes') {
-    dependentsText = 'نعم';
-  } else if (rawDependents === 'لا' || rawDependents === false || rawDependents === 'no') {
-    dependentsText = 'لا';
-  } else if (typeof rawDependents === 'string' && rawDependents.trim()) {
-    dependentsText = rawDependents.trim();
-  }
-
-  const incomeSource = (
-    effectiveUserProfile?.incomeSource ||
-    req.body?.incomeSource ||
-    ''
-  ).trim();
-
-  const incomeStability = (
-    effectiveUserProfile?.incomeStability ||
-    req.body?.incomeStability ||
-    ''
-  ).trim();
-
+  // استخراج سياق المستفيد وخلفيته الحياتية من الكائن الموحّد parsedCtx
   const userContextBlock = `
 [سياق المستفيد وخلفيته الحياتية الأساسية 🎯]:
-- الاسم: ${effectiveUserProfile?.name || userName || 'عزيزي'}
-- حالة العمل: ${workStatus}
-${ageGroup ? `- الفئة العمرية: ${ageGroup}` : ''}
-${dependentsText ? `- المعالون: ${dependentsText}` : ''}
-${incomeSource ? `- مصدر الدخل الأساسي: ${incomeSource}` : ''}
-${incomeStability ? `- طبيعة واستقرار الدخل: ${incomeStability}` : ''}
+- الاسم: ${parsedCtx.name}
+- الوضع الحالي / حالة العمل: ${parsedCtx.workStatus}
+${parsedCtx.ageGroup ? `- الفئة العمرية: ${parsedCtx.ageGroup}` : ''}
+- المعالون (أسرة أو أطفال): ${parsedCtx.dependentsLabel}
+${parsedCtx.incomeSource ? `- مصدر الدخل الأساسي: ${parsedCtx.incomeSource}` : ''}
+${parsedCtx.incomeStability ? `- طبيعة واستقرار الدخل: ${parsedCtx.incomeStability}` : ''}
+${parsedCtx.currentFocus ? `- التركيز والتفاصيل الإضافية: ${parsedCtx.currentFocus}` : ''}
 
 ⛔ قاعدة صارمة وملزمة في تخصيص الحوار والأسئلة والنصائح:
-لا تطرح أي سؤال أو نصيحة لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تفترض دخلاً ثابتاً لمن دخله متغير أو باحث عن عمل، ولا تقدم نصائح ترقية وظيفية لمتقاعد أو طالب). وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في الحوار.
+لا تطرح أي سؤال أو نصيحة لا تناسب حالته (مثلاً لا تسأل طالباً عن الراتب والأقساط، ولا تقدم نصائح استثمار معقدة لمن دخله مصروف، ولا تفترض دخلاً ثابتاً لمن دخله متغير أو باحث عن عمل، ولا تفترض وجود أطفال/زوج لمن اختار "بدون معالين"، ولا تقدم نصائح ترقية وظيفية لمتقاعد أو طالب). كيّف كل سؤال ومثال في جميع جولات الحوار ليطابق هذا السياق الحياتي بدقة. وإن ذكر المستخدم ما يتعارض مع ملفه فاتبع كلامه في الحوار.
 `;
 
   // سابعاً: سياق المحطة الحالية - استخراج ملخص مقتضب من سطرين لأهم ما ذكره المستخدم في هذه المحطة لربط السياق والحديث
@@ -550,45 +542,7 @@ ${incomeStability ? `- طبيعة واستقرار الدخل: ${incomeStability
     stationSummaryContextText = `\n[ملخص سريع لما ذكره المستفيد في هذه المحطة لربط السياق]:\n${summaryStatements.slice(-2).join('\n')}\n`;
   }
 
-  let domainSpecificContextGuideline = '';
-  if (agentKey === 'financial') {
-    const isStudent = workStatus.includes('طالب');
-    const isBusiness = workStatus.includes('صاحب عمل') || workStatus.includes('مستقل');
-    const isJobSeeker = workStatus.includes('باحث');
-    const isRetired = workStatus.includes('متقاعد');
-
-    let specificDirectives = '';
-    if (isStudent) {
-      specificDirectives = `
-- المستفيد طالب جامعي ويعتمد على (${incomeSource || 'مكافأة جامعية/منحة أو مصروف'}):
-  * يجب أن تسأله حصراً عن كيفية إدارته للمكافأة أو المصروف وتحديات التوفيق حتى نهاية الشهر ونفقات الدراسة.
-  * ركّز على تأسيس حصالة أو صندوق ادخار رمزي بسيط (50–100 ريال شهرياً) وضبط نفقات المقاهي والمستلزمات وتجنب الاقتراض.
-  * ⛔ يُمنع منعاً باتاً سؤاله عن "الراتب الوظيفي" أو "قروض وشراء سيارات" أو "استثمارات عقارية معقدة" أو افتراض دخل ثابت كبير.`;
-    } else if (isBusiness) {
-      specificDirectives = `
-- المستفيد رائد أعمال أو صاحب عمل حر بدخل (${incomeStability || 'متغير'}):
-  * اسأله عن إدارة التدفق النقدي بين مواسم الوفرة والركود، وفصل أموال العمل تماماً عن المصروف الشخصي.
-  * ركز على تأسيس صمام أمان مزدوج (تجاري وشخصي) لا يقل عن 6 أشهر.`;
-    } else if (isJobSeeker) {
-      specificDirectives = `
-- المستفيد باحث عن عمل:
-  * اسأله عن إدارة مصاريفه ومدخراته المتاحة (Runway) بحذر لتكفي أطول فترة دون اقتراض.
-  * ⛔ لا تفترض وجود راتب أو دخل حالي.`;
-    } else if (isRetired) {
-      specificDirectives = `
-- المستفيد متقاعد ويعتمد على المعاش التقاعدي:
-  * اسأله عن كفاية المعاش، وإدارة التكاليف الصحية الطارئة، والحفاظ على رأس المال بأمان.`;
-    } else {
-      specificDirectives = `
-- المستفيد موظف بدخل (${incomeStability || 'شهري منتظم'})${dependentsText === 'نعم' ? ' ومسؤوليات أسرية ومعالين' : ''}:
-  * اسأله عن إدارة الراتب، وقاعدة 50/30/20، وصندوق الطوارئ لـ 3-6 أشهر نفقات، والتعامل مع الأقساط والالتزامات.`;
-    }
-
-    domainSpecificContextGuideline = `
-[توجيه استثنائي وإلزامي للمستشار المالي (أ. كمال المالي) 💰]:
-${specificDirectives}
-`;
-  }
+  const domainSpecificContextGuideline = buildDomainContextDirectives(agentKey, parsedCtx);
 
   // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
   systemInstruction = `
@@ -597,7 +551,7 @@ ${domainSpecificContextGuideline}
 
 ${agentRoleDescription}
 
-أنت الآن في محادثة استشارية حية بصفتك: "${advisorName}" (${advisorRole}) لمحطة "${stationTitle}" ضمن منصة وزان.
+ أنت الآن في محادثة استشارية حية بصفتك: "${advisorName}" (${advisorRole}) لمحطة "${stationTitle}" ضمن منصة وزان.
 تحدث كشخصية واعية، حكيمة ودافئة، تفهم بذكاء الإنسان أمامها وتفكر معه بصدق ورصانة.
 
 ${modeGuideline}
@@ -609,11 +563,13 @@ ${scoringAndCompletionGuideline}
 ${evaluationSessionGuideline}
 
 سياق المستفيد من منصة وزان:
-- الاسم: ${effectiveUserProfile?.name || 'عزيزي'}
-- حالة العمل: ${workStatus}
-${ageGroup ? `- الفئة العمرية: ${ageGroup}` : ''}
-${incomeSource ? `- مصدر الدخل: ${incomeSource}` : ''}
-${incomeStability ? `- طبيعة الدخل: ${incomeStability}` : ''}
+- الاسم: ${parsedCtx.name}
+- حالة العمل: ${parsedCtx.workStatus}
+${parsedCtx.ageGroup ? `- الفئة العمرية: ${parsedCtx.ageGroup}` : ''}
+- المعالون: ${parsedCtx.dependentsLabel}
+${parsedCtx.incomeSource ? `- مصدر الدخل: ${parsedCtx.incomeSource}` : ''}
+${parsedCtx.incomeStability ? `- طبيعة الدخل: ${parsedCtx.incomeStability}` : ''}
+${parsedCtx.currentFocus ? `- التركيز الحالي: ${parsedCtx.currentFocus}` : ''}
 - الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
@@ -1420,12 +1376,17 @@ advisorChatRouter.post('/station-summary', async (req: Request, res: Response) =
     return res.json(deterministicFallback);
   }
 
+  const summaryCtx = parseUserContext(userProfile, userName);
   const summaryInstruction = `
 أنت "${advisorName}" في منصة وزان، ومهمتك الآن توليد بطاقة الإنجاز وملخص نهاية محطة "${stationTitle}" بناءً على سجل المحادثة الكامل أدناه.
 
 سياق المستفيد:
-- الاسم: ${userProfile?.name || userName || 'المستفيد'}
-- حالة العمل: ${userProfile?.employmentStatus || userProfile?.workStatus || 'غير محدد'}
+- الاسم: ${summaryCtx.name}
+- حالة العمل: ${summaryCtx.workStatus}
+${summaryCtx.ageGroup ? `- الفئة العمرية: ${summaryCtx.ageGroup}` : ''}
+- المعالون: ${summaryCtx.dependentsLabel}
+${summaryCtx.incomeStability ? `- استقرار الدخل: ${summaryCtx.incomeStability}` : ''}
+${summaryCtx.incomeSource ? `- مصدر الدخل: ${summaryCtx.incomeSource}` : ''}
 - الدرجة المعتمدة: ${score ?? 'غير محددة'}/10
 
 ⚠️ تعليمات صارمة وملزمة لا يجوز مخالفتها:

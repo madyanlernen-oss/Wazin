@@ -12,6 +12,12 @@ import { generateAgent11Suggestions, mapDomainNameToAreaId } from '../src/utils/
 import { INITIAL_EISENHOWER_GOALS } from '../src/components/eisenhower/initialGoals';
 import { generateFallbackDirectorReport } from '../server/routes/directorSummary';
 import { loadStoredState } from '../src/utils/storage';
+import { getAdaptiveStationConfig } from '../src/data/assessmentQuestions';
+import {
+  parseUserContext,
+  buildDomainContextDirectives,
+  getDomainContextConfig,
+} from '../src/utils/contextPersonalization';
 
 // In-memory localStorage polyfill for non-browser runtimes (Node / Bun CLI)
 if (typeof (globalThis as any).localStorage === 'undefined') {
@@ -917,6 +923,114 @@ async function testAgentBehaviors() {
       name: 'Turn 1: Career Direction & Procrastination Handling',
       passed: false,
       durationMs: Date.now() - c1Start,
+      message: err.message,
+    });
+  }
+
+  // --- 2.5 Context-Aware Differentiation (Student w/o Dependents vs Employee w/ Dependents) ---
+  const ctxDiffStart = Date.now();
+  try {
+    const scenarioStudentNoDep: UserProfile = {
+      name: 'أحمد العلي',
+      email: 'ahmad.student@wazan.test',
+      ageGroup: '20 - 29 سنة',
+      currentFocus: 'التوازن الدراسي والمالي',
+      registeredAt: '2026-01-01T00:00:00.000Z',
+      employmentStatus: 'طالب جامعي',
+      workStatus: 'طالب جامعي',
+      hasDependents: 'لا',
+      incomeSource: 'مكافأة جامعية/منحة',
+    };
+    const scenarioEmployeeWithDep: UserProfile = {
+      name: 'خالد الحربي',
+      email: 'khaled.emp@wazan.test',
+      ageGroup: '30 - 39 سنة',
+      currentFocus: 'استقرار الأسرة والنمو المهني',
+      registeredAt: '2026-01-01T00:00:00.000Z',
+      employmentStatus: 'موظف',
+      workStatus: 'موظف',
+      hasDependents: 'نعم',
+      incomeStability: 'نعم (دخل ثابت)',
+    };
+
+    const parsedStudent = parseUserContext(scenarioStudentNoDep);
+    const parsedEmployee = parseUserContext(scenarioEmployeeWithDep);
+    const allAreas: LifeAreaId[] = ['spiritual', 'financial', 'career', 'personal', 'learning', 'family', 'social', 'health'];
+
+    for (const area of allAreas) {
+      const stCfg = getAdaptiveStationConfig(area, scenarioStudentNoDep);
+      const empCfg = getAdaptiveStationConfig(area, scenarioEmployeeWithDep);
+      assert(
+        stCfg.consultation.title !== empCfg.consultation.title,
+        `[${area}] Opening question MUST differ between student (no dependents) and employee (with dependents)`
+      );
+
+      const stDirective = buildDomainContextDirectives(area, parsedStudent);
+      const empDirective = buildDomainContextDirectives(area, parsedEmployee);
+      assert(
+        stDirective !== empDirective,
+        `[${area}] System prompt directive MUST differ between student and employee contexts`
+      );
+
+      const stLocal = generateLocalAgentResponse(
+        area,
+        'أحتاج نصيحة عملية تناسب وضعي اليومي حالياً',
+        scenarioStudentNoDep.name,
+        getAdvisor(area),
+        5,
+        true,
+        1,
+        stCfg.consultation.title,
+        'initial_assessment',
+        1,
+        scenarioStudentNoDep
+      );
+      const empLocal = generateLocalAgentResponse(
+        area,
+        'أحتاج نصيحة عملية تناسب وضعي اليومي حالياً',
+        scenarioEmployeeWithDep.name,
+        getAdvisor(area),
+        5,
+        true,
+        1,
+        empCfg.consultation.title,
+        'initial_assessment',
+        1,
+        scenarioEmployeeWithDep
+      );
+      assert(
+        stLocal.reply !== empLocal.reply,
+        `[${area}] Local fallback reply MUST differ between student and employee contexts`
+      );
+      assert(stLocal.station_completed === false && empLocal.station_completed === false, `[${area}] Turn 1 must keep station open`);
+    }
+
+    // Check explicit domain tailoring details
+    const finSt = getDomainContextConfig('financial', parsedStudent);
+    const finEmp = getDomainContextConfig('financial', parsedEmployee);
+    assert(finSt.openingQuestion.includes('مكافأتك') || finSt.openingQuestion.includes('الدراسية'), 'Student financial opening must reference university stipend/study');
+    assert(finEmp.openingQuestion.includes('راتب') || finEmp.openingQuestion.includes('الأسرة') || finEmp.openingQuestion.includes('المعالين'), 'Employee financial opening must reference salary & family obligations');
+
+    const famSt = getDomainContextConfig('family', parsedStudent);
+    const famEmp = getDomainContextConfig('family', parsedEmployee);
+    assert(!famSt.openingQuestion.includes('أبنائك') && !famSt.openingQuestion.includes('زوجتك'), 'Student w/o dependents family question MUST NOT assume spouse/children');
+    assert(famEmp.openingQuestion.includes('أبنائك') || famEmp.openingQuestion.includes('زوجتك'), 'Employee w/ dependents family question MUST reference spouse/children');
+
+    results.push({
+      suite,
+      domain: 'All 8 Domains',
+      name: 'Context-Aware Personalization (Student w/o Dependents vs Employee w/ Dependents)',
+      passed: true,
+      durationMs: Date.now() - ctxDiffStart,
+      details: '8/8 domains produce distinct opening questions, system directives, and fallback replies per user context',
+    });
+  } catch (err: any) {
+    results.push({
+      suite,
+      domain: 'All 8 Domains',
+      name: 'Context-Aware Personalization (Student w/o Dependents vs Employee w/ Dependents)',
+      passed: false,
+      durationMs: Date.now() - ctxDiffStart,
       message: err.message,
     });
   }

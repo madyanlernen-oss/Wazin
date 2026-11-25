@@ -1,5 +1,6 @@
 import { LifeAreaId } from '../types/lifeBalance';
 import { ADVISORS_LIST } from './advisorsData';
+import { parseUserContext, getDomainContextConfig } from '../utils/contextPersonalization';
 
 export type AssessmentMode = 'doctor_consultation' | 'initial_assessment' | 'weekly_checkin';
 
@@ -350,26 +351,58 @@ export const STATION_ASSESSMENT_CONFIG: Record<LifeAreaId, StationAssessmentConf
   return acc;
 }, {} as Record<LifeAreaId, StationAssessmentConfig>);
 
-// Helper: Adaptive station consultation questions tailored to the user's employment status and profile context
+// Helper: Adaptive station consultation questions tailored to the user's complete profile context across all 8 domains
 export function getAdaptiveStationConfig(
   areaId: LifeAreaId,
-  userProfile?: { employmentStatus?: string; workStatus?: string; [key: string]: any } | null
+  userProfile?: { employmentStatus?: string; workStatus?: string;[key: string]: any } | null
 ): StationAssessmentConfig {
   const baseConfig = STATION_ASSESSMENT_CONFIG[areaId];
   if (!baseConfig) return baseConfig;
 
   const status = (userProfile?.employmentStatus || userProfile?.workStatus || '').trim();
+  const hasAnyContext = Boolean(
+    status ||
+    userProfile?.ageGroup?.trim() ||
+    userProfile?.hasDependents ||
+    userProfile?.incomeStability?.trim() ||
+    userProfile?.incomeSource?.trim()
+  );
 
-  const isStudent = status === 'طالب جامعي' || status.includes('طالب');
-  const isBusiness =
-    status === 'صاحب عمل/مستقل' ||
-    status === 'صاحب عمل' ||
-    status === 'مستقل' ||
-    status.includes('صاحب عمل') ||
-    status.includes('مستقل');
-  const isRetired = status === 'متقاعد' || status.includes('متقاعد');
-  const isJobSeeker = status === 'باحث عن عمل' || status.includes('باحث');
-  const isEmployee = status === 'موظف' || status.includes('موظف');
+  if (!hasAnyContext) {
+    return baseConfig;
+  }
+
+  const parsedCtx = parseUserContext(userProfile);
+  const domainCtx = getDomainContextConfig(areaId, parsedCtx);
+
+  return {
+    ...baseConfig,
+    consultation: {
+      title: domainCtx.openingQuestion,
+      description: domainCtx.description,
+      placeholder: domainCtx.placeholder,
+      followUpProbe: domainCtx.followUpProbe,
+      suggestedResponses: domainCtx.suggestedResponses,
+    },
+    initialDiagnostic: {
+      title: domainCtx.openingQuestion,
+      description: domainCtx.description,
+      placeholder: domainCtx.placeholder,
+      followUpProbe: domainCtx.followUpProbe,
+      suggestedResponses: domainCtx.suggestedResponses.map((s) => s.replace(/\s*\(\d+\/10\)\s*$/, '')),
+    },
+  };
+}
+
+function _unusedLegacyRemoved() {
+  let areaId: any;
+  let baseConfig: any;
+  let userProfile: any;
+  let isStudent: any;
+  let isEmployee: any;
+  let isBusiness: any;
+  let isRetired: any;
+  let isJobSeeker: any;
 
   // 1. المحطة المالية (أ. كمال المالي) - التكيف حسب مصدر وديناميكية الدخل
   if (areaId === 'financial') {

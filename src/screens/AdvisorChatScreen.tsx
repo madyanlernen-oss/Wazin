@@ -8,6 +8,7 @@ import {
   UserProfile,
 } from '../types/lifeBalance';
 import { isCrisisMessage } from '../components/CrisisSupportCard';
+import { parseUserContext, getDomainContextConfig } from '../utils/contextPersonalization';
 import {
   AiModelMode,
   AI_MODES,
@@ -139,18 +140,22 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     }
   }, [addedGoals]);
 
-  // Initialize welcoming message for this advisor if empty
+  // Initialize welcoming message for this advisor if empty (adapted to user context)
   useEffect(() => {
     if (!messagesByAdvisor[currentAdvisor.id] || messagesByAdvisor[currentAdvisor.id].length === 0) {
+      const parsedCtx = parseUserContext(userProfile);
+      const domainCtx = getDomainContextConfig(currentAdvisor.id, parsedCtx);
       const welcomeMsg: ChatMessage = {
         id: `welcome_${currentAdvisor.id}`,
         sender: 'advisor',
-        content: `أهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'} في منصة وزان. أنا ${currentAdvisor.name}، ${currentAdvisor.role}.
+        content: `أهلاً بك يا ${parsedCtx.name} في منصة وزان. أنا ${currentAdvisor.name}، ${currentAdvisor.role}.
 رصدت تقييمك الحالي في "${currentAdvisor.title}" بدرجة (${currentScore.toFixed(1)} من 10).
-أنا هنا معك لنصنع نقلة نوعية ونحول التحديات إلى خطوات بسيطة يومية. بمَ تحب أن نبدأ استشارتنا اليوم؟`,
+${domainCtx.contextIntro}
+
+${domainCtx.openingQuestion}`,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         actionSteps: currentAdvisor.defaultGoals.slice(0, 2),
-        reflectionQuestion: 'ما هو التغيير البسيط الذي لو قمت به هذا الأسبوع سيشعرك بفرق حقيقي في هذا الجانب؟',
+        reflectionQuestion: domainCtx.exploratoryQuestions[0],
       };
 
       setMessagesByAdvisor((prev) => ({
@@ -158,7 +163,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         [currentAdvisor.id]: [welcomeMsg],
       }));
     }
-  }, [currentAdvisor.id, currentScore, userProfile?.name]);
+  }, [currentAdvisor.id, currentScore, userProfile]);
 
   // Scroll to bottom on new message
   useEffect(() => {
