@@ -1,4 +1,4 @@
-import { LifeAreaId, DayPlanTask, ThirtyDayPlanState } from '../types/lifeBalance';
+import { LifeAreaId, DayPlanTask, DailyGoalItem, ThirtyDayPlanState } from '../types/lifeBalance';
 import {
   DOMAIN_ARABIC_NAMES,
   getDomainArabicName,
@@ -7,6 +7,42 @@ import {
 
 const PLAN_STORAGE_KEY = 'wazan_30day_plan_v1';
 const CUSTOM_FOCUS_STORAGE_KEY = 'wazan_30day_custom_focus_v1';
+export const MAX_DAILY_GOALS = 4;
+
+/**
+ * Resolve 1 to MAX_DAILY_GOALS (4) active goals/tasks for a plan day,
+ * with backwards compatibility for legacy single-selectedTask plans.
+ */
+export function resolveDayGoals(day?: DayPlanTask | null): DailyGoalItem[] {
+  if (!day) return [];
+  if (Array.isArray(day.dailyGoals) && day.dailyGoals.length > 0) {
+    return day.dailyGoals
+      .filter((g) => g && typeof g.text === 'string' && g.text.trim().length > 0)
+      .slice(0, MAX_DAILY_GOALS)
+      .map((g, idx) => ({
+        id: g.id || `goal_${day.dayNumber}_${idx + 1}`,
+        text: g.text.trim(),
+        isCompleted: Boolean(g.isCompleted),
+        isCustom: Boolean(g.isCustom),
+        completedAt: g.completedAt,
+      }));
+  }
+
+  const fallbackText =
+    (day.selectedTask && day.selectedTask.trim()) ||
+    (Array.isArray(day.defaultSuggestions) && day.defaultSuggestions[0]) ||
+    'خطوة يومية متوازنة';
+
+  return [
+    {
+      id: `goal_${day.dayNumber}_1`,
+      text: fallbackText.trim(),
+      isCompleted: Boolean(day.isCompleted),
+      isCustom: Boolean(day.isCustomSelected),
+      completedAt: day.completedAt,
+    },
+  ];
+}
 
 // أسماء وأيقونات المجالات (مرتبطة بالقاموس العربي الموحد لضمان عدم تسرب أي مفتاح إنجليزي)
 export const DOMAIN_META: Record<LifeAreaId, { title: string; icon: string; color: string }> = {
@@ -370,6 +406,35 @@ function buildDaysForFocusDomains(
             : [])
       : [];
 
+    const preservedMultiGoals =
+      sameDomain && Array.isArray(prevDay.dailyGoals) && prevDay.dailyGoals.length > 1
+        ? prevDay.dailyGoals.slice(0, MAX_DAILY_GOALS).map((g, idx) => ({
+            ...g,
+            id: g.id || `goal_${dayNum}_${idx + 1}`,
+            text: localizeDomainText(g.text),
+          }))
+        : undefined;
+
+    const syncedSelectedTask = sameDomain
+      ? localizeDomainText(prevDay.selectedTask)
+      : suggestionsPool[0];
+    const syncedCustomSelected = sameDomain ? Boolean(prevDay.isCustomSelected) : false;
+    const syncedCompleted = preservedMultiGoals
+      ? preservedMultiGoals.every((g) => g.isCompleted)
+      : sameDomain
+        ? Boolean(prevDay.isCompleted)
+        : false;
+
+    const dailyGoals: DailyGoalItem[] = preservedMultiGoals || [
+      {
+        id: (sameDomain && prevDay.dailyGoals?.[0]?.id) || `goal_${dayNum}_1`,
+        text: syncedSelectedTask,
+        isCompleted: syncedCompleted,
+        isCustom: syncedCustomSelected,
+        completedAt: sameDomain ? prevDay.completedAt : undefined,
+      },
+    ];
+
     days.push({
       dayNumber: dayNum,
       domainId,
@@ -378,11 +443,12 @@ function buildDaysForFocusDomains(
       weekNumber,
       weekTitle,
       defaultSuggestions: [suggestionsPool[0], suggestionsPool[1], suggestionsPool[2]],
-      selectedTask: sameDomain ? localizeDomainText(prevDay.selectedTask) : suggestionsPool[0],
+      selectedTask: syncedSelectedTask,
       customTask: sameDomain ? (prevDay.customTask || '') : '',
       customTasks: legacyOrListCustomTasks,
-      isCustomSelected: sameDomain ? Boolean(prevDay.isCustomSelected) : false,
-      isCompleted: sameDomain ? Boolean(prevDay.isCompleted) : false,
+      isCustomSelected: syncedCustomSelected,
+      dailyGoals,
+      isCompleted: syncedCompleted,
       completedAt: sameDomain ? prevDay.completedAt : undefined,
       estimatedMinutes: 10,
     });
@@ -608,13 +674,25 @@ export function exportPlanAsText(plan: ThirtyDayPlanState): string {
   plan.days.forEach((day) => {
     const status = day.isCompleted ? '✅ منجز' : '⏳ قيد الانتظار';
     const domainArabicTitle = getDomainArabicName(day.domainId || day.domainTitle);
-    const cleanTask = localizeDomainText(day.selectedTask);
-    const taskWithBidi = cleanTask.replace(
-      /(\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?%|\d+(?:\.\d+)?)/g,
-      (m) => `\u2066${m}\u2069`
-    );
+    const goals = resolveDayGoals(day);
+    const isolateNums = (str: string) =>
+      str.replace(
+        /(\d+(?:\.\d+)?\s*[\/–—-]\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?%|\d+(?:\.\d+)?)/g,
+        (m) => `\u2066${m}\u2069`
+      );
     text += `[اليوم \u2066${day.dayNumber} / 30\u2069] (${domainArabicTitle}) - ${status}\n`;
-    text += `📌 المهمة: ${taskWithBidi}\n\n`;
+    if (goals.length <= 1) {
+      const cleanTask = localizeDomainText(goals[0]?.text || day.selectedTask);
+      text += `📌 المهمة: ${isolateNums(cleanTask)}\n\n`;
+    } else {
+      const doneGoals = goals.filter((g) => g.isCompleted).length;
+      text += `📌 أهداف اليوم (\u2066${doneGoals} / ${goals.length}\u2069):\n`;
+      goals.forEach((g, idx) => {
+        const gMark = g.isCompleted ? '✅' : '⏳';
+        text += `   ${idx + 1}. ${gMark} ${isolateNums(localizeDomainText(g.text))}\n`;
+      });
+      text += `\n`;
+    }
   });
 
   return text;

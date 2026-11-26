@@ -529,6 +529,7 @@ export function formatThirtyDayPlanForArabicPdf(
       domainId: string;
       domainTitle?: string;
       selectedTask: string;
+      dailyGoals?: Array<{ text: string; isCompleted?: boolean }>;
       isCompleted: boolean;
     }>;
   },
@@ -555,12 +556,25 @@ export function formatThirtyDayPlanForArabicPdf(
     completedCount,
     progressPercent,
     focusDomains,
-    days: daysList.map((d) => ({
-      dayNumber: d.dayNumber,
-      weekNumber: d.weekNumber,
-      domainLabel: getDomainArabicName(d.domainId || d.domainTitle || ''),
-      taskText: localizeDomainText(d.selectedTask || ''),
-      isCompleted: Boolean(d.isCompleted),
-    })),
+    days: daysList.map((d) => {
+      const activeGoals =
+        Array.isArray(d.dailyGoals) && d.dailyGoals.length > 0
+          ? d.dailyGoals.slice(0, 4).filter((g) => g && g.text?.trim())
+          : [];
+      const formattedTaskText =
+        activeGoals.length > 1
+          ? activeGoals
+              .map((g, idx) => `${idx + 1}) ${localizeDomainText(g.text)}${g.isCompleted ? ' ✓' : ''}`)
+              .join(' • ')
+          : localizeDomainText(activeGoals[0]?.text || d.selectedTask || '');
+
+      return {
+        dayNumber: d.dayNumber,
+        weekNumber: d.weekNumber,
+        domainLabel: getDomainArabicName(d.domainId || d.domainTitle || ''),
+        taskText: formattedTaskText,
+        isCompleted: Boolean(d.isCompleted),
+      };
+    }),
   };
 }

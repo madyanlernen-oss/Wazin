@@ -18,16 +18,19 @@ import {
   SlidersHorizontal,
   Plus,
   X,
+  AlertCircle,
 } from 'lucide-react';
-import { LifeAreaId, ThirtyDayPlanState, DayPlanTask, Screen } from '../types/lifeBalance';
+import { LifeAreaId, ThirtyDayPlanState, DayPlanTask, DailyGoalItem, Screen } from '../types/lifeBalance';
 import { isolateNumbersInText } from '../components/FormattedChatMessage';
 import {
   ALL_CANONICAL_DOMAINS,
+  MAX_DAILY_GOALS,
   applyFocusDomainsToPlan,
   extractPriorityDomains,
   generateThirtyDayPlan,
   getStoredCustomFocusDomains,
   getStoredThirtyDayPlan,
+  resolveDayGoals,
   saveCustomFocusDomainsToStorage,
   saveThirtyDayPlanToStorage,
   syncThirtyDayPlanWithScores,
@@ -69,6 +72,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   const [copiedToast, setCopiedToast] = useState(false);
   const [showCelebrationToast, setShowCelebrationToast] = useState(false);
   const [customInputText, setCustomInputText] = useState('');
+  const [goalLimitWarning, setGoalLimitWarning] = useState<string | null>(null);
+  const limitWarningTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [customFocusDomains, setCustomFocusDomains] = useState<LifeAreaId[] | null>(() => {
     const storedCustom = getStoredCustomFocusDomains();
     if (storedCustom && storedCustom.length === 3) return storedCustom;
@@ -108,6 +113,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
       }
     }
     setCustomInputText('');
+    setGoalLimitWarning(null);
   }, [plan, selectedDayNum]);
 
   // Current active day task
@@ -192,141 +198,38 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     setShowFocusModal(false);
   };
 
-  // Helper: Resolve list of custom tasks for any day (backwards compatible with legacy customTask)
-  const getDayCustomTasks = (day?: DayPlanTask): string[] => {
-    if (!day) return [];
-    if (Array.isArray(day.customTasks) && day.customTasks.length > 0) {
-      return day.customTasks;
-    }
-    if (day.customTask && day.customTask.trim().length > 0) {
-      return [day.customTask.trim()];
-    }
-    return [];
+  const triggerGoalLimitWarning = (
+    msg: string = 'الحد الأقصى 4 أهداف في اليوم — احذف هدفاً أولاً لإضافة هدف جديد.'
+  ) => {
+    setGoalLimitWarning(msg);
+    if (limitWarningTimeoutRef.current) clearTimeout(limitWarningTimeoutRef.current);
+    limitWarningTimeoutRef.current = setTimeout(() => setGoalLimitWarning(null), 3500);
   };
 
-  // Handler: Select a smart suggestion
-  const handleSelectSuggestion = (suggestion: string) => {
-    if (!plan || !currentTask) return;
-
-    const updatedDays = plan.days.map((d) => {
-      if (d.dayNumber === selectedDayNum) {
-        return {
-          ...d,
-          selectedTask: suggestion,
-          isCustomSelected: false,
-        };
-      }
-      return d;
-    });
-
-    const updatedPlan: ThirtyDayPlanState = {
-      ...plan,
-      days: updatedDays,
+  useEffect(() => {
+    return () => {
+      if (limitWarningTimeoutRef.current) clearTimeout(limitWarningTimeoutRef.current);
     };
+  }, []);
 
-    setPlan(updatedPlan);
-    saveThirtyDayPlanToStorage(updatedPlan);
-  };
+  // Unified commit helper keeping dailyGoals (1..4), selectedTask, customTasks, and day completion in sync
+  const commitDayGoalsUpdate = (
+    targetDayNum: number,
+    nextGoalsRaw: DailyGoalItem[],
+    triggerCelebrationOnComplete: boolean = false,
+    autoAdvanceIfSelected: boolean = false
+  ) => {
+    if (!plan || nextGoalsRaw.length === 0) return;
+    const prevDay = plan.days.find((d) => d.dayNumber === targetDayNum);
+    if (!prevDay) return;
 
-  // Handler: Add a new custom task card at the top on Enter / + إضافة
-  const handleAddCustomTask = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    const trimmed = customInputText.trim();
-    if (!plan || !currentTask || !trimmed) return;
+    const nextGoals = nextGoalsRaw.slice(0, MAX_DAILY_GOALS);
+    const allGoalsDone = nextGoals.length > 0 && nextGoals.every((g) => g.isCompleted);
+    const newlyCompletedDay = !prevDay.isCompleted && allGoalsDone;
+    const customList = nextGoals.filter((g) => g.isCustom).map((g) => g.text);
+    const primaryGoal = nextGoals[0];
 
-    const existingList = getDayCustomTasks(currentTask);
-    const nextList = [trimmed, ...existingList.filter((t) => t !== trimmed)];
-
-    const updatedDays = plan.days.map((d) => {
-      if (d.dayNumber === selectedDayNum) {
-        return {
-          ...d,
-          customTasks: nextList,
-          customTask: trimmed,
-          selectedTask: trimmed,
-          isCustomSelected: true,
-        };
-      }
-      return d;
-    });
-
-    const updatedPlan: ThirtyDayPlanState = {
-      ...plan,
-      days: updatedDays,
-    };
-
-    setPlan(updatedPlan);
-    saveThirtyDayPlanToStorage(updatedPlan);
-    setCustomInputText('');
-  };
-
-  // Handler: Select an existing custom task card
-  const handleSelectCustomTaskCard = (taskText: string) => {
-    if (!plan || !currentTask) return;
-
-    const updatedDays = plan.days.map((d) => {
-      if (d.dayNumber === selectedDayNum) {
-        return {
-          ...d,
-          customTask: taskText,
-          selectedTask: taskText,
-          isCustomSelected: true,
-        };
-      }
-      return d;
-    });
-
-    const updatedPlan: ThirtyDayPlanState = {
-      ...plan,
-      days: updatedDays,
-    };
-
-    setPlan(updatedPlan);
-    saveThirtyDayPlanToStorage(updatedPlan);
-  };
-
-  // Handler: Remove a custom task card
-  const handleDeleteCustomTask = (taskText: string) => {
-    if (!plan || !currentTask) return;
-
-    const existingList = getDayCustomTasks(currentTask);
-    const nextList = existingList.filter((t) => t !== taskText);
-    const wasSelected = currentTask.isCustomSelected && currentTask.selectedTask === taskText;
-    const fallbackSelected = wasSelected
-      ? nextList[0] || currentTask.defaultSuggestions[0]
-      : currentTask.selectedTask;
-    const fallbackIsCustom = wasSelected ? nextList.length > 0 : Boolean(currentTask.isCustomSelected);
-
-    const updatedDays = plan.days.map((d) => {
-      if (d.dayNumber === selectedDayNum) {
-        return {
-          ...d,
-          customTasks: nextList,
-          customTask: nextList[0] || '',
-          selectedTask: fallbackSelected,
-          isCustomSelected: fallbackIsCustom,
-        };
-      }
-      return d;
-    });
-
-    const updatedPlan: ThirtyDayPlanState = {
-      ...plan,
-      days: updatedDays,
-    };
-
-    setPlan(updatedPlan);
-    saveThirtyDayPlanToStorage(updatedPlan);
-  };
-
-  // Handler: Toggle Task Completion for any Day (used by both daily card button and weekly table ✓ buttons)
-  const handleToggleDayCompletion = (targetDayNum: number, autoAdvanceIfSelected: boolean = false) => {
-    if (!plan) return;
-    const targetDay = plan.days.find((d) => d.dayNumber === targetDayNum);
-    if (!targetDay) return;
-
-    const nextCompleted = !targetDay.isCompleted;
-    if (nextCompleted) {
+    if (newlyCompletedDay && triggerCelebrationOnComplete) {
       try {
         confetti({
           particleCount: 50,
@@ -341,18 +244,21 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     }
 
     const updatedDays = plan.days.map((d) => {
-      if (d.dayNumber === targetDayNum) {
-        return {
-          ...d,
-          isCompleted: nextCompleted,
-          completedAt: nextCompleted ? Date.now() : undefined,
-        };
-      }
-      return d;
+      if (d.dayNumber !== targetDayNum) return d;
+      return {
+        ...d,
+        dailyGoals: nextGoals,
+        customTasks: customList,
+        customTask: customList[0] || '',
+        selectedTask: primaryGoal.text,
+        isCustomSelected: Boolean(primaryGoal.isCustom),
+        isCompleted: allGoalsDone,
+        completedAt: allGoalsDone ? (d.completedAt || Date.now()) : undefined,
+      };
     });
 
     let nextCurrentDay = plan.currentDay;
-    if (nextCompleted && targetDayNum < 30) {
+    if (allGoalsDone && targetDayNum < 30) {
       nextCurrentDay = Math.max(plan.currentDay, targetDayNum + 1);
     }
 
@@ -365,11 +271,123 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     setPlan(updatedPlan);
     saveThirtyDayPlanToStorage(updatedPlan);
 
-    if (autoAdvanceIfSelected && nextCompleted && targetDayNum === selectedDayNum && targetDayNum < 30) {
+    if (autoAdvanceIfSelected && newlyCompletedDay && targetDayNum === selectedDayNum && targetDayNum < 30) {
       setTimeout(() => {
         setSelectedDayNum((prev) => Math.min(30, prev + 1));
       }, 400);
     }
+  };
+
+  // Handler: Add or toggle a smart suggestion in today's goals (1..4 cap)
+  const handleToggleSuggestionInDay = (suggestion: string) => {
+    if (!plan || !currentTask) return;
+    const goals = resolveDayGoals(currentTask);
+    const existing = goals.find((g) => g.text === suggestion);
+
+    if (existing) {
+      if (goals.length <= 1) {
+        triggerGoalLimitWarning('يجب أن يحتوي اليوم على هدف واحد على الأقل.');
+        return;
+      }
+      setGoalLimitWarning(null);
+      commitDayGoalsUpdate(
+        selectedDayNum,
+        goals.filter((g) => g.id !== existing.id)
+      );
+      return;
+    }
+
+    if (goals.length >= MAX_DAILY_GOALS) {
+      triggerGoalLimitWarning('الحد الأقصى 4 أهداف في اليوم — احذف هدفاً أولاً لإضافة هذا الاقتراح.');
+      return;
+    }
+
+    setGoalLimitWarning(null);
+    const addedGoal: DailyGoalItem = {
+      id: `sug_${selectedDayNum}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      text: suggestion,
+      isCompleted: false,
+      isCustom: false,
+    };
+    commitDayGoalsUpdate(selectedDayNum, [...goals, addedGoal]);
+  };
+
+  // Handler: Add a new custom goal/task at the top on Enter / + إضافة (up to MAX_DAILY_GOALS = 4)
+  const handleAddCustomTask = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const trimmed = customInputText.trim();
+    if (!plan || !currentTask || !trimmed) return;
+
+    const goals = resolveDayGoals(currentTask);
+    if (goals.some((g) => g.text === trimmed)) {
+      setCustomInputText('');
+      setGoalLimitWarning(null);
+      return;
+    }
+
+    if (goals.length >= MAX_DAILY_GOALS) {
+      triggerGoalLimitWarning('الحد الأقصى 4 أهداف في اليوم');
+      return;
+    }
+
+    setGoalLimitWarning(null);
+    const newCustomGoal: DailyGoalItem = {
+      id: `custom_${selectedDayNum}_${Date.now()}`,
+      text: trimmed,
+      isCompleted: false,
+      isCustom: true,
+    };
+
+    commitDayGoalsUpdate(selectedDayNum, [newCustomGoal, ...goals]);
+    setCustomInputText('');
+  };
+
+  // Handler: Toggle completion of an individual daily goal independently
+  const handleToggleSingleGoalCompletion = (goalId: string) => {
+    if (!plan || !currentTask) return;
+    const goals = resolveDayGoals(currentTask);
+    const nextGoals = goals.map((g) => {
+      if (g.id !== goalId) return g;
+      const nextDone = !g.isCompleted;
+      return {
+        ...g,
+        isCompleted: nextDone,
+        completedAt: nextDone ? Date.now() : undefined,
+      };
+    });
+    commitDayGoalsUpdate(selectedDayNum, nextGoals, true, false);
+  };
+
+  // Handler: Remove a goal/task from the selected day (keeping at least 1 goal per day)
+  const handleRemoveDailyGoal = (goalId: string) => {
+    if (!plan || !currentTask) return;
+    const goals = resolveDayGoals(currentTask);
+    if (goals.length <= 1) {
+      triggerGoalLimitWarning('يجب أن يحتوي اليوم على هدف واحد على الأقل.');
+      return;
+    }
+    setGoalLimitWarning(null);
+    commitDayGoalsUpdate(
+      selectedDayNum,
+      goals.filter((g) => g.id !== goalId)
+    );
+  };
+
+  // Handler: Toggle whole-day completion (used by main button and weekly table ✓ buttons)
+  const handleToggleDayCompletion = (targetDayNum: number, autoAdvanceIfSelected: boolean = false) => {
+    if (!plan) return;
+    const targetDay = plan.days.find((d) => d.dayNumber === targetDayNum);
+    if (!targetDay) return;
+
+    const nextCompleted = !targetDay.isCompleted;
+    const goals = resolveDayGoals(targetDay);
+    const nextGoals = goals.map((g) => ({
+      ...g,
+      isCompleted: nextCompleted,
+      completedAt: nextCompleted ? (g.completedAt || Date.now()) : undefined,
+    }));
+
+    commitDayGoalsUpdate(targetDayNum, nextGoals, nextCompleted, autoAdvanceIfSelected);
   };
 
   // Handler: Export Plan Text
@@ -394,7 +412,9 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
       ? customFocusDomains
       : lowestDomains.map((d) => d.id);
   const activeWeekDays = plan ? plan.days.filter((d) => d.weekNumber === activeWeekTab) : [];
-  const currentDayCustomTasks = getDayCustomTasks(currentTask);
+  const currentDayGoals = resolveDayGoals(currentTask);
+  const dayCompletedGoalsCount = currentDayGoals.filter((g) => g.isCompleted).length;
+  const isDayAtMaxGoals = currentDayGoals.length >= MAX_DAILY_GOALS;
   const pdfPlanPayload = plan ? formatThirtyDayPlanForArabicPdf(plan, scores) : null;
 
   return (
@@ -748,11 +768,11 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
 
           {/* Main Plan Area: Two Columns (Interactive on screen; full 30-day Arabic table rendered cleanly in PDF print) */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:hidden">
-            {/* Left Card: مهمتك لهذا اليوم (5 Columns on Desktop) - WITH USER'S REQUESTED 3 SUGGESTIONS + CUSTOM OPTION */}
-            <div className="lg:col-span-5 bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm sticky top-6">
+            {/* Left Card: أهداف اليوم المختارة (1 إلى 4 أهداف) + الاقتراحات */}
+            <div className="lg:col-span-5 bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-sm sticky top-6">
               {/* Day & Domain Header */}
               <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
                     اليوم <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{selectedDayNum} / 30</span>
                   </span>
@@ -773,118 +793,190 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                 </span>
               </div>
 
-              {/* Sleek Custom Task Input Bar (Press Enter or + إضافة to prepend at top) */}
-              <form onSubmit={handleAddCustomTask} className="flex items-center gap-2">
-                <input
-                  type="text"
-                  value={customInputText}
-                  onChange={(e) => setCustomInputText(e.target.value)}
-                  placeholder="أضف مهمة مخصصة لهذا اليوم واضغط Enter..."
-                  className="flex-1 min-w-0 bg-[#F7F6F2] dark:bg-[#071318] border border-slate-200 dark:border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-cyan-400 transition-all"
-                  dir="rtl"
-                />
-                <button
-                  type="submit"
-                  disabled={!customInputText.trim()}
-                  className="inline-flex items-center gap-1 px-3.5 py-2.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-cyan-500 disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-black transition-all shadow-xs cursor-pointer flex-shrink-0"
+              {/* Daily Goals Progress Counter Badge (1 to 4 goals per day) */}
+              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-[#071318] border border-slate-200/80 dark:border-slate-800 flex-wrap">
+                <span className="text-xs font-black text-[#0F172A] dark:text-white flex items-center gap-1.5">
+                  <Target className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-cyan-400" />
+                  <span>
+                    الأهداف المنجزة اليوم:{' '}
+                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-[#0F6E6E] dark:text-cyan-300">
+                      {dayCompletedGoalsCount} / {currentDayGoals.length}
+                    </span>
+                  </span>
+                </span>
+                <span
+                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                    isDayAtMaxGoals
+                      ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+                      : 'bg-white dark:bg-[#0B161C] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                  }`}
                 >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>إضافة</span>
-                </button>
-              </form>
+                  المجدولة اليوم:{' '}
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-black">
+                    {currentDayGoals.length} / {MAX_DAILY_GOALS}
+                  </span>
+                </span>
+              </div>
 
-              {/* Task Options List: User-Added Custom Tasks Above + 3 Smart Suggestions */}
-              <div className="space-y-2.5">
-                {/* Custom Added Tasks (Displayed at Top Above Suggested Tasks) */}
-                {currentDayCustomTasks.map((customTxt) => {
-                  const isSelected =
-                    Boolean(currentTask?.isCustomSelected) && currentTask?.selectedTask === customTxt;
-
+              {/* Active Daily Goals Checklist (1 to 4 independent toggleable goals) */}
+              <div className="space-y-2">
+                {currentDayGoals.map((goal, gIdx) => {
+                  const cleanGoalText = localizeDomainText(goal.text);
                   return (
                     <div
-                      key={`custom_${customTxt}`}
-                      role="button"
-                      tabIndex={0}
-                      onClick={() => handleSelectCustomTaskCard(customTxt)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          handleSelectCustomTaskCard(customTxt);
-                        }
-                      }}
-                      className={`w-full text-right p-3.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-start gap-3 border group ${isSelected
-                          ? 'bg-[#0F6E6E]/10 dark:bg-cyan-950/50 border-[#0F6E6E] dark:border-cyan-400 text-[#0F6E6E] dark:text-cyan-300 shadow-xs'
-                          : 'bg-slate-50/80 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-teal-400 dark:hover:border-cyan-500'
-                        }`}
+                      key={goal.id}
+                      className={`w-full text-right p-3.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-start gap-3 border group ${
+                        goal.isCompleted
+                          ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300/80 dark:border-emerald-800/70 text-emerald-900 dark:text-emerald-200'
+                          : 'bg-[#0F6E6E]/8 dark:bg-cyan-950/40 border-[#0F6E6E]/40 dark:border-cyan-500/40 text-[#0F172A] dark:text-white shadow-2xs'
+                      }`}
                     >
-                      <div
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${isSelected
-                            ? 'border-[#0F6E6E] dark:border-cyan-400 bg-[#0F6E6E] dark:bg-cyan-400 text-white dark:text-[#0B161C]'
-                            : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
-                          }`}
-                      >
-                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 mb-0.5">
-                          <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-teal-500/15 dark:bg-cyan-500/20 text-[#0F6E6E] dark:text-cyan-300 font-black">
-                            مهمة مخصصة
-                          </span>
-                        </div>
-                        <span className="leading-relaxed block break-words">{isolateNumbersInText(customTxt)}</span>
-                      </div>
                       <button
                         type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeleteCustomTask(customTxt);
-                        }}
-                        aria-label="حذف المهمة المخصصة"
-                        title="حذف المهمة"
-                        className="p-1 rounded-lg text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer flex-shrink-0"
+                        onClick={() => handleToggleSingleGoalCompletion(goal.id)}
+                        aria-label={goal.isCompleted ? `إلغاء إنجاز الهدف ${gIdx + 1}` : `تحديد الهدف ${gIdx + 1} كمُنجز`}
+                        className={`w-6 h-6 rounded-lg border flex items-center justify-center flex-shrink-0 mt-0.5 transition-all cursor-pointer ${
+                          goal.isCompleted
+                            ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white'
+                            : 'bg-white dark:bg-[#0B161C] border-[#0F6E6E]/50 dark:border-cyan-400/60 text-transparent hover:border-[#0F6E6E] dark:hover:border-cyan-300'
+                        }`}
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <Check className="w-3.5 h-3.5 stroke-[3]" />
                       </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleToggleSingleGoalCompletion(goal.id)}
+                        className="flex-1 min-w-0 text-right cursor-pointer"
+                      >
+                        <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
+                          <span className="text-[10px] font-black text-[#0F6E6E] dark:text-cyan-300">
+                            هدف <span dir="ltr" className="font-mono [unicode-bidi:isolate]">{gIdx + 1}</span>
+                          </span>
+                          {goal.isCustom && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-teal-500/15 dark:bg-cyan-500/20 text-[#0F6E6E] dark:text-cyan-300 font-black">
+                              مخصص
+                            </span>
+                          )}
+                        </div>
+                        <span
+                          className={`leading-relaxed block break-words ${
+                            goal.isCompleted ? 'line-through opacity-75' : ''
+                          }`}
+                        >
+                          {isolateNumbersInText(cleanGoalText)}
+                        </span>
+                      </button>
+
+                      {currentDayGoals.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveDailyGoal(goal.id)}
+                          aria-label="إزالة الهدف من اليوم"
+                          title="إزالة الهدف"
+                          className="p-1 rounded-lg text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer flex-shrink-0"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      )}
                     </div>
                   );
                 })}
+              </div>
 
-                {/* 3 Smart Suggestions */}
-                {currentTask?.defaultSuggestions.map((suggestion, idx) => {
-                  const isSelected =
-                    !currentTask.isCustomSelected && currentTask.selectedTask === suggestion;
+              {/* Sleek Custom Goal Input Bar (Press Enter or + إضافة, capped at 4 goals/day) */}
+              <div className="space-y-2">
+                <form onSubmit={handleAddCustomTask} className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={customInputText}
+                    onChange={(e) => setCustomInputText(e.target.value)}
+                    placeholder={
+                      isDayAtMaxGoals
+                        ? 'تم بلوغ الحد الأقصى (4 أهداف لهذا اليوم)...'
+                        : 'أضف هدفاً إضافياً لهذا اليوم واضغط Enter (حتى 4)...'
+                    }
+                    className="flex-1 min-w-0 bg-[#F7F6F2] dark:bg-[#071318] border border-slate-200 dark:border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs sm:text-sm text-[#0F172A] dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-[#0F6E6E] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0F6E6E] dark:focus:ring-cyan-400 transition-all"
+                    dir="rtl"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!customInputText.trim()}
+                    className={`inline-flex items-center gap-1 px-3.5 py-2.5 rounded-xl disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-black transition-all shadow-xs cursor-pointer flex-shrink-0 ${
+                      isDayAtMaxGoals
+                        ? 'bg-amber-600 hover:bg-amber-700'
+                        : 'bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-cyan-500'
+                    }`}
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة</span>
+                  </button>
+                </form>
 
-                  return (
-                    <button
-                      key={idx}
-                      type="button"
-                      onClick={() => handleSelectSuggestion(suggestion)}
-                      className={`w-full text-right p-3.5 rounded-2xl text-xs sm:text-sm font-bold transition-all cursor-pointer flex items-start gap-3 border ${isSelected
-                        ? 'bg-[#0F6E6E]/10 dark:bg-cyan-950/50 border-[#0F6E6E] dark:border-cyan-400 text-[#0F6E6E] dark:text-cyan-300 shadow-xs'
-                        : 'bg-slate-50/80 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-teal-400 dark:hover:border-cyan-500'
+                {goalLimitWarning && (
+                  <div
+                    role="alert"
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800/70 text-amber-800 dark:text-amber-300 text-xs font-bold animate-in fade-in duration-150"
+                  >
+                    <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                    <span>{goalLimitWarning}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Selectable Smart Suggestions (Click to add up to 4 goals/day or remove) */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
+                  <span>أضف من الاقتراحات الذكية (حتى 4 أهداف):</span>
+                </div>
+                <div className="space-y-2">
+                  {currentTask?.defaultSuggestions.map((suggestion, idx) => {
+                    const isIncluded = currentDayGoals.some((g) => g.text === suggestion);
+
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => handleToggleSuggestionInDay(suggestion)}
+                        className={`w-full text-right p-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between gap-2.5 border ${
+                          isIncluded
+                            ? 'bg-teal-50/70 dark:bg-cyan-950/35 border-[#0F6E6E]/50 dark:border-cyan-500/50 text-[#0F6E6E] dark:text-cyan-300'
+                            : 'bg-slate-50/80 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-teal-400 dark:hover:border-cyan-500'
                         }`}
-                    >
-                      <div
-                        className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${isSelected
-                          ? 'border-[#0F6E6E] dark:border-cyan-400 bg-[#0F6E6E] dark:bg-cyan-400 text-white dark:text-[#0B161C]'
-                          : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700'
-                          }`}
                       >
-                        {isSelected && <Check className="w-3 h-3 stroke-[3]" />}
-                      </div>
-                      <span className="leading-relaxed flex-1">{isolateNumbersInText(suggestion)}</span>
-                    </button>
-                  );
-                })}
+                        <span className="leading-relaxed flex-1">{isolateNumbersInText(suggestion)}</span>
+                        <span
+                          className={`text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 flex-shrink-0 ${
+                            isIncluded
+                              ? 'bg-[#0F6E6E] dark:bg-cyan-600 text-white'
+                              : 'bg-white dark:bg-[#0B161C] text-[#0F6E6E] dark:text-cyan-300 border border-slate-200 dark:border-slate-700'
+                          }`}
+                        >
+                          {isIncluded ? (
+                            <>
+                              <Check className="w-3 h-3 stroke-[3]" />
+                              <span>مضاف</span>
+                            </>
+                          ) : (
+                            <>
+                              <Plus className="w-3 h-3" />
+                              <span>إضافة</span>
+                            </>
+                          )}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Time Estimate */}
               <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
                 <Clock className="w-4 h-4 text-slate-400" />
-                <span>اقتراح: 10 دقائق تقريباً</span>
+                <span>اقتراح: 10 دقائق تقريباً لكل هدف</span>
               </div>
 
-              {/* Primary Complete Action Button */}
+              {/* Primary Complete Action Button (Marks all active daily goals complete/incomplete) */}
               <button
                 type="button"
                 onClick={() => handleToggleDayCompletion(selectedDayNum, true)}
@@ -896,8 +988,10 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                 <Check className="w-4 h-4 stroke-[3]" />
                 <span>
                   {currentTask?.isCompleted
-                    ? 'تم إنجاز مهمة هذا اليوم (انقر للإلغاء)'
-                    : 'أنجزت مهمة اليوم'}
+                    ? `تم إنجاز أهداف اليوم (${dayCompletedGoalsCount} / ${currentDayGoals.length}) — انقر للإلغاء`
+                    : currentDayGoals.length > 1
+                      ? `أنجزت جميع أهداف اليوم (${currentDayGoals.length})`
+                      : 'أنجزت مهمة اليوم'}
                 </span>
               </button>
 
@@ -1013,6 +1107,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                   const isSelected = selectedDayNum === day.dayNumber;
                   const isCompleted = day.isCompleted;
                   const isActiveTarget = !isCompleted && day.dayNumber === activeFocusDay.dayNumber;
+                  const dayGoalsList = resolveDayGoals(day);
+                  const dayDoneGoals = dayGoalsList.filter((g) => g.isCompleted).length;
 
                   return (
                     <button
@@ -1041,13 +1137,26 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                           <Check className="w-2.5 h-2.5 stroke-[3]" />
                         </span>
                       )}
-                      {!isCompleted && isActiveTarget && (
+                      {!isCompleted && dayGoalsList.length > 1 ? (
+                        <span
+                          dir="ltr"
+                          style={{ unicodeBidi: 'isolate' }}
+                          className={`absolute top-1.5 start-1.5 px-1 py-0.2 rounded text-[9px] font-mono font-black ${
+                            isSelected
+                              ? 'bg-white/20 text-white'
+                              : 'bg-teal-500/15 text-[#0F6E6E] dark:text-cyan-300'
+                          }`}
+                          title={`${dayDoneGoals} من ${dayGoalsList.length} أهداف منجزة`}
+                        >
+                          {dayDoneGoals}/{dayGoalsList.length}
+                        </span>
+                      ) : !isCompleted && isActiveTarget ? (
                         <span
                           className={`absolute top-1.5 start-1.5 w-2 h-2 rounded-full ${isSelected ? 'bg-amber-300' : 'bg-[#0F6E6E] dark:bg-cyan-400 animate-pulse'
                             }`}
                           title="اليوم النشط"
                         />
-                      )}
+                      ) : null}
                       <span className="text-[11px] font-bold opacity-80">يوم</span>
                       <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-base font-black font-mono">
                         {day.dayNumber}
@@ -1076,7 +1185,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                     <thead>
                       <tr className="bg-slate-100/80 dark:bg-[#112028] border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-black text-slate-600 dark:text-slate-300">
                         <th className="py-3 px-4 w-44">اليوم والمجال</th>
-                        <th className="py-3 px-4">المهمة المختارة</th>
+                        <th className="py-3 px-4">أهداف اليوم المختارة</th>
                         <th className="py-3 px-4 w-28 text-center">الإنجاز</th>
                       </tr>
                     </thead>
@@ -1084,7 +1193,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                       {activeWeekDays.map((day) => {
                         const isFocused = day.dayNumber === selectedDayNum;
                         const domainLabel = getDomainArabicName(day.domainId || day.domainTitle);
-                        const cleanTask = localizeDomainText(day.selectedTask);
+                        const dayGoals = resolveDayGoals(day);
+                        const doneCount = dayGoals.filter((g) => g.isCompleted).length;
 
                         return (
                           <tr
@@ -1097,9 +1207,20 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                           >
                             <td className="py-3 px-4 align-middle">
                               <div className="flex flex-col gap-1">
-                                <span className="font-black text-[#0F172A] dark:text-white">
-                                  يوم <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{day.dayNumber}</span>
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="font-black text-[#0F172A] dark:text-white">
+                                    يوم <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{day.dayNumber}</span>
+                                  </span>
+                                  {dayGoals.length > 1 && (
+                                    <span
+                                      dir="ltr"
+                                      style={{ unicodeBidi: 'isolate' }}
+                                      className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-teal-500/10 dark:bg-cyan-500/15 text-[#0F6E6E] dark:text-cyan-300"
+                                    >
+                                      {doneCount}/{dayGoals.length}
+                                    </span>
+                                  )}
+                                </div>
                                 <span className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700/80 text-[10px] font-bold text-[#0F6E6E] dark:text-cyan-300">
                                   <span>{day.domainIcon || '🎯'}</span>
                                   <span className="truncate max-w-[120px]">{domainLabel}</span>
@@ -1107,20 +1228,31 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                               </div>
                             </td>
                             <td className="py-3 px-4 align-middle">
-                              <div className="flex items-start gap-2">
-                                <span
-                                  className={`leading-relaxed font-semibold ${day.isCompleted
-                                      ? 'line-through text-slate-400 dark:text-slate-500'
-                                      : 'text-[#0F172A] dark:text-slate-200'
-                                    }`}
-                                >
-                                  {isolateNumbersInText(cleanTask)}
-                                </span>
-                                {day.isCustomSelected && (
-                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-teal-500/15 dark:bg-cyan-500/20 text-[#0F6E6E] dark:text-cyan-300 flex-shrink-0">
-                                    مخصصة
-                                  </span>
-                                )}
+                              <div className="space-y-1">
+                                {dayGoals.map((goal) => (
+                                  <div key={goal.id} className="flex items-start gap-2">
+                                    <span
+                                      className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
+                                        goal.isCompleted
+                                          ? 'bg-emerald-500'
+                                          : 'bg-slate-300 dark:bg-slate-600'
+                                      }`}
+                                    />
+                                    <span
+                                      className={`leading-relaxed font-semibold ${goal.isCompleted
+                                          ? 'line-through text-slate-400 dark:text-slate-500'
+                                          : 'text-[#0F172A] dark:text-slate-200'
+                                        }`}
+                                    >
+                                      {isolateNumbersInText(localizeDomainText(goal.text))}
+                                    </span>
+                                    {goal.isCustom && (
+                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-teal-500/15 dark:bg-cyan-500/20 text-[#0F6E6E] dark:text-cyan-300 flex-shrink-0">
+                                        مخصصة
+                                      </span>
+                                    )}
+                                  </div>
+                                ))}
                               </div>
                             </td>
                             <td className="py-3 px-4 align-middle text-center">
@@ -1151,7 +1283,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                   {activeWeekDays.map((day) => {
                     const isFocused = day.dayNumber === selectedDayNum;
                     const domainLabel = getDomainArabicName(day.domainId || day.domainTitle);
-                    const cleanTask = localizeDomainText(day.selectedTask);
+                    const dayGoals = resolveDayGoals(day);
+                    const doneCount = dayGoals.filter((g) => g.isCompleted).length;
 
                     return (
                       <div
@@ -1171,15 +1304,30 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                               <span>{day.domainIcon || '🎯'}</span>
                               <span>{domainLabel}</span>
                             </span>
+                            {dayGoals.length > 1 && (
+                              <span
+                                dir="ltr"
+                                style={{ unicodeBidi: 'isolate' }}
+                                className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-teal-500/10 dark:bg-cyan-500/15 text-[#0F6E6E] dark:text-cyan-300"
+                              >
+                                {doneCount}/{dayGoals.length}
+                              </span>
+                            )}
                           </div>
-                          <p
-                            className={`text-xs leading-relaxed font-semibold ${day.isCompleted
-                                ? 'line-through text-slate-400 dark:text-slate-500'
-                                : 'text-[#334155] dark:text-slate-200'
-                              }`}
-                          >
-                            {isolateNumbersInText(cleanTask)}
-                          </p>
+                          <div className="space-y-1">
+                            {dayGoals.map((goal) => (
+                              <p
+                                key={goal.id}
+                                className={`text-xs leading-relaxed font-semibold flex items-start gap-1.5 ${goal.isCompleted
+                                    ? 'line-through text-slate-400 dark:text-slate-500'
+                                    : 'text-[#334155] dark:text-slate-200'
+                                  }`}
+                              >
+                                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${goal.isCompleted ? 'bg-emerald-500' : 'bg-teal-500'}`} />
+                                <span>{isolateNumbersInText(localizeDomainText(goal.text))}</span>
+                              </p>
+                            ))}
+                          </div>
                         </div>
 
                         <button

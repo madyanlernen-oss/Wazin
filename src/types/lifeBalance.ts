@@ -174,6 +174,14 @@ export interface WeekData {
   challenges: string[];
 }
 
+export interface DailyGoalItem {
+  id: string;
+  text: string;
+  isCompleted: boolean;
+  isCustom?: boolean;
+  completedAt?: number;
+}
+
 export interface DayPlanTask {
   dayNumber: number; // 1 to 30
   domainId: LifeAreaId;
@@ -186,6 +194,7 @@ export interface DayPlanTask {
   customTask?: string;
   customTasks?: string[];
   isCustomSelected?: boolean;
+  dailyGoals?: DailyGoalItem[];
   isCompleted: boolean;
   completedAt?: number;
   estimatedMinutes?: number;
