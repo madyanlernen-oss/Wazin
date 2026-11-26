@@ -146,10 +146,11 @@ export const ChatRoomHeader: React.FC<ChatRoomHeaderProps> = ({
               type="button"
               onClick={onReevaluateAdvisor}
               className="flex items-center gap-1 px-2.5 py-2 rounded-xl bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#334155] dark:text-[#CBD5E1] hover:text-[#0F6E6E] dark:hover:text-[#22D3EE] text-[11px] font-bold transition-all shadow-xs cursor-pointer"
-              title="بدء جلسة إعادة تقييم جديدة معزولة لهذا الجانب"
+              title="إعادة تقييم هذه المحطة فقط مع الاحتفاظ ببقية المحطات"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">إعادة التقييم</span>
+              <span className="hidden sm:inline">إعادة تقييم هذه المحطة</span>
+              <span className="sm:hidden">إعادة التقييم</span>
             </button>
           )}
         </div>

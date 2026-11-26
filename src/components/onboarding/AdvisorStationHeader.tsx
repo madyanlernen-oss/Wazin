@@ -215,17 +215,17 @@ export const AdvisorStationHeader: React.FC<AdvisorStationHeaderProps> = ({
             </button>
           )}
 
-          {/* Start New Weekly Assessment button */}
+          {/* Re-evaluate current station only */}
           {onStartNewWeeklyAssessment && (
             <button
               type="button"
               onClick={onStartNewWeeklyAssessment}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#F7F6F2] dark:bg-[#162734] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] text-xs font-bold transition-all shadow-xs cursor-pointer"
-              title="بدء دورة تقييم أسبوعي جديدة لكافة الأبعاد"
+              title="إعادة تقييم هذه المحطة فقط مع الاحتفاظ ببقية المحطات"
             >
               <Sparkles className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-[#22D3EE]" />
-              <span className="hidden sm:inline">بدء تقييم أسبوعي جديد</span>
-              <span className="sm:hidden">تقييم جديد</span>
+              <span className="hidden sm:inline">إعادة تقييم هذه المحطة</span>
+              <span className="sm:hidden">تصفير المحطة</span>
             </button>
           )}
         </div>

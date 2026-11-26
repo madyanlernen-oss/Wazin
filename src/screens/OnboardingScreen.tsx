@@ -1447,20 +1447,19 @@ ${openingQuestion}
         onSave={handleSaveContext}
       />
 
-      {/* Confirmation Dialog for Starting a New Weekly Assessment */}
+      {/* Confirmation Dialog for Per-Station Re-evaluation */}
       {onStartNewWeeklyAssessment && (
         <ConfirmDialog
           open={showWeeklyResetConfirm}
-          title="بدء تقييم أسبوعي جديد"
-          description="سيتم تصفير المحطة الحالية والعودة فوراً إلى المحطة 1 من 8 (الجانب الروحي) ومسح رسائل المحادثات السابقة والدرجات غير المعتمدة. هل تريد المتابعة؟"
-          confirmLabel="نعم، بدء تقييم جديد"
+          title="إعادة تقييم هذه المحطة"
+          description="سيتم تصفير المحطة الحالية ومسح رسائل محادثتها فقط لإعادة التقييم من جديد، مع الاحتفاظ ببقية المحطات كما هي. هل تريد المتابعة؟"
+          confirmLabel="نعم، إعادة تقييم هذه المحطة"
           cancelLabel="إلغاء"
           variant="warning"
           onCancel={() => setShowWeeklyResetConfirm(false)}
           onConfirm={() => {
             setShowWeeklyResetConfirm(false);
-            resetToFirstStation();
-            onStartNewWeeklyAssessment();
+            handleReopenStation();
           }}
         />
       )}

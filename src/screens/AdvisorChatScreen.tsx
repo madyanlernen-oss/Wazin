@@ -8,6 +8,7 @@ import {
   UserProfile,
 } from '../types/lifeBalance';
 import { isCrisisMessage } from '../components/CrisisSupportCard';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   WAZAN_ADVISOR_CHATS_KEY,
   loadChatHistoryFromStorage,
@@ -117,6 +118,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     return 'balanced';
   });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [showStationResetConfirm, setShowStationResetConfirm] = useState(false);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -148,6 +150,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     lastSentMsgIdRef.current = '';
     lastSentAdvisorIdRef.current = '';
     setToastMessage(null);
+    setShowStationResetConfirm(false);
   }, [currentAdvisor.id]);
 
   const handleSelectAiMode = (mode: AiModelMode) => {
@@ -916,7 +919,7 @@ ${domainCtx.openingQuestion}`;
             currentScore={currentScore}
             aiMode={aiMode}
             onSelectAiMode={handleSelectAiMode}
-            onReevaluateAdvisor={handleReevaluateAdvisor}
+            onReevaluateAdvisor={() => setShowStationResetConfirm(true)}
           />
 
           {/* Chat Messages Area */}
@@ -989,6 +992,21 @@ ${domainCtx.openingQuestion}`;
           />
         </div>
       </div>
+
+      {/* Confirmation Dialog for Per-Station Re-evaluation */}
+      <ConfirmDialog
+        open={showStationResetConfirm}
+        title="إعادة تقييم هذه المحطة"
+        description="سيتم تصفير المحطة الحالية ومسح رسائل محادثتها فقط لإعادة التقييم من جديد، مع الاحتفاظ ببقية المحطات كما هي. هل تريد المتابعة؟"
+        confirmLabel="نعم، إعادة تقييم هذه المحطة"
+        cancelLabel="إلغاء"
+        variant="warning"
+        onCancel={() => setShowStationResetConfirm(false)}
+        onConfirm={() => {
+          setShowStationResetConfirm(false);
+          handleReevaluateAdvisor();
+        }}
+      />
 
       {/* Floating Confirmation Toast for Eisenhower Injection */}
       <ChatToast
