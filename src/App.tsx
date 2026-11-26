@@ -39,9 +39,9 @@ import {
   cleanupStoredUserPasswords,
   resetStoredState,
   StoredAppState,
-  isCoordinatorUnlockedInStorage,
   setCoordinatorUnlockedInStorage,
   getStoredDashboardTab,
+  saveStoredDashboardTab,
   clearChatHistoryFromStorage,
   WAZAN_CHAT_HISTORY_KEY,
   WAZAN_ADVISOR_CHATS_KEY,
@@ -76,18 +76,26 @@ export default function App() {
       loaded.lastActiveScreen !== 'login' &&
       loaded.lastActiveScreen !== 'landing'
     ) {
+      if (
+        loaded.lastActiveScreen === 'director_summary' &&
+        (loaded.completedAdvisors?.length || 0) < 8
+      ) {
+        return 'dashboard';
+      }
       return loaded.lastActiveScreen;
     }
     return 'landing';
   });
 
   const [previousScreen, setPreviousScreen] = useState<Screen>('dashboard');
+  const [lockedDirectorNoticeSeq, setLockedDirectorNoticeSeq] = useState<number>(0);
 
   const navigateTo = (newScreen: Screen) => {
     let target = newScreen;
-    const isUnlocked = appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage();
+    const isUnlocked = appState.completedAdvisors.length >= 8;
     if (target === 'director_summary' && !isUnlocked) {
       target = 'dashboard';
+      setLockedDirectorNoticeSeq((s) => s + 1);
     }
     if (target !== activeScreen) {
       setPreviousScreen(activeScreen);
@@ -391,6 +399,10 @@ export default function App() {
         completedDates: newCompletedDates,
       };
       saveStoredState(nextState);
+      if (newCompleted.length < 8) {
+        setCoordinatorUnlockedInStorage(false);
+        saveStoredDashboardTab('dashboard');
+      }
       const existingPlan = getStoredThirtyDayPlan();
       if (existingPlan) {
         syncThirtyDayPlanWithScores(existingPlan, newScores);
@@ -448,6 +460,8 @@ export default function App() {
     });
 
     clearThirtyDayPlanFromStorage();
+    setCoordinatorUnlockedInStorage(false);
+    saveStoredDashboardTab('dashboard');
     clearChatHistoryFromStorage(undefined, WAZAN_CHAT_HISTORY_KEY);
     clearChatHistoryFromStorage(undefined, WAZAN_ADVISOR_CHATS_KEY);
     try {
@@ -627,6 +641,7 @@ export default function App() {
         onSignOut={handleSignOut}
         onReset={handleResetProfile}
         completedCount={appState.completedAdvisors.length}
+        onLockedDirectorAttempt={() => setLockedDirectorNoticeSeq((s) => s + 1)}
         isOpenMobile={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         theme={theme}
@@ -687,15 +702,17 @@ export default function App() {
           {(activeScreen === 'dashboard' || activeScreen === 'director_summary') && (
             <DashboardScreen
               activeTab={
-                (activeScreen === 'director_summary' || getStoredDashboardTab() === 'coordinator') &&
-                (appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage())
+                appState.completedAdvisors.length >= 8 &&
+                (activeScreen === 'director_summary' || getStoredDashboardTab() === 'coordinator')
                   ? 'coordinator'
                   : 'dashboard'
               }
               onSelectTab={(tab) => {
                 if (tab === 'coordinator') {
-                  if (appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage()) {
+                  if (appState.completedAdvisors.length >= 8) {
                     setActiveScreen('director_summary');
+                  } else {
+                    setLockedDirectorNoticeSeq((s) => s + 1);
                   }
                 } else {
                   setActiveScreen('dashboard');
@@ -711,8 +728,10 @@ export default function App() {
               onSelectAdvisorChat={handleSelectAdvisorChat}
               onEditAdvisorEvaluation={handleEditAdvisorEvaluation}
               onNavigateToDirectorSummary={() => {
-                if (appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage()) {
+                if (appState.completedAdvisors.length >= 8) {
                   setActiveScreen('director_summary');
+                } else {
+                  setLockedDirectorNoticeSeq((s) => s + 1);
                 }
               }}
               onNavigateToThirtyDayPlan={() => setActiveScreen('thirty_day_plan')}
@@ -720,6 +739,7 @@ export default function App() {
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
               onStartEvaluation={handleStartNewWeeklyAssessment}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
+              lockedDirectorNoticeSeq={lockedDirectorNoticeSeq}
               theme={theme}
             />
           )}
@@ -737,7 +757,7 @@ export default function App() {
               directorReport={appState.directorReport}
               userProfile={appState.userProfile}
               onNavigateToAssessment={() => setActiveScreen('onboarding')}
-              onNavigateToDirector={() => setActiveScreen('director_summary')}
+              onNavigateToDirector={() => navigateTo('director_summary')}
               theme={theme}
             />
           )}

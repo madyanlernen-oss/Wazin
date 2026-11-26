@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { RotateCcw, LogOut, X, Lock } from 'lucide-react';
 import { Screen, UserProfile } from '../types/lifeBalance';
-import { isCoordinatorUnlockedInStorage } from '../utils/storage';
 import { WazanLogo } from './WazanLogo';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ThemeToggle } from './ThemeToggle';
@@ -16,6 +15,7 @@ export interface SidebarProps {
   onSignOut: () => void;
   onReset: () => void;
   completedCount: number;
+  onLockedDirectorAttempt?: () => void;
   isOpenMobile?: boolean;
   onCloseMobile?: () => void;
   theme?: 'light' | 'dark';
@@ -30,6 +30,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSignOut,
   onReset,
   completedCount,
+  onLockedDirectorAttempt,
   isOpenMobile = false,
   onCloseMobile,
   theme = 'light',
@@ -98,7 +99,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, [isOpenMobile, onCloseMobile, openerRef]);
 
   const handleSelectNav = (screen: Screen) => {
-    if (screen === 'director_summary' && completedCount < 8 && !isCoordinatorUnlockedInStorage()) {
+    if (screen === 'director_summary' && completedCount < 8) {
+      onLockedDirectorAttempt?.();
       onNavigate('dashboard');
       if (onCloseMobile) onCloseMobile();
       return;
@@ -157,7 +159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const isDirectorItem = item.screen === 'director_summary';
-            const isDirectorUnlocked = completedCount >= 8 || isCoordinatorUnlockedInStorage();
+            const isDirectorUnlocked = completedCount >= 8;
             const isDirectorLocked = isDirectorItem && !isDirectorUnlocked;
             const isActive =
               currentScreen === item.screen ||
@@ -170,6 +172,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 type="button"
                 onClick={() => handleSelectNav(item.screen)}
                 aria-current={isActive ? 'page' : undefined}
+                aria-disabled={isDirectorLocked || undefined}
                 title={
                   isDirectorLocked
                     ? `يُفتح بعد إكمال التقييم (${completedCount} / 8)`
@@ -193,14 +196,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         : 'text-slate-600 dark:text-slate-400 group-hover:text-[#0F6E6E] dark:group-hover:text-cyan-300'
                     }`}
                   />
-                  <span className="truncate">{item.label}</span>
+                  <div className="min-w-0 text-right">
+                    <span className="truncate block">{item.label}</span>
+                    {isDirectorLocked && (
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 flex items-center gap-1 mt-0.5">
+                        <Lock className="w-2.5 h-2.5 flex-shrink-0" aria-hidden="true" />
+                        <span className="truncate">يُفتح بعد إكمال التقييم</span>
+                      </span>
+                    )}
+                  </div>
                 </div>
                 {isDirectorLocked && (
                   <span
                     className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100/80 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 flex items-center gap-1 flex-shrink-0"
-                    title="يُفتح بعد إكمال التقييم"
+                    title={`يُفتح بعد إكمال التقييم (${completedCount} / 8)`}
                   >
-                    <Lock className="w-3 h-3" />
+                    <Lock className="w-3 h-3" aria-hidden="true" />
+                    <span dir="ltr" className="[unicode-bidi:isolate] tabular-nums">{completedCount}/8</span>
                   </span>
                 )}
               </button>

@@ -35,7 +35,6 @@ import { DirectorSummaryReport, LifeAreaId, UserProfile } from '../types/lifeBal
 import {
   extractInsightsFromAnswers,
   getStoredDashboardTab,
-  isCoordinatorUnlockedInStorage,
   saveStoredDashboardTab,
   setCoordinatorUnlockedInStorage,
 } from '../utils/storage';
@@ -68,6 +67,7 @@ interface DashboardScreenProps {
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
   onStartEvaluation?: () => void;
   onStartNewWeeklyAssessment?: () => void;
+  lockedDirectorNoticeSeq?: number;
   theme?: 'light' | 'dark';
 }
 
@@ -90,30 +90,29 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onAddEisenhowerGoal,
   onStartEvaluation,
   onStartNewWeeklyAssessment,
+  lockedDirectorNoticeSeq = 0,
   theme = 'light',
 }) => {
   const completedCount = completedAdvisors.length;
-  const isAssessmentComplete =
-    completedCount >= 8 ||
-    ADVISORS_LIST.every((adv) => (scores[adv.id] || 0) > 0) ||
-    isCoordinatorUnlockedInStorage();
+  const isAssessmentComplete = completedCount >= 8;
   const isBrandNewUser = completedCount === 0;
 
-  // Persist unlock state once all 8 domains are completed
+  // Keep storage synchronized strictly with actual 8/8 completion state
   React.useEffect(() => {
-    if (completedCount >= 8 || ADVISORS_LIST.every((adv) => (scores[adv.id] || 0) > 0)) {
-      setCoordinatorUnlockedInStorage(true);
+    setCoordinatorUnlockedInStorage(isAssessmentComplete);
+    if (!isAssessmentComplete) {
+      saveStoredDashboardTab('dashboard');
     }
-  }, [completedCount, scores]);
+  }, [isAssessmentComplete]);
 
   const [internalTab, setInternalTab] = useState<DashboardTab>(() => {
+    if (completedAdvisors.length < 8) return 'dashboard';
     const saved = getStoredDashboardTab();
-    if (saved === 'coordinator' && isAssessmentComplete) {
-      return 'coordinator';
-    }
-    return initialTab === 'coordinator' && isAssessmentComplete ? 'coordinator' : 'dashboard';
+    if (saved === 'coordinator') return 'coordinator';
+    return initialTab === 'coordinator' ? 'coordinator' : 'dashboard';
   });
-  const currentTab = activeTab !== undefined ? activeTab : internalTab;
+  const rawTab = activeTab !== undefined ? activeTab : internalTab;
+  const currentTab: DashboardTab = isAssessmentComplete && rawTab === 'coordinator' ? 'coordinator' : 'dashboard';
 
   const [selectedAreaId, setSelectedAreaId] = useState<LifeAreaId | null>('spiritual');
   const [newGoalInput, setNewGoalInput] = useState<{ [key: string]: string }>({});
@@ -124,13 +123,31 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [showWeeklyResetConfirm, setShowWeeklyResetConfirm] = useState(false);
   const toastTimeoutRef = useRef<any>(null);
 
+  const showLockedCoordinatorToast = () => {
+    const remaining = Math.max(0, 8 - completedCount);
+    const remainingText =
+      remaining === 1 ? 'محطة واحدة متبقية' : remaining === 2 ? 'محطتان متبقيتان' : `${remaining} محطات متبقية`;
+    setToastMessage(
+      `🔒 رؤية المنسق العام مُغلقة حالياً: يُفتح بعد إكمال التقييم (${completedCount} / 8 — ${remainingText}).`
+    );
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 4500);
+  };
+
+  // Surface locked hint toast when user clicks locked Coordinator link from Sidebar or another screen
+  const prevLockSeqRef = useRef(lockedDirectorNoticeSeq);
+  React.useEffect(() => {
+    if (lockedDirectorNoticeSeq > prevLockSeqRef.current) {
+      prevLockSeqRef.current = lockedDirectorNoticeSeq;
+      if (!isAssessmentComplete) {
+        showLockedCoordinatorToast();
+      }
+    }
+  }, [lockedDirectorNoticeSeq, isAssessmentComplete]);
+
   const handleTabChange = (tab: DashboardTab) => {
     if (tab === 'coordinator' && !isAssessmentComplete) {
-      setToastMessage(
-        `🔒 رؤية المنسق العام مُغلقة حالياً: تُفتح تلقائياً بعد إكمال تقييم جميع محطات عجلة الحياة (${completedCount} / 8).`
-      );
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 4500);
+      showLockedCoordinatorToast();
       return;
     }
 
@@ -144,11 +161,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
   const handleNavigateToCoordinatorView = () => {
     if (!isAssessmentComplete) {
-      setToastMessage(
-        `🔒 تقرير ورؤية المنسق العام مُغلقة حالياً: تُفتح تلقائياً بعد إكمال تقييم جميع محطات عجلة الحياة (${completedCount} / 8).`
-      );
-      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-      toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 4500);
+      showLockedCoordinatorToast();
       return;
     }
 
@@ -500,11 +513,27 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
                     <button
                       type="button"
                       onClick={handleNavigateToCoordinatorView}
-                      className="flex items-center gap-2 px-5 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-extrabold text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] group cursor-pointer"
+                      aria-disabled={!isAssessmentComplete}
+                      title={!isAssessmentComplete ? `يُفتح بعد إكمال التقييم (${completedCount} / 8)` : undefined}
+                      className={`flex items-center gap-2 px-5 py-4 rounded-2xl font-extrabold text-xs sm:text-sm transition-all ${
+                        !isAssessmentComplete
+                          ? 'bg-slate-100 dark:bg-[#0E1D24] border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-80'
+                          : 'bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg hover:scale-[1.02] group cursor-pointer'
+                      }`}
                     >
-                      <Sparkles className="w-4 h-4 text-[#ffd67a] dark:text-amber-300" />
+                      {!isAssessmentComplete ? (
+                        <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                      ) : (
+                        <Sparkles className="w-4 h-4 text-[#ffd67a] dark:text-amber-300" />
+                      )}
                       <span>تقرير المنسق العام التكاملي</span>
-                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                      {!isAssessmentComplete ? (
+                        <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800/80 whitespace-nowrap">
+                          يُفتح بعد إكمال التقييم
+                        </span>
+                      ) : (
+                        <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                      )}
                     </button>
                     {onStartNewWeeklyAssessment && (
                       <button
@@ -907,11 +936,27 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
           <button
             type="button"
             onClick={handleNavigateToCoordinatorView}
-            className="px-5 py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-[#0B161C] dark:hover:bg-[#162734] border border-slate-200 dark:border-slate-700 text-[#0F172A] dark:text-slate-200 font-extrabold text-xs shadow-xs transition-all flex items-center gap-2 self-start sm:self-center cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72]"
+            aria-disabled={!isAssessmentComplete}
+            title={!isAssessmentComplete ? `يُفتح بعد إكمال التقييم (${completedCount} / 8)` : undefined}
+            className={`px-5 py-2.5 rounded-2xl font-extrabold text-xs shadow-xs transition-all flex items-center gap-2 self-start sm:self-center group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] ${
+              !isAssessmentComplete
+                ? 'bg-slate-50 dark:bg-[#0E1D24] border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 cursor-not-allowed opacity-80'
+                : 'bg-slate-50 hover:bg-slate-100 dark:bg-[#0B161C] dark:hover:bg-[#162734] border border-slate-200 dark:border-slate-700 text-[#0F172A] dark:text-slate-200 cursor-pointer'
+            }`}
           >
-            <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+            {!isAssessmentComplete ? (
+              <Lock className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            ) : (
+              <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
+            )}
             <span>عرض التقرير التفاعلي الكامل</span>
-            <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
+            {!isAssessmentComplete ? (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800/80 whitespace-nowrap">
+                يُفتح بعد إكمال التقييم
+              </span>
+            ) : (
+              <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-1 transition-transform" />
+            )}
           </button>
         </div>
 
