@@ -14,8 +14,7 @@ import { DashboardScreen } from './screens/DashboardScreen';
 import { AdvisorChatScreen } from './screens/AdvisorChatScreen';
 import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
-import { EisenhowerMatrixScreen } from './screens/EisenhowerMatrixScreen';
-import { ThirtyDayPlanScreen } from './screens/ThirtyDayPlanScreen';
+import { UnifiedThirtyDayWorkspace } from './screens/UnifiedThirtyDayWorkspace';
 import {
   clearThirtyDayPlanFromStorage,
   getStoredThirtyDayPlan,
@@ -523,7 +522,8 @@ export default function App() {
     onboarding: 'تقييم أبعاد الحياة',
     advisor_chat: 'استشارة المستشارين',
     director_summary: 'تقرير المنسق العام',
-    goals_matrix: 'أهدافي (مصفوفة أيزنهاور)',
+    thirty_day_plan: 'خطة 30 يوم',
+    goals_matrix: 'خطة 30 يوم',
     comparison: 'المقارنة والتحليلات',
   };
 
@@ -659,10 +659,20 @@ export default function App() {
             />
           )}
 
-          {activeScreen === 'thirty_day_plan' && (
-            <ThirtyDayPlanScreen
+          {(activeScreen === 'thirty_day_plan' || activeScreen === 'goals_matrix') && (
+            <UnifiedThirtyDayWorkspace
+              activeTab={activeScreen === 'goals_matrix' ? 'matrix' : 'plan'}
+              onSelectTab={(tab) => setActiveScreen(tab === 'matrix' ? 'goals_matrix' : 'thirty_day_plan')}
               scores={appState.scores}
               onNavigate={(screen) => setActiveScreen(screen)}
+              eisenhowerGoals={appState.eisenhowerGoals}
+              onUpdateEisenhowerGoals={(updated) =>
+                setAppState((prev) => ({ ...prev, eisenhowerGoals: updated }))
+              }
+              directorReport={appState.directorReport}
+              userProfile={appState.userProfile}
+              onNavigateToAssessment={() => setActiveScreen('onboarding')}
+              onNavigateToDirector={() => setActiveScreen('director_summary')}
               theme={theme}
             />
           )}
@@ -737,21 +747,6 @@ export default function App() {
             <ComparisonScreen
               userProfile={appState.userProfile}
               onNavigateToDashboard={() => setActiveScreen('dashboard')}
-              theme={theme}
-            />
-          )}
-
-          {activeScreen === 'goals_matrix' && (
-            <EisenhowerMatrixScreen
-              goals={appState.eisenhowerGoals}
-              onUpdateGoals={(updated) =>
-                setAppState((prev) => ({ ...prev, eisenhowerGoals: updated }))
-              }
-              directorReport={appState.directorReport}
-              scores={appState.scores}
-              userProfile={appState.userProfile}
-              onNavigateToAssessment={() => setActiveScreen('onboarding')}
-              onNavigateToDirector={() => setActiveScreen('director_summary')}
               theme={theme}
             />
           )}

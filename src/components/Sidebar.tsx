@@ -150,7 +150,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
-            const isActive = currentScreen === item.screen;
+            const isActive =
+              currentScreen === item.screen ||
+              (item.screen === 'thirty_day_plan' && currentScreen === 'goals_matrix');
 
             return (
               <button

@@ -2,7 +2,6 @@ import React from 'react';
 import {
   LayoutDashboard,
   CalendarDays,
-  Target,
   ClipboardList,
   MessageSquare,
   Compass,
@@ -29,15 +28,8 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     screen: 'thirty_day_plan',
     icon: CalendarDays,
-    label: 'خطتي الذكية لـ 30 يوماً',
+    label: 'خطة 30 يوم',
     shortLabel: 'خطة 30 يوم',
-    inTopBar: true,
-  },
-  {
-    screen: 'goals_matrix',
-    icon: Target,
-    label: 'أهدافي (مصفوفة أيزنهاور)',
-    shortLabel: 'أهدافي',
     inTopBar: true,
   },
   {

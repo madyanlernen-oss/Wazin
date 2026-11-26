@@ -138,7 +138,9 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* 7 & 9. Navigation Tabs with aria-label, aria-current, and responsive icon-collapse */}
       <nav aria-label="التنقل الرئيسي" className="flex items-center gap-1 sm:gap-1.5 md:gap-2">
         {NAV_ITEMS.filter((item) => item.inTopBar).map((item) => {
-          const isActive = currentScreen === item.screen;
+          const isActive =
+            currentScreen === item.screen ||
+            (item.screen === 'thirty_day_plan' && currentScreen === 'goals_matrix');
           const isAssessmentTab = item.screen === 'onboarding';
           const hasBadge = isAssessmentTab && completedCount !== undefined && completedCount < 8;
 
