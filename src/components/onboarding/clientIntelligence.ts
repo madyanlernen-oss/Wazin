@@ -27,6 +27,7 @@ export interface EvaluationChatMessage {
   summary?: string;
   advice?: string;
   isCrisis?: boolean;
+  ignoredForTurnCount?: boolean;
   suggestedReplies?: string[];
   source?: 'gemini' | 'groq' | 'local-fallback';
 }

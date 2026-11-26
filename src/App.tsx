@@ -42,6 +42,10 @@ import {
   isCoordinatorUnlockedInStorage,
   setCoordinatorUnlockedInStorage,
   getStoredDashboardTab,
+  clearChatHistoryFromStorage,
+  WAZAN_CHAT_HISTORY_KEY,
+  WAZAN_ADVISOR_CHATS_KEY,
+  WAZAN_EVAL_ACTIVE_DOMAIN_KEY,
 } from './utils/storage';
 import {
   activateDemoMode,
@@ -175,7 +179,10 @@ export default function App() {
     exitDemoMode();
     clearThirtyDayPlanFromStorage();
     setCoordinatorUnlockedInStorage(false);
+    clearChatHistoryFromStorage(undefined, WAZAN_CHAT_HISTORY_KEY);
+    clearChatHistoryFromStorage(undefined, WAZAN_ADVISOR_CHATS_KEY);
     try {
+      localStorage.removeItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY);
       localStorage.removeItem('wazan_dashboard_active_tab_v1');
       localStorage.removeItem('wazan_advisor_chats');
       localStorage.removeItem('wazan_added_goals');
@@ -222,7 +229,10 @@ export default function App() {
       setIsDemoMode(true);
     } else {
       exitDemoMode();
+      clearChatHistoryFromStorage(undefined, WAZAN_CHAT_HISTORY_KEY);
+      clearChatHistoryFromStorage(undefined, WAZAN_ADVISOR_CHATS_KEY);
       try {
+        localStorage.removeItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY);
         localStorage.removeItem('wazan_advisor_chats');
         localStorage.removeItem('wazan_added_goals');
       } catch {
@@ -388,9 +398,23 @@ export default function App() {
       return nextState;
     });
 
+    clearChatHistoryFromStorage(advisorId, WAZAN_CHAT_HISTORY_KEY);
+    clearChatHistoryFromStorage(advisorId, WAZAN_ADVISOR_CHATS_KEY);
     try {
+      localStorage.setItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY, advisorId);
       localStorage.removeItem('wazan_eval_chats');
-      localStorage.removeItem('wazan_eval_insights');
+      const rawInsights = localStorage.getItem('wazan_eval_insights');
+      if (rawInsights) {
+        const parsedInsights = JSON.parse(rawInsights);
+        if (parsedInsights && typeof parsedInsights === 'object') {
+          delete parsedInsights[advisorId];
+          if (Object.keys(parsedInsights).length === 0) {
+            localStorage.removeItem('wazan_eval_insights');
+          } else {
+            localStorage.setItem('wazan_eval_insights', JSON.stringify(parsedInsights));
+          }
+        }
+      }
     } catch {
       // ignore
     }
@@ -424,7 +448,10 @@ export default function App() {
     });
 
     clearThirtyDayPlanFromStorage();
+    clearChatHistoryFromStorage(undefined, WAZAN_CHAT_HISTORY_KEY);
+    clearChatHistoryFromStorage(undefined, WAZAN_ADVISOR_CHATS_KEY);
     try {
+      localStorage.removeItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY);
       localStorage.removeItem('wazan_eval_chats');
       localStorage.removeItem('wazan_eval_insights');
       localStorage.removeItem('wazan_current_eval_advisor');

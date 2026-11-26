@@ -143,32 +143,7 @@ export function cleanupStoredUserPasswords(): void {
       }
     }
 
-    // 3. Reset legacy completedAdvisors (8/8) so weekly assessment starts fresh and uncompleted
-    for (const stateKey of [STORAGE_KEY, ...LEGACY_STORAGE_KEYS]) {
-      const raw = localStorage.getItem(stateKey);
-      if (raw) {
-        try {
-          const parsed = JSON.parse(raw);
-          if (parsed && Array.isArray(parsed.completedAdvisors) && parsed.completedAdvisors.length >= 8) {
-            parsed.completedAdvisors = [];
-            parsed.completedDates = {};
-            parsed.answers = {};
-            localStorage.setItem(stateKey, JSON.stringify(parsed));
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    // 4. Always clear old assessment caches (chats, insights, and current advisor)
-    try {
-      localStorage.removeItem('wazan_eval_insights');
-      localStorage.removeItem('wazan_eval_chats');
-      localStorage.removeItem('wazan_current_eval_advisor');
-    } catch {
-      // ignore
-    }
+    // 3. Preserve completedAdvisors across reloads; do NOT purge chat history on startup
   } catch (err) {
     console.warn('Password cleanup skipped or failed:', err);
   }
@@ -350,6 +325,73 @@ export const saveStoredDashboardTab = (tab: 'dashboard' | 'coordinator'): void =
   }
 };
 
+export const WAZAN_CHAT_HISTORY_KEY = 'wazan_chat_history_v1';
+export const WAZAN_ADVISOR_CHATS_KEY = 'wazan_advisor_chats';
+export const WAZAN_EVAL_ACTIVE_DOMAIN_KEY = 'wazan_eval_active_domain_v1';
+
+/**
+ * Load per-domain chat threads safely from localStorage.
+ */
+export const loadChatHistoryFromStorage = <T = any>(
+  storageKey: string = WAZAN_CHAT_HISTORY_KEY
+): Record<string, T[]> => {
+  try {
+    const raw = localStorage.getItem(storageKey);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
+    const sanitized: Record<string, T[]> = {};
+    for (const [domainId, msgs] of Object.entries(parsed)) {
+      if (Array.isArray(msgs)) {
+        sanitized[domainId] = msgs as T[];
+      }
+    }
+    return sanitized;
+  } catch {
+    return {};
+  }
+};
+
+/**
+ * Persist per-domain chat threads cleanly to localStorage.
+ */
+export const saveChatHistoryToStorage = <T = any>(
+  historyByDomain: Record<string, T[]>,
+  storageKey: string = WAZAN_CHAT_HISTORY_KEY
+): void => {
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(historyByDomain));
+  } catch {
+    // ignore quota or private mode errors
+  }
+};
+
+/**
+ * Clear saved chat history for one specific domain or all domains.
+ */
+export const clearChatHistoryFromStorage = (
+  domainId?: LifeAreaId | string,
+  storageKey: string = WAZAN_CHAT_HISTORY_KEY
+): void => {
+  try {
+    if (!domainId) {
+      localStorage.removeItem(storageKey);
+      return;
+    }
+    const current = loadChatHistoryFromStorage(storageKey);
+    if (domainId in current) {
+      delete current[domainId];
+      if (Object.keys(current).length === 0) {
+        localStorage.removeItem(storageKey);
+      } else {
+        localStorage.setItem(storageKey, JSON.stringify(current));
+      }
+    }
+  } catch {
+    // ignore
+  }
+};
+
 export const resetStoredState = (): void => {
   try {
     localStorage.removeItem(STORAGE_KEY);
@@ -361,7 +403,9 @@ export const resetStoredState = (): void => {
       }
     });
     const extraWazanKeys = [
-      'wazan_advisor_chats',
+      WAZAN_CHAT_HISTORY_KEY,
+      WAZAN_ADVISOR_CHATS_KEY,
+      WAZAN_EVAL_ACTIVE_DOMAIN_KEY,
       'wazan_eval_chats',
       'wazan_eval_insights',
       'wazan_eisenhower_goals',

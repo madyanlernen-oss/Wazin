@@ -22,6 +22,11 @@ import {
   calculateScoreForAdvisor,
   extractInsightsFromAnswers,
   isAdvisorWeeklyLocked,
+  WAZAN_CHAT_HISTORY_KEY,
+  WAZAN_EVAL_ACTIVE_DOMAIN_KEY,
+  loadChatHistoryFromStorage,
+  saveChatHistoryToStorage,
+  clearChatHistoryFromStorage,
 } from '../utils/storage';
 import { AiModelMode } from './AdvisorChatScreen';
 import { isCrisisMessage } from '../components/CrisisSupportCard';
@@ -98,6 +103,18 @@ function getDynamicGoldenHabit(
   });
 }
 
+/**
+ * Single source of truth determining whether a user message advances the evaluation turn counter.
+ */
+function isSubstantiveEvaluationMessage(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  const isCrisisOrDeathMsg = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(trimmed);
+  const isBareGreeting = /^(?:أهلاً|اهلا|هلا|مرحبا|مرحباً|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|حيّاك|أهلين)\s*(?:دكتور|دكتورة|استاذ|أستاذ|باشمهندس|كمال|سفيان)?\s*[.!؟]*$/i.test(trimmed);
+  const isPureAck = /^(?:شكراً|شكرا|يعطيك العافية|جزاك الله خير|تمام|أوك|اوك|حسناً|حسنا)\s*[.!؟]*$/i.test(trimmed);
+  return !isCrisisOrDeathMsg && !isBareGreeting && !isPureAck;
+}
+
 export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   initialAdvisorId = 'spiritual',
   assessmentMode,
@@ -120,19 +137,54 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
   theme: _theme = 'light',
 }) => {
   const [currentAdvisorIndex, setCurrentAdvisorIndex] = useState(() => {
+    try {
+      const savedActiveDomain = localStorage.getItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY);
+      if (savedActiveDomain) {
+        const savedIdx = ADVISORS_LIST.findIndex((a) => a.id === savedActiveDomain);
+        if (savedIdx >= 0) return savedIdx;
+      }
+    } catch {
+      // ignore
+    }
     const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
     return idx >= 0 ? idx : 0;
   });
+  const prevInitialAdvisorIdRef = useRef<LifeAreaId>(initialAdvisorId);
 
-  // Track turn count per advisor station for the adaptive clinical flow
-  const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>({});
+  // Restore saved chat history per domain from localStorage on mount
+  const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>(() =>
+    loadChatHistoryFromStorage<EvaluationChatMessage>(WAZAN_CHAT_HISTORY_KEY)
+  );
+
+  // Derive initial turn counts per domain directly from restored conversation history
+  const [stationTurnCount, setStationTurnCount] = useState<Record<string, number>>(() => {
+    const restored = loadChatHistoryFromStorage<EvaluationChatMessage>(WAZAN_CHAT_HISTORY_KEY);
+    const counts: Record<string, number> = {};
+    for (const [domainId, msgs] of Object.entries(restored)) {
+      counts[domainId] = msgs.filter(
+        (m) => m.sender === 'user' && !m.ignoredForTurnCount && isSubstantiveEvaluationMessage(m.text)
+      ).length;
+    }
+    return counts;
+  });
   // Track pending edit/undo resend per advisor so advisor never repeats greeting or prior question
   const [isEditResendByAdvisor, setIsEditResendByAdvisor] = useState<Record<string, boolean>>({});
   // Track temporary dismissal of score adoption choice when user clicks "الاستمرار في الحوار"
   const [dismissedChoiceTurns, setDismissedChoiceTurns] = useState<Record<string, number>>({});
 
-  // Dynamic insights per station in memory only (never saved to localStorage across sessions)
-  const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>({});
+  // Restore dynamic insights per station if saved
+  const [stationInsights, setStationInsights] = useState<Record<string, StationDynamicInsights>>(() => {
+    try {
+      const raw = localStorage.getItem('wazan_eval_insights');
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return {};
+  });
 
   // Isolate input draft per advisor station so switching advisors (e.g. Sufyan -> Layla) never leaks text across rooms
   const [draftsByAdvisor, setDraftsByAdvisor] = useState<Record<string, string>>({});
@@ -208,8 +260,6 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     localStorage.setItem('wazan_ai_mode', mode);
   };
 
-  // Chat conversation state per advisor in memory only (never saved to localStorage across sessions)
-  const [chatMessages, setChatMessages] = useState<Record<string, EvaluationChatMessage[]>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const currentRequestIdRef = useRef<string>('');
@@ -224,18 +274,34 @@ export const OnboardingScreen: React.FC<OnboardingScreenProps> = ({
     };
   }, []);
 
-  // Proactively purge any residual evaluation caches from localStorage on mount & when uncompleted
+  // Persist evaluation chat history per life domain in localStorage across reloads & switches
+  useEffect(() => {
+    if (Object.keys(chatMessages).length > 0) {
+      saveChatHistoryToStorage(chatMessages, WAZAN_CHAT_HISTORY_KEY);
+    }
+  }, [chatMessages]);
+
+  // Persist completed station dynamic insights safely in localStorage
   useEffect(() => {
     try {
-      localStorage.removeItem('wazan_eval_chats');
-      localStorage.removeItem('wazan_eval_insights');
-      localStorage.removeItem('wazan_current_eval_advisor');
+      if (Object.keys(stationInsights).length > 0) {
+        localStorage.setItem('wazan_eval_insights', JSON.stringify(stationInsights));
+      }
     } catch {
       // ignore
     }
-  }, []);
+  }, [stationInsights]);
 
   const currentAdvisor: AdvisorConfig = ADVISORS_LIST[currentAdvisorIndex];
+
+  // Remember active evaluation domain across page reloads
+  useEffect(() => {
+    try {
+      localStorage.setItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY, currentAdvisor.id);
+    } catch {
+      // ignore
+    }
+  }, [currentAdvisor.id]);
   const stationNumber = currentAdvisorIndex + 1; // 1 to 8
   const inputText = draftsByAdvisor[currentAdvisor.id] || '';
   const setInputText = (val: string) => {
@@ -356,18 +422,20 @@ ${openingQuestion}
     const firstAdvisor = ADVISORS_LIST[0];
     const firstStationConfig = getAdaptiveStationConfig(firstAdvisor.id, userProfile) || currentStationConfig;
     const initialOpeningMsg = getOpeningMessage(firstAdvisor, firstStationConfig, 1);
-    setChatMessages({ [firstAdvisor.id]: [initialOpeningMsg] });
-    setStationInsights({});
-    setStationTurnCount({ [firstAdvisor.id]: 0 });
-    setCurrentAdvisorIndex(0);
-    resetClientFallbackTracker();
+    clearChatHistoryFromStorage(undefined, WAZAN_CHAT_HISTORY_KEY);
     try {
+      localStorage.setItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY, firstAdvisor.id);
       localStorage.removeItem('wazan_eval_chats');
       localStorage.removeItem('wazan_eval_insights');
       localStorage.removeItem('wazan_current_eval_advisor');
     } catch {
       // ignore
     }
+    setChatMessages({ [firstAdvisor.id]: [initialOpeningMsg] });
+    setStationInsights({});
+    setStationTurnCount({ [firstAdvisor.id]: 0 });
+    setCurrentAdvisorIndex(0);
+    resetClientFallbackTracker();
   };
 
   // Switch cleanly between advisor stations: abort in-flight requests and isolate transient state
@@ -398,9 +466,12 @@ ${openingQuestion}
   }, [assessmentSessionId]);
 
   useEffect(() => {
-    const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
-    if (idx >= 0) {
-      setCurrentAdvisorIndex(idx);
+    if (initialAdvisorId !== prevInitialAdvisorIdRef.current) {
+      prevInitialAdvisorIdRef.current = initialAdvisorId;
+      const idx = ADVISORS_LIST.findIndex((a) => a.id === initialAdvisorId);
+      if (idx >= 0) {
+        setCurrentAdvisorIndex(idx);
+      }
     }
   }, [initialAdvisorId]);
 
@@ -481,6 +552,15 @@ ${openingQuestion}
     setStationInsights((prev) => {
       const copy = { ...prev };
       delete copy[advisorKey];
+      try {
+        if (Object.keys(copy).length === 0) {
+          localStorage.removeItem('wazan_eval_insights');
+        } else {
+          localStorage.setItem('wazan_eval_insights', JSON.stringify(copy));
+        }
+      } catch {
+        // ignore
+      }
       return copy;
     });
     if (onResetAdvisor) {
@@ -556,6 +636,7 @@ ${openingQuestion}
                   id: `usr_${Date.now()}`,
                   sender: 'user' as const,
                   text,
+                  ignoredForTurnCount: true,
                   timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 },
               ]
@@ -626,12 +707,7 @@ ${openingQuestion}
     }
 
     // Increment station turn count only for genuine substantive diagnostic exchanges
-    const isCrisisOrDeathMsg = /(انتحار|الانتحار|انتحر|أنتحر|بنتحر|بانتحر|قتل نفسي|أقتل نفسي|اقتل نفسي|ايذاء النفس|إيذاء نفسي|اذية نفسي|أذية نفسي|الموت|بالموت|للموت|اموت|أموت|بموت|اريد الموت|أريد الموت|افكر بالموت|أفكر بالموت|افكر في الموت|أفكر في الموت|فكرة الموت|تفكير بالموت|تفكير في الموت|ودي اموت|ودي أموت|ابغى اموت|أبغى أموت|مش عايز اعيش|مش عايز أعيش|مش طايق أعيش|مش طايق اعيش|انهي حياتي|أنهي حياتي|اتخلص من حياتي|أتخلص من حياتي|لا اشعر باي سلام|لا اشعر بأي سلام|عدم الشعور بالأمان|غير آمن|خلاص تعبت من الحياة|أكره حياتي|كرهت حياتي|كرهت الحياة|أكره نفسي|كرهت نفسي|متعب بقوة|تعبت بقوة|مش قادر اكمل|مش قادر أكمل|ضائع ومحطم|محطم كلياً)/i.test(text);
-    const isBareGreeting = /^(?:أهلاً|اهلا|هلا|مرحبا|مرحباً|سلام|السلام عليكم|صباح الخير|مساء الخير|هاي|حيّاك|أهلين)\s*(?:دكتور|دكتورة|استاذ|أستاذ|باشمهندس|كمال|سفيان)?\s*[.!؟]*$/i.test(text.trim());
-    const isPureAck = /^(?:شكراً|شكرا|يعطيك العافية|جزاك الله خير|تمام|أوك|اوك|حسناً|حسنا)\s*[.!؟]*$/i.test(text.trim());
-    const isSubstantiveExchange = !isCrisisOrDeathMsg && !isBareGreeting && !isPureAck;
-
-    if (isSubstantiveExchange) {
+    if (isSubstantiveEvaluationMessage(text)) {
       setStationTurnCount((prev) => ({ ...prev, [advisorKey]: currentTurns + 1 }));
     }
 

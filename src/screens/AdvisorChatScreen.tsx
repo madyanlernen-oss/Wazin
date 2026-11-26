@@ -8,6 +8,11 @@ import {
   UserProfile,
 } from '../types/lifeBalance';
 import { isCrisisMessage } from '../components/CrisisSupportCard';
+import {
+  WAZAN_ADVISOR_CHATS_KEY,
+  loadChatHistoryFromStorage,
+  saveChatHistoryToStorage,
+} from '../utils/storage';
 import { parseUserContext, getDomainContextConfig } from '../utils/contextPersonalization';
 import { generateDynamicQuickSuggestions } from '../utils/dynamicSuggestions';
 import { getClientAdvisorResponse } from '../components/onboarding/clientIntelligence';
@@ -71,18 +76,9 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   const currentGoals = goals[currentAdvisor.id] || [];
 
   // Chat message history per advisor (persisted to localStorage under wazan_advisor_chats)
-  const [messagesByAdvisor, setMessagesByAdvisor] = useState<Record<string, ChatMessage[]>>(() => {
-    try {
-      const stored = localStorage.getItem('wazan_advisor_chats');
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === 'object') return parsed;
-      }
-    } catch (e) {
-      // ignore
-    }
-    return {};
-  });
+  const [messagesByAdvisor, setMessagesByAdvisor] = useState<Record<string, ChatMessage[]>>(() =>
+    loadChatHistoryFromStorage<ChatMessage>(WAZAN_ADVISOR_CHATS_KEY)
+  );
   const [draftsByAdvisor, setDraftsByAdvisor] = useState<Record<string, string>>({});
   const inputMessage = draftsByAdvisor[currentAdvisor.id] || '';
   const setInputMessage = (val: string) => {
@@ -161,12 +157,8 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
 
   // Persist messagesByAdvisor to localStorage under wazan_advisor_chats
   useEffect(() => {
-    try {
-      if (Object.keys(messagesByAdvisor).length > 0) {
-        localStorage.setItem('wazan_advisor_chats', JSON.stringify(messagesByAdvisor));
-      }
-    } catch (e) {
-      // ignore
+    if (Object.keys(messagesByAdvisor).length > 0) {
+      saveChatHistoryToStorage(messagesByAdvisor, WAZAN_ADVISOR_CHATS_KEY);
     }
   }, [messagesByAdvisor]);
 
