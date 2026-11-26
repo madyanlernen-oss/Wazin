@@ -239,7 +239,7 @@ ${localizedReport.criticalBottleneck.title}: ${localizedReport.criticalBottlenec
 "${localizedReport.directorGoldenRule}"
     `.trim();
 
-    navigator.clipboard.writeText(isolateNumbersForPlainText(text));
+    navigator.clipboard?.writeText(isolateNumbersForPlainText(text)).catch(() => {});
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
   };

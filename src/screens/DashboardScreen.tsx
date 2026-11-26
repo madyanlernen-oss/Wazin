@@ -14,11 +14,9 @@ import {
   Play,
   HelpCircle,
   Check,
-  Calendar,
   Zap,
   AlertOctagon,
   Layers,
-  ArrowRight,
   RotateCcw,
   Lock,
   LayoutDashboard,
@@ -122,6 +120,12 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [completedHaniGoals, setCompletedHaniGoals] = useState<Record<string, boolean>>({});
   const [showWeeklyResetConfirm, setShowWeeklyResetConfirm] = useState(false);
   const toastTimeoutRef = useRef<any>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    };
+  }, []);
 
   const showLockedCoordinatorToast = () => {
     const remaining = Math.max(0, 8 - completedCount);

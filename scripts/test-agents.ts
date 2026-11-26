@@ -18,14 +18,20 @@ import {
 } from '../server/middleware/validation';
 import { buildConversationAwareStationSummary } from '../server/routes/advisorChat';
 import { getClientAdvisorResponse, calculateSemanticScore, extractExplicitRating as extractClientExplicitRating } from '../src/components/onboarding/clientIntelligence';
-import { extractInsightsFromAnswers } from '../src/utils/storage';
+import {
+  extractInsightsFromAnswers,
+  loadStoredState,
+  WAZAN_CHAT_HISTORY_KEY,
+  loadChatHistoryFromStorage,
+  saveChatHistoryToStorage,
+  clearChatHistoryFromStorage,
+} from '../src/utils/storage';
 import { ADVISORS_LIST } from '../src/data/advisorsData';
 import type { AdvisorConfig, UserProfile, LifeAreaId } from '../src/types/lifeBalance';
 import { activateDemoMode, isDemoModeActive, exitDemoMode, DEMO_STORAGE_FLAG_KEY } from '../src/utils/demoMode';
 import { generateAgent11Suggestions, mapDomainNameToAreaId } from '../src/utils/eisenhowerAgent';
 import { INITIAL_EISENHOWER_GOALS } from '../src/components/eisenhower/initialGoals';
 import { generateFallbackDirectorReport } from '../server/routes/directorSummary';
-import { loadStoredState } from '../src/utils/storage';
 import { getAdaptiveStationConfig } from '../src/data/assessmentQuestions';
 import {
   parseUserContext,
@@ -42,6 +48,8 @@ import {
   generateThirtyDayPlan,
   syncThirtyDayPlanWithScores,
   resolveActivePlanDayAndWeek,
+  resolveDayGoals,
+  MAX_DAILY_GOALS,
   exportPlanAsText,
 } from '../src/utils/thirtyDayPlanGenerator';
 import { isolateNumbersForPlainText } from '../src/components/FormattedChatMessage';
@@ -3342,11 +3350,11 @@ async function testStep3PlanAndArabicPdfExport() {
     const picked3 = extractPriorityDomains(partialScores);
     assert(
       picked3.length === 3 &&
-        picked3[0] === 'financial' &&
-        picked3[1] === 'learning' &&
-        picked3[2] === 'health' &&
-        !picked3.includes('career') &&
-        !picked3.includes('spiritual'),
+      picked3[0] === 'financial' &&
+      picked3[1] === 'learning' &&
+      picked3[2] === 'health' &&
+      !picked3.includes('career') &&
+      !picked3.includes('spiritual'),
       `Must select lowest 3 scored domains [financial(2.5), learning(3.5), health(4.0)], got: ${picked3.join(',')}`
     );
 
@@ -3378,12 +3386,12 @@ async function testStep3PlanAndArabicPdfExport() {
     const { plan: syncedWithCustom, didUpdate } = syncThirtyDayPlanWithScores(initialPlan, updatedScores);
     assert(
       didUpdate === true &&
-        syncedWithCustom.focusDomains[0] === 'financial' &&
-        syncedWithCustom.focusDomains[1] === 'health' &&
-        syncedWithCustom.focusDomains[2] === 'learning' &&
-        syncedWithCustom.days[0].customTask === 'كتابة مصاريف اليوم بدقة في دفتري' &&
-        syncedWithCustom.days[0].isCustomSelected === true &&
-        syncedWithCustom.days[0].isCompleted === true,
+      syncedWithCustom.focusDomains[0] === 'financial' &&
+      syncedWithCustom.focusDomains[1] === 'health' &&
+      syncedWithCustom.focusDomains[2] === 'learning' &&
+      syncedWithCustom.days[0].customTask === 'كتابة مصاريف اليوم بدقة في دفتري' &&
+      syncedWithCustom.days[0].isCustomSelected === true &&
+      syncedWithCustom.days[0].isCompleted === true,
       'Score sync must re-sort lowest-3 domains while keeping custom edited day task intact'
     );
 
@@ -3440,10 +3448,10 @@ async function testStep3PlanAndArabicPdfExport() {
     });
     assert(
       !leakedKeyRegex.test(sanitizedCheck) &&
-        !leakedProseRegex.test(sanitizedCheck) &&
-        pdfPlan.focusDomains[0].label === 'الجانب المالي والاستقلال' &&
-        pdfDirector.domainScores.length === 8 &&
-        !serializedAll.includes('undefined'),
+      !leakedProseRegex.test(sanitizedCheck) &&
+      pdfPlan.focusDomains[0].label === 'الجانب المالي والاستقلال' &&
+      pdfDirector.domainScores.length === 8 &&
+      !serializedAll.includes('undefined'),
       `PDF & text exports must render 100% Arabic labels without raw English keys: ${sanitizedCheck.slice(0, 220)}`
     );
 
@@ -3462,6 +3470,83 @@ async function testStep3PlanAndArabicPdfExport() {
       name: 'Lowest-3 Scored Selection & Clean Arabic PDF Export',
       passed: false,
       durationMs: Date.now() - s3Start,
+      message: err.message,
+    });
+  }
+}
+
+async function testLatestUpgradesIntegrity() {
+  const qaStart = Date.now();
+  try {
+    // 1. Per-domain chat history persistence + isolated clear & full reset
+    clearChatHistoryFromStorage(undefined, WAZAN_CHAT_HISTORY_KEY);
+    saveChatHistoryToStorage(
+      {
+        spiritual: [{ id: 'm1', sender: 'user', text: 'حديث عن السكينة', timestamp: '10:00' }],
+        financial: [{ id: 'm2', sender: 'user', text: 'خطة ادخار شهرية', timestamp: '10:05' }],
+      },
+      WAZAN_CHAT_HISTORY_KEY
+    );
+    const loadedChats = loadChatHistoryFromStorage(WAZAN_CHAT_HISTORY_KEY);
+    assert(
+      loadedChats.spiritual?.length === 1 && loadedChats.financial?.length === 1,
+      'Per-domain chat threads must restore accurately from storage'
+    );
+    clearChatHistoryFromStorage('spiritual', WAZAN_CHAT_HISTORY_KEY);
+    const afterSingleClear = loadChatHistoryFromStorage(WAZAN_CHAT_HISTORY_KEY);
+    assert(
+      !afterSingleClear.spiritual && afterSingleClear.financial?.length === 1,
+      'Clearing one domain chat must preserve other domains'
+    );
+    clearChatHistoryFromStorage(undefined, WAZAN_CHAT_HISTORY_KEY);
+    assert(
+      Object.keys(loadChatHistoryFromStorage(WAZAN_CHAT_HISTORY_KEY)).length === 0,
+      'Full chat clear must wipe all domain chat threads'
+    );
+
+    // 2. 30-Day Plan 1..4 Daily Goals Cap & Export Integrity
+    assert(MAX_DAILY_GOALS === 4, 'MAX_DAILY_GOALS must strictly equal 4');
+    const planScores = { financial: 3.5, health: 4.0, learning: 4.5, career: 8.5 };
+    const plan = generateThirtyDayPlan(planScores);
+    const day8 = plan.days[7];
+    day8.dailyGoals = [
+      { id: 'g1', text: 'مراجعة المصاريف اليومية', isCompleted: true, isCustom: false },
+      { id: 'g2', text: 'تأجيل الشراء العاطفي', isCompleted: true, isCustom: false },
+      { id: 'g3', text: 'توفير 50 ريالاً في صندوق الطوارئ', isCompleted: true, isCustom: true },
+      { id: 'g4', text: 'تنظيم فواتير الأسبوع', isCompleted: false, isCustom: false },
+      { id: 'g5', text: 'هدف خامس يتجاوز الحد الأقصى', isCompleted: false, isCustom: true },
+    ];
+    const resolvedDay8Goals = resolveDayGoals(day8);
+    assert(
+      resolvedDay8Goals.length === 4 &&
+        resolvedDay8Goals.every((g) => !g.text.includes('خامس')),
+      `resolveDayGoals must cap daily goals at 4; got ${resolvedDay8Goals.length}`
+    );
+
+    const multiExport = exportPlanAsText(plan);
+    const multiPdf = formatThirtyDayPlanForArabicPdf(plan, planScores);
+    assert(
+      multiExport.includes('أهداف اليوم') &&
+        multiExport.includes('توفير') &&
+        multiPdf.days[7].taskText.includes('توفير'),
+      'Multi-goal days must export cleanly to text and Arabic PDF'
+    );
+
+    results.push({
+      suite: 'QA Regression Suite',
+      domain: 'All 8',
+      name: 'Chat Persistence & 1-4 Daily Goals Cap Integrity',
+      passed: true,
+      durationMs: Date.now() - qaStart,
+      details: `Per-domain chat isolation OK; Day 8 goals capped at ${resolvedDay8Goals.length}/4 & exported cleanly`,
+    });
+  } catch (err: any) {
+    results.push({
+      suite: 'QA Regression Suite',
+      domain: 'All 8',
+      name: 'Chat Persistence & 1-4 Daily Goals Cap Integrity',
+      passed: false,
+      durationMs: Date.now() - qaStart,
       message: err.message,
     });
   }
@@ -3526,6 +3611,7 @@ async function main() {
   await testGoldenRecommendationSynthesis();
   await testStep2GuardrailsAndSessionIsolation();
   await testStep3PlanAndArabicPdfExport();
+  await testLatestUpgradesIntegrity();
 
   if (isLiveMode) {
     await testLiveGeminiScenarios();

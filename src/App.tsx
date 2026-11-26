@@ -12,7 +12,6 @@ import { AuthScreen } from './screens/AuthScreen';
 import { OnboardingScreen } from './screens/OnboardingScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
 import { AdvisorChatScreen } from './screens/AdvisorChatScreen';
-import { DirectorSummaryScreen } from './screens/DirectorSummaryScreen';
 import { ComparisonScreen } from './screens/ComparisonScreen';
 import { UnifiedThirtyDayWorkspace } from './screens/UnifiedThirtyDayWorkspace';
 import {
@@ -31,7 +30,6 @@ import {
 } from './types/lifeBalance';
 import {
   getDefaultInitialState,
-  loadSampleState,
   loadStoredState,
   saveStoredState,
   saveStoredUser,
@@ -168,7 +166,9 @@ export default function App() {
     setAppState(demoState);
     setIsDemoMode(true);
     setWeeklySessionKey((k) => k + 1);
-    setCoordinatorUnlockedInStorage(true);
+    // Demo mode initializes at 0/8 completed stations — keep General Coordinator locked until 8/8
+    setCoordinatorUnlockedInStorage(demoState.completedAdvisors.length >= 8);
+    saveStoredDashboardTab('dashboard');
     setActiveScreen('onboarding'); // Direct to active live station
   };
 
@@ -178,7 +178,8 @@ export default function App() {
     setAppState(demoState);
     setIsDemoMode(true);
     setWeeklySessionKey((k) => k + 1);
-    setCoordinatorUnlockedInStorage(true);
+    setCoordinatorUnlockedInStorage(demoState.completedAdvisors.length >= 8);
+    saveStoredDashboardTab('dashboard');
     setActiveScreen('onboarding');
   };
 
@@ -205,11 +206,6 @@ export default function App() {
     setActiveScreen('login');
   };
 
-  // Handler: Load Sample Profile
-  const handleLoadSample = () => {
-    handleActivateDemo();
-  };
-
   // Handler: Login Success (loads realistic sample state for demo user سعود المنصور, or clean state for new users)
   const handleLoginSuccess = (profile: UserProfile) => {
     // Normalize demo email if ending with .ai or legacy domain to demo@wazan.com
@@ -234,6 +230,8 @@ export default function App() {
       demoState.userProfile = profile;
       setAppState(demoState);
       saveStoredState(demoState);
+      setCoordinatorUnlockedInStorage(demoState.completedAdvisors.length >= 8);
+      saveStoredDashboardTab('dashboard');
       setIsDemoMode(true);
     } else {
       exitDemoMode();

@@ -74,6 +74,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   const [customInputText, setCustomInputText] = useState('');
   const [goalLimitWarning, setGoalLimitWarning] = useState<string | null>(null);
   const limitWarningTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const celebrationTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copiedTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [customFocusDomains, setCustomFocusDomains] = useState<LifeAreaId[] | null>(() => {
     const storedCustom = getStoredCustomFocusDomains();
     if (storedCustom && storedCustom.length === 3) return storedCustom;
@@ -209,6 +211,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   useEffect(() => {
     return () => {
       if (limitWarningTimeoutRef.current) clearTimeout(limitWarningTimeoutRef.current);
+      if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
+      if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
     };
   }, []);
 
@@ -240,7 +244,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
         // ignore
       }
       setShowCelebrationToast(true);
-      setTimeout(() => setShowCelebrationToast(false), 3200);
+      if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
+      celebrationTimeoutRef.current = setTimeout(() => setShowCelebrationToast(false), 3200);
     }
 
     const updatedDays = plan.days.map((d) => {
@@ -394,9 +399,10 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   const handleExportText = () => {
     if (!plan) return;
     const text = exportPlanAsText(plan);
-    navigator.clipboard.writeText(text);
+    navigator.clipboard?.writeText(text).catch(() => {});
     setCopiedToast(true);
-    setTimeout(() => setCopiedToast(false), 2500);
+    if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
+    copiedTimeoutRef.current = setTimeout(() => setCopiedToast(false), 2500);
   };
 
   // Single source of truth for prioritized domains (custom user choice if set, else strictly ascending lowest evaluated scores)
@@ -1424,7 +1430,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                   موعد البدء: {pdfPlanPayload.startDateStr} • نسبة الإنجاز: {pdfPlanPayload.completedCount} / 30 ({pdfPlanPayload.progressPercent}%)
                 </p>
                 <p className="text-xs font-bold text-[#0F6E6E] mt-1">
-                  مجالات التركيز (الأدنى درجة):{' '}
+                  {isUsingCustomFocus ? 'مجالات التركيز المختارة:' : 'مجالات التركيز (الأدنى درجة):'}{' '}
                   {pdfPlanPayload.focusDomains
                     .map((d) => (d.score > 0 ? `${d.label} (${d.score.toFixed(1)}/10)` : d.label))
                     .join(' • ')}
