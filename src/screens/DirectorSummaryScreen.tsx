@@ -35,6 +35,7 @@ interface DirectorSummaryScreenProps {
   onBackToDashboard: () => void;
   onNavigateToThirtyDayPlan?: () => void;
   theme?: 'light' | 'dark';
+  embedded?: boolean;
 }
 
 export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
@@ -47,6 +48,7 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
   onBackToDashboard,
   onNavigateToThirtyDayPlan,
   theme: _theme = 'light',
+  embedded = false,
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -247,7 +249,12 @@ ${localizedReport.criticalBottleneck.title}: ${localizedReport.criticalBottlenec
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 space-y-8 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
+    <div
+      className={`space-y-8 text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300 ${embedded
+          ? 'max-w-5xl mx-auto w-full'
+          : 'min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-28 bg-[#F7F6F2] dark:bg-[#071318]'
+        }`}
+    >
       {/* Top Breadcrumb & Actions Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-[#E2E8F0] dark:border-[#1E343F]">
         {/* Navigation & Screen Label */}

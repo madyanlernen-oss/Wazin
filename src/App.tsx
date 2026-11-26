@@ -39,6 +39,9 @@ import {
   cleanupStoredUserPasswords,
   resetStoredState,
   StoredAppState,
+  isCoordinatorUnlockedInStorage,
+  setCoordinatorUnlockedInStorage,
+  getStoredDashboardTab,
 } from './utils/storage';
 import {
   activateDemoMode,
@@ -77,9 +80,14 @@ export default function App() {
   const [previousScreen, setPreviousScreen] = useState<Screen>('dashboard');
 
   const navigateTo = (newScreen: Screen) => {
-    if (newScreen !== activeScreen) {
+    let target = newScreen;
+    const isUnlocked = appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage();
+    if (target === 'director_summary' && !isUnlocked) {
+      target = 'dashboard';
+    }
+    if (target !== activeScreen) {
       setPreviousScreen(activeScreen);
-      setActiveScreen(newScreen);
+      setActiveScreen(target);
     }
   };
 
@@ -148,6 +156,7 @@ export default function App() {
     setAppState(demoState);
     setIsDemoMode(true);
     setWeeklySessionKey((k) => k + 1);
+    setCoordinatorUnlockedInStorage(true);
     setActiveScreen('onboarding'); // Direct to active live station
   };
 
@@ -157,6 +166,7 @@ export default function App() {
     setAppState(demoState);
     setIsDemoMode(true);
     setWeeklySessionKey((k) => k + 1);
+    setCoordinatorUnlockedInStorage(true);
     setActiveScreen('onboarding');
   };
 
@@ -164,7 +174,9 @@ export default function App() {
   const handleStartFreshProfile = () => {
     exitDemoMode();
     clearThirtyDayPlanFromStorage();
+    setCoordinatorUnlockedInStorage(false);
     try {
+      localStorage.removeItem('wazan_dashboard_active_tab_v1');
       localStorage.removeItem('wazan_advisor_chats');
       localStorage.removeItem('wazan_added_goals');
     } catch {
@@ -324,6 +336,9 @@ export default function App() {
 
       try {
         saveStoredState(nextState);
+        if (newCompleted.length >= 8) {
+          setCoordinatorUnlockedInStorage(true);
+        }
         const existingPlan = getStoredThirtyDayPlan();
         if (existingPlan) {
           syncThirtyDayPlanWithScores(existingPlan, newScores);
@@ -422,6 +437,7 @@ export default function App() {
 
   // Handler: Finish all 8 advisors
   const handleCompleteAll = () => {
+    setCoordinatorUnlockedInStorage(true);
     navigateTo('dashboard');
   };
 
@@ -490,11 +506,13 @@ export default function App() {
   const handleResetProfile = () => {
     exitDemoMode();
     setIsDemoMode(false);
+    setCoordinatorUnlockedInStorage(false);
     const fresh = getDefaultInitialState();
     setAppState(fresh);
     resetStoredState();
     saveStoredState(fresh);
     try {
+      localStorage.removeItem('wazan_dashboard_active_tab_v1');
       localStorage.removeItem('wazan_advisor_chats');
       localStorage.removeItem('wazan_added_goals');
     } catch {
@@ -639,17 +657,37 @@ export default function App() {
 
         {/* Screen Routing */}
         <main className="flex-1 transition-all duration-300">
-          {activeScreen === 'dashboard' && (
+          {(activeScreen === 'dashboard' || activeScreen === 'director_summary') && (
             <DashboardScreen
+              activeTab={
+                (activeScreen === 'director_summary' || getStoredDashboardTab() === 'coordinator') &&
+                (appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage())
+                  ? 'coordinator'
+                  : 'dashboard'
+              }
+              onSelectTab={(tab) => {
+                if (tab === 'coordinator') {
+                  if (appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage()) {
+                    setActiveScreen('director_summary');
+                  }
+                } else {
+                  setActiveScreen('dashboard');
+                }
+              }}
               userProfile={appState.userProfile}
               scores={appState.scores}
               answers={appState.answers}
               goals={appState.goals}
               completedAdvisors={appState.completedAdvisors}
               directorReport={appState.directorReport}
+              onSaveDirectorReport={handleSaveDirectorReport}
               onSelectAdvisorChat={handleSelectAdvisorChat}
               onEditAdvisorEvaluation={handleEditAdvisorEvaluation}
-              onNavigateToDirectorSummary={() => setActiveScreen('director_summary')}
+              onNavigateToDirectorSummary={() => {
+                if (appState.completedAdvisors.length >= 8 || isCoordinatorUnlockedInStorage()) {
+                  setActiveScreen('director_summary');
+                }
+              }}
               onNavigateToThirtyDayPlan={() => setActiveScreen('thirty_day_plan')}
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
@@ -725,20 +763,6 @@ export default function App() {
               onSaveStationGoals={handleSaveStationGoals}
               onNavigateToGoalsMatrix={() => setActiveScreen('goals_matrix')}
               onBackToDashboard={() => setActiveScreen('dashboard')}
-              theme={theme}
-            />
-          )}
-
-          {activeScreen === 'director_summary' && (
-            <DirectorSummaryScreen
-              userProfile={appState.userProfile}
-              scores={appState.scores}
-              answers={appState.answers}
-              goals={appState.goals}
-              report={appState.directorReport}
-              onSaveReport={handleSaveDirectorReport}
-              onBackToDashboard={() => setActiveScreen('dashboard')}
-              onNavigateToThirtyDayPlan={() => setActiveScreen('thirty_day_plan')}
               theme={theme}
             />
           )}

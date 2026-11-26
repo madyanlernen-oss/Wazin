@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { RotateCcw, LogOut, X } from 'lucide-react';
+import { RotateCcw, LogOut, X, Lock } from 'lucide-react';
 import { Screen, UserProfile } from '../types/lifeBalance';
+import { isCoordinatorUnlockedInStorage } from '../utils/storage';
 import { WazanLogo } from './WazanLogo';
 import { ConfirmDialog } from './ConfirmDialog';
 import { ThemeToggle } from './ThemeToggle';
@@ -97,6 +98,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   }, [isOpenMobile, onCloseMobile, openerRef]);
 
   const handleSelectNav = (screen: Screen) => {
+    if (screen === 'director_summary' && completedCount < 8 && !isCoordinatorUnlockedInStorage()) {
+      onNavigate('dashboard');
+      if (onCloseMobile) onCloseMobile();
+      return;
+    }
     onNavigate(screen as SidebarScreen);
     if (onCloseMobile) onCloseMobile();
   };
@@ -150,9 +156,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
+            const isDirectorItem = item.screen === 'director_summary';
+            const isDirectorUnlocked = completedCount >= 8 || isCoordinatorUnlockedInStorage();
+            const isDirectorLocked = isDirectorItem && !isDirectorUnlocked;
             const isActive =
               currentScreen === item.screen ||
-              (item.screen === 'thirty_day_plan' && currentScreen === 'goals_matrix');
+              (item.screen === 'thirty_day_plan' && currentScreen === 'goals_matrix') ||
+              (item.screen === 'dashboard' && currentScreen === 'director_summary' && !isDirectorUnlocked);
 
             return (
               <button
@@ -160,22 +170,39 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 type="button"
                 onClick={() => handleSelectNav(item.screen)}
                 aria-current={isActive ? 'page' : undefined}
-                className={`w-full flex items-center gap-3 px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
+                title={
+                  isDirectorLocked
+                    ? `يُفتح بعد إكمال التقييم (${completedCount} / 8)`
+                    : undefined
+                }
+                className={`w-full flex items-center justify-between px-3.5 py-2.5 min-h-[44px] rounded-xl text-xs font-bold transition-all cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-[#0B161C] ${
                   isActive
                     ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white shadow-xs font-black'
+                    : isDirectorLocked
+                    ? 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/60 dark:hover:bg-[#112028]/60 opacity-80'
                     : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028]'
                 }`}
               >
-                {/* 12 & 16. Icon with aria-hidden, text-slate-600 in light, dark:text-slate-400 */}
-                <Icon
-                  aria-hidden="true"
-                  className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 motion-safe:group-hover:scale-105 ${
-                    isActive
-                      ? 'text-white'
-                      : 'text-slate-600 dark:text-slate-400 group-hover:text-[#0F6E6E] dark:group-hover:text-cyan-300'
-                  }`}
-                />
-                <span className="truncate">{item.label}</span>
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* 12 & 16. Icon with aria-hidden, text-slate-600 in light, dark:text-slate-400 */}
+                  <Icon
+                    aria-hidden="true"
+                    className={`w-4 h-4 flex-shrink-0 transition-transform duration-200 motion-safe:group-hover:scale-105 ${
+                      isActive
+                        ? 'text-white'
+                        : 'text-slate-600 dark:text-slate-400 group-hover:text-[#0F6E6E] dark:group-hover:text-cyan-300'
+                    }`}
+                  />
+                  <span className="truncate">{item.label}</span>
+                </div>
+                {isDirectorLocked && (
+                  <span
+                    className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-amber-100/80 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-200 dark:border-amber-800/60 flex items-center gap-1 flex-shrink-0"
+                    title="يُفتح بعد إكمال التقييم"
+                  >
+                    <Lock className="w-3 h-3" />
+                  </span>
+                )}
               </button>
             );
           })}

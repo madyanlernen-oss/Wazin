@@ -20,6 +20,8 @@ import {
   Layers,
   ArrowRight,
   RotateCcw,
+  Lock,
+  LayoutDashboard,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { RadarChart } from '../components/RadarChart';
@@ -30,24 +32,37 @@ import {
 } from '../utils/arabicDomainLabels';
 import { YearlyAndWeeklyAnalytics } from '../components/YearlyAndWeeklyAnalytics';
 import { DirectorSummaryReport, LifeAreaId, UserProfile } from '../types/lifeBalance';
-import { extractInsightsFromAnswers } from '../utils/storage';
+import {
+  extractInsightsFromAnswers,
+  getStoredDashboardTab,
+  isCoordinatorUnlockedInStorage,
+  saveStoredDashboardTab,
+  setCoordinatorUnlockedInStorage,
+} from '../utils/storage';
 import {
   extractUserDialogueTextsForArea,
   generateRealisticAreaGoals,
 } from '../utils/realisticGoalsGenerator';
 import { isolateNumbersInText } from '../components/FormattedChatMessage';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { DirectorSummaryScreen } from './DirectorSummaryScreen';
+
+export type DashboardTab = 'dashboard' | 'coordinator';
 
 interface DashboardScreenProps {
+  initialTab?: DashboardTab;
+  activeTab?: DashboardTab;
+  onSelectTab?: (tab: DashboardTab) => void;
   userProfile: UserProfile | null;
   scores: Record<LifeAreaId, number>;
   answers: Record<string, any>;
   goals: Record<LifeAreaId, string[]>;
   completedAdvisors?: LifeAreaId[];
   directorReport?: DirectorSummaryReport | null;
+  onSaveDirectorReport?: (report: DirectorSummaryReport) => void;
   onSelectAdvisorChat: (advisorId: LifeAreaId) => void;
   onEditAdvisorEvaluation: (advisorId: LifeAreaId) => void;
-  onNavigateToDirectorSummary: () => void;
+  onNavigateToDirectorSummary?: () => void;
   onNavigateToThirtyDayPlan?: () => void;
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
@@ -57,12 +72,16 @@ interface DashboardScreenProps {
 }
 
 export const DashboardScreen: React.FC<DashboardScreenProps> = ({
+  initialTab = 'dashboard',
+  activeTab,
+  onSelectTab,
   userProfile,
   scores,
   answers,
   goals,
   completedAdvisors = [],
   directorReport,
+  onSaveDirectorReport,
   onSelectAdvisorChat,
   onEditAdvisorEvaluation,
   onNavigateToDirectorSummary,
@@ -73,6 +92,29 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onStartNewWeeklyAssessment,
   theme = 'light',
 }) => {
+  const completedCount = completedAdvisors.length;
+  const isAssessmentComplete =
+    completedCount >= 8 ||
+    ADVISORS_LIST.every((adv) => (scores[adv.id] || 0) > 0) ||
+    isCoordinatorUnlockedInStorage();
+  const isBrandNewUser = completedCount === 0;
+
+  // Persist unlock state once all 8 domains are completed
+  React.useEffect(() => {
+    if (completedCount >= 8 || ADVISORS_LIST.every((adv) => (scores[adv.id] || 0) > 0)) {
+      setCoordinatorUnlockedInStorage(true);
+    }
+  }, [completedCount, scores]);
+
+  const [internalTab, setInternalTab] = useState<DashboardTab>(() => {
+    const saved = getStoredDashboardTab();
+    if (saved === 'coordinator' && isAssessmentComplete) {
+      return 'coordinator';
+    }
+    return initialTab === 'coordinator' && isAssessmentComplete ? 'coordinator' : 'dashboard';
+  });
+  const currentTab = activeTab !== undefined ? activeTab : internalTab;
+
   const [selectedAreaId, setSelectedAreaId] = useState<LifeAreaId | null>('spiritual');
   const [newGoalInput, setNewGoalInput] = useState<{ [key: string]: string }>({});
   const [showAddGoalFor, setShowAddGoalFor] = useState<LifeAreaId | null>(null);
@@ -82,8 +124,40 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   const [showWeeklyResetConfirm, setShowWeeklyResetConfirm] = useState(false);
   const toastTimeoutRef = useRef<any>(null);
 
-  const completedCount = completedAdvisors.length;
-  const isBrandNewUser = completedCount === 0;
+  const handleTabChange = (tab: DashboardTab) => {
+    if (tab === 'coordinator' && !isAssessmentComplete) {
+      setToastMessage(
+        `🔒 رؤية المنسق العام مُغلقة حالياً: تُفتح تلقائياً بعد إكمال تقييم جميع محطات عجلة الحياة (${completedCount} / 8).`
+      );
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 4500);
+      return;
+    }
+
+    saveStoredDashboardTab(tab);
+    if (onSelectTab) {
+      onSelectTab(tab);
+    } else {
+      setInternalTab(tab);
+    }
+  };
+
+  const handleNavigateToCoordinatorView = () => {
+    if (!isAssessmentComplete) {
+      setToastMessage(
+        `🔒 تقرير ورؤية المنسق العام مُغلقة حالياً: تُفتح تلقائياً بعد إكمال تقييم جميع محطات عجلة الحياة (${completedCount} / 8).`
+      );
+      if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+      toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 4500);
+      return;
+    }
+
+    saveStoredDashboardTab('coordinator');
+    handleTabChange('coordinator');
+    if (onNavigateToDirectorSummary) {
+      onNavigateToDirectorSummary();
+    }
+  };
 
   // Compute Overall Balance Score for evaluated areas only
   const evaluatedScores = completedAdvisors.map((id) => scores[id] || 0);
@@ -290,89 +364,159 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 transition-colors duration-300">
-      {/* Welcome & Overall Balance Banner */}
-      <div className="relative overflow-hidden bg-white dark:bg-[#112028] border border-slate-200/90 dark:border-slate-800/80 rounded-3xl p-6 sm:p-8 shadow-xs transition-colors">
-        <div className="absolute top-0 left-0 w-80 h-80 bg-[#0B6E72]/5 dark:bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 right-0 w-80 h-80 bg-purple-500/5 dark:bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+    <div
+      dir="rtl"
+      className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8 pb-24 space-y-6 sm:space-y-8 bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 transition-colors duration-300"
+    >
+      {/* Prominent RTL Segmented Tab Switcher */}
+      <div className="print:hidden">
+        <div
+          role="tablist"
+          aria-label="أقسام لوحة التحكم ورؤية المنسق العام"
+          className="flex w-full sm:w-auto sm:inline-flex items-center gap-1.5 p-1.5 rounded-2xl bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 shadow-xs transition-colors"
+        >
+          {/* Tab 1: لوحة التحكم (Default active) */}
+          <button
+            type="button"
+            role="tab"
+            id="dashboard-tab-overview"
+            aria-selected={currentTab === 'dashboard'}
+            onClick={() => handleTabChange('dashboard')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
+              currentTab === 'dashboard'
+                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white font-black shadow-xs'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028] font-bold'
+            }`}
+          >
+            <LayoutDashboard className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">لوحة التحكم</span>
+          </button>
 
-        <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="space-y-3">
-            <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 text-xs font-bold text-[#0B6E72] dark:text-cyan-400">
-              <span>{isBrandNewUser ? 'حساب جديد' : 'لوحة التحكم'}</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-[#0B6E72] dark:bg-cyan-400"></span>
-              <span className="text-[#0B6E72] dark:text-cyan-300 font-extrabold">{getDiagnosisLabel()}</span>
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white transition-colors">
-              مرحباً بك، {userProfile?.name?.trim() || 'عزيزي'} 👋
-            </h1>
-
-            <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-300 max-w-2xl leading-relaxed transition-colors">
-              {isBrandNewUser
-                ? 'أنت في بداية رحلتك مع وزان. لم تقم بأي تقييم حتى الآن. انقر على الزر لبدء جولة التقييم مع المستشارين ورسم عجلة حياتك الخاصة.'
-                : 'هنا تجتمع أبعاد حياتك الثمانية بنظام وزان. انقر على أي مجال في عجلة الحياة لاستعراض بطاقته أو المتابعة في التقييم.'}
-            </p>
-          </div>
-
-          {/* Action Trigger Box */}
-          <div className="flex flex-wrap items-center gap-4">
-            <div className="bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-xs">
-              <div className="w-14 h-14 rounded-2xl bg-white dark:bg-[#112028] border border-[#0B6E72]/20 dark:border-cyan-500/30 flex items-center justify-center shadow-xs">
-                <span className="text-2xl font-black text-[#0B6E72] dark:text-cyan-300 tabular-nums" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
-                  {isBrandNewUser ? '0 / 8' : averageBalanceScore}
-                </span>
-              </div>
-              <div>
-                <span className="text-[11px] text-[#64748B] dark:text-slate-400 block font-semibold">
-                  {isBrandNewUser ? 'إنجاز التقييم' : 'مؤشر التوازن العام'}
-                </span>
-                <span className="text-xs font-bold text-[#0B6E72] dark:text-cyan-400">
-                  {isBrandNewUser ? (
-                    'بانتظار البدء'
-                  ) : (
-                    <span>
-                      <span dir="ltr" className="inline-block font-sans font-bold tabular-nums" style={{ unicodeBidi: 'isolate' }}>{balancePercentage}%</span> اكتمال المنظومة
-                    </span>
-                  )}
-                </span>
-              </div>
-            </div>
-
-            {isBrandNewUser ? (
-              <button
-                type="button"
-                onClick={onStartEvaluation}
-                className="flex items-center gap-2 px-6 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-black text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer"
-              >
-                <Play className="w-4 h-4 fill-white" />
-                <span>
-                  ابدأ رحلة تقييم مجالات حياتك (<span dir="ltr" style={{ unicodeBidi: 'isolate' }}>0/8</span>)
-                </span>
-                <ArrowLeft className="w-4 h-4" />
-              </button>
+          {/* Tab 2: رؤية المنسق العام (Locked when incomplete, Unlocked when complete) */}
+          <button
+            type="button"
+            role="tab"
+            id="dashboard-tab-coordinator"
+            aria-selected={currentTab === 'coordinator'}
+            aria-disabled={!isAssessmentComplete}
+            onClick={() => handleTabChange('coordinator')}
+            title={
+              !isAssessmentComplete
+                ? `يُفتح بعد إكمال التقييم (${completedCount} / 8)`
+                : 'رؤية المنسق العام والتحليل التكاملي الشامل'
+            }
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
+              !isAssessmentComplete
+                ? 'opacity-65 cursor-not-allowed bg-slate-50 dark:bg-[#0E1D24] text-slate-500 dark:text-slate-400 border border-dashed border-slate-300 dark:border-slate-700 hover:opacity-85'
+                : currentTab === 'coordinator'
+                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white font-black shadow-xs cursor-pointer'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028] font-bold cursor-pointer'
+            }`}
+          >
+            {!isAssessmentComplete ? (
+              <Lock className="w-3.5 h-3.5 flex-shrink-0 text-amber-600 dark:text-amber-400" aria-hidden="true" />
             ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={onNavigateToDirectorSummary}
-                  className="flex items-center gap-2 px-5 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-extrabold text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] group cursor-pointer"
-                >
-                  <Sparkles className="w-4 h-4 text-[#ffd67a] dark:text-amber-300" />
-                  <span>تقرير المنسق العام التكاملي</span>
-                  <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
-                </button>
-                {onStartNewWeeklyAssessment && (
+              <Compass className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            )}
+            <span className="truncate">رؤية المنسق العام</span>
+            {!isAssessmentComplete && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/80 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-800/80 whitespace-nowrap">
+                يُفتح بعد إكمال التقييم
+              </span>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Tab 1 Content: لوحة التحكم وعجلة الحياة */}
+      {currentTab === 'dashboard' && (
+        <div
+          role="tabpanel"
+          aria-labelledby="dashboard-tab-overview"
+          className="space-y-8 animate-in fade-in duration-200"
+        >
+          {/* Welcome & Overall Balance Banner */}
+          <div className="relative overflow-hidden bg-white dark:bg-[#112028] border border-slate-200/90 dark:border-slate-800/80 rounded-3xl p-6 sm:p-8 shadow-xs transition-colors">
+            <div className="absolute top-0 left-0 w-80 h-80 bg-[#0B6E72]/5 dark:bg-cyan-500/5 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute bottom-0 right-0 w-80 h-80 bg-purple-500/5 dark:bg-purple-500/5 rounded-full blur-3xl pointer-events-none" />
+
+            <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+              <div className="space-y-3">
+                <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 text-xs font-bold text-[#0B6E72] dark:text-cyan-400">
+                  <span>{isBrandNewUser ? 'حساب جديد' : 'لوحة التحكم'}</span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#0B6E72] dark:bg-cyan-400"></span>
+                  <span className="text-[#0B6E72] dark:text-cyan-300 font-extrabold">{getDiagnosisLabel()}</span>
+                </div>
+
+                <h1 className="text-2xl sm:text-3xl font-black text-[#0F172A] dark:text-white transition-colors">
+                  مرحباً بك، {userProfile?.name?.trim() || 'عزيزي'} 👋
+                </h1>
+
+                <p className="text-xs sm:text-sm text-[#334155] dark:text-slate-300 max-w-2xl leading-relaxed transition-colors">
+                  {isBrandNewUser
+                    ? 'أنت في بداية رحلتك مع وزان. لم تقم بأي تقييم حتى الآن. انقر على الزر لبدء جولة التقييم مع المستشارين ورسم عجلة حياتك الخاصة.'
+                    : 'هنا تجتمع أبعاد حياتك الثمانية بنظام وزان. انقر على أي مجال في عجلة الحياة لاستعراض بطاقته أو المتابعة في التقييم.'}
+                </p>
+              </div>
+
+              {/* Action Trigger Box */}
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-4 flex items-center gap-4 shadow-xs">
+                  <div className="w-14 h-14 rounded-2xl bg-white dark:bg-[#112028] border border-[#0B6E72]/20 dark:border-cyan-500/30 flex items-center justify-center shadow-xs">
+                    <span className="text-2xl font-black text-[#0B6E72] dark:text-cyan-300 tabular-nums" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                      {isBrandNewUser ? '0 / 8' : averageBalanceScore}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-[#64748B] dark:text-slate-400 block font-semibold">
+                      {isBrandNewUser ? 'إنجاز التقييم' : 'مؤشر التوازن العام'}
+                    </span>
+                    <span className="text-xs font-bold text-[#0B6E72] dark:text-cyan-400">
+                      {isBrandNewUser ? (
+                        'بانتظار البدء'
+                      ) : (
+                        <span>
+                          <span dir="ltr" className="inline-block font-sans font-bold tabular-nums" style={{ unicodeBidi: 'isolate' }}>{balancePercentage}%</span> اكتمال المنظومة
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                </div>
+
+                {isBrandNewUser ? (
                   <button
                     type="button"
-                    onClick={() => setShowWeeklyResetConfirm(true)}
-                    className="flex items-center gap-1.5 px-4 py-4 rounded-2xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0B6E72] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] font-bold text-xs sm:text-sm shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] transition-all cursor-pointer"
-                    title="بدء دورة تقييم أسبوعي جديدة وإعادة فحص المحطات"
+                    onClick={onStartEvaluation}
+                    className="flex items-center gap-2 px-6 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-black text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] cursor-pointer"
                   >
-                    <RotateCcw className="w-4 h-4 text-[#0B6E72] dark:text-[#22D3EE]" />
-                    <span>بدء تقييم أسبوعي جديد</span>
+                    <Play className="w-4 h-4 fill-white" />
+                    <span>
+                      ابدأ رحلة تقييم مجالات حياتك (<span dir="ltr" style={{ unicodeBidi: 'isolate' }}>0/8</span>)
+                    </span>
+                    <ArrowLeft className="w-4 h-4" />
                   </button>
-                )}
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleNavigateToCoordinatorView}
+                      className="flex items-center gap-2 px-5 py-4 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0E7490] dark:hover:bg-[#0891B2] text-white font-extrabold text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.02] group cursor-pointer"
+                    >
+                      <Sparkles className="w-4 h-4 text-[#ffd67a] dark:text-amber-300" />
+                      <span>تقرير المنسق العام التكاملي</span>
+                      <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform" />
+                    </button>
+                    {onStartNewWeeklyAssessment && (
+                      <button
+                        type="button"
+                        onClick={() => setShowWeeklyResetConfirm(true)}
+                        className="flex items-center gap-1.5 px-4 py-4 rounded-2xl bg-white dark:bg-[#0E1D24] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0B6E72] dark:hover:border-[#22D3EE] text-[#0F172A] dark:text-[#F1F5F9] font-bold text-xs sm:text-sm shadow-xs hover:bg-[#F7F6F2] dark:hover:bg-[#162734] transition-all cursor-pointer"
+                        title="بدء دورة تقييم أسبوعي جديدة وإعادة فحص المحطات"
+                      >
+                        <RotateCcw className="w-4 h-4 text-[#0B6E72] dark:text-[#22D3EE]" />
+                        <span>بدء تقييم أسبوعي جديد</span>
+                      </button>
+                    )}
               </div>
             )}
           </div>
@@ -762,7 +906,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
 
           <button
             type="button"
-            onClick={onNavigateToDirectorSummary}
+            onClick={handleNavigateToCoordinatorView}
             className="px-5 py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 dark:bg-[#0B161C] dark:hover:bg-[#162734] border border-slate-200 dark:border-slate-700 text-[#0F172A] dark:text-slate-200 font-extrabold text-xs shadow-xs transition-all flex items-center gap-2 self-start sm:self-center cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72]"
           >
             <Sparkles className="w-4 h-4 text-amber-500 group-hover:scale-110 transition-transform" />
@@ -850,7 +994,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
               {/* 30-Day Smart Plan Direct Access */}
               <div className="pt-2">
                 <div
-                  onClick={onNavigateToThirtyDayPlan || onNavigateToDirectorSummary}
+                  onClick={onNavigateToThirtyDayPlan || handleNavigateToCoordinatorView}
                   className="p-4 rounded-2xl bg-gradient-to-r from-[#0B6E72]/10 via-teal-500/5 to-transparent dark:from-cyan-950/40 dark:via-teal-950/20 dark:to-transparent border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 cursor-pointer hover:border-[#0B6E72]/40 transition-all shadow-2xs"
                 >
                   <div className="flex items-center gap-3">
@@ -1039,10 +1183,75 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             );
           })}
         </div>
-      </div >
+      </div>
 
       {/* Yearly and Weekly Longitudinal Analytics Component */}
-      < YearlyAndWeeklyAnalytics />
+      <YearlyAndWeeklyAnalytics />
+        </div>
+      )}
+
+      {/* Tab 2 Content: رؤية المنسق العام (Unlocked) */}
+      {currentTab === 'coordinator' && isAssessmentComplete && (
+        <div
+          role="tabpanel"
+          aria-labelledby="dashboard-tab-coordinator"
+          className="animate-in fade-in duration-200"
+        >
+          <DirectorSummaryScreen
+            userProfile={userProfile}
+            scores={scores}
+            answers={answers}
+            goals={goals}
+            report={directorReport || null}
+            onSaveReport={onSaveDirectorReport || (() => {})}
+            onBackToDashboard={() => handleTabChange('dashboard')}
+            onNavigateToThirtyDayPlan={onNavigateToThirtyDayPlan}
+            theme={theme}
+            embedded
+          />
+        </div>
+      )}
+
+      {/* Tab 2 Content: رؤية المنسق العام (Locked Fallback Card) */}
+      {currentTab === 'coordinator' && !isAssessmentComplete && (
+        <div
+          role="tabpanel"
+          aria-labelledby="dashboard-tab-coordinator"
+          className="p-8 sm:p-12 rounded-3xl bg-white dark:bg-[#112028] border border-dashed border-amber-300 dark:border-amber-800/70 text-center space-y-4 max-w-xl mx-auto shadow-xs animate-in fade-in duration-200"
+        >
+          <div className="w-16 h-16 rounded-3xl bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto text-2xl shadow-xs">
+            <Lock className="w-7 h-7" />
+          </div>
+          <div className="space-y-1.5">
+            <h3 className="text-lg font-black text-[#0F172A] dark:text-white">
+              رؤية المنسق العام مُغلقة حالياً
+            </h3>
+            <p className="text-xs text-[#475569] dark:text-slate-400 leading-relaxed max-w-md mx-auto">
+              تعتمد الرؤية التكاملية للمنسق العام على تقاطع درجات مجالات الحياة الثمانية معاً.
+              أكمل تقييم محطاتك المتبقية لفتح التشخيص الاستراتيجي وخارطة التوازن تلقائياً.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-3">
+            {onStartEvaluation && (
+              <button
+                type="button"
+                onClick={onStartEvaluation}
+                className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] text-white text-xs font-black shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <Play className="w-3.5 h-3.5 fill-white" />
+                <span>متابعة التقييم الآن ({completedCount} / 8)</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleTabChange('dashboard')}
+              className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-50 dark:bg-[#0E1D24] border border-slate-200 dark:border-slate-700 text-[#475569] dark:text-slate-300 text-xs font-bold hover:bg-slate-100 transition-all cursor-pointer"
+            >
+              العودة للوحة التحكم
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Toast Notification */}
       {

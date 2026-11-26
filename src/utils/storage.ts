@@ -307,6 +307,49 @@ export const saveStoredState = (state: StoredAppState): void => {
   }
 };
 
+export const WAZAN_COORDINATOR_UNLOCKED_KEY = 'wazan_coordinator_unlocked_v1';
+export const WAZAN_DASHBOARD_TAB_KEY = 'wazan_dashboard_active_tab_v1';
+
+export const isCoordinatorUnlockedInStorage = (): boolean => {
+  try {
+    return localStorage.getItem(WAZAN_COORDINATOR_UNLOCKED_KEY) === 'true';
+  } catch {
+    return false;
+  }
+};
+
+export const setCoordinatorUnlockedInStorage = (unlocked: boolean): void => {
+  try {
+    if (unlocked) {
+      localStorage.setItem(WAZAN_COORDINATOR_UNLOCKED_KEY, 'true');
+    } else {
+      localStorage.removeItem(WAZAN_COORDINATOR_UNLOCKED_KEY);
+    }
+  } catch {
+    // ignore
+  }
+};
+
+export const getStoredDashboardTab = (): 'dashboard' | 'coordinator' => {
+  try {
+    const saved = localStorage.getItem(WAZAN_DASHBOARD_TAB_KEY);
+    if (saved === 'coordinator' || saved === 'dashboard') {
+      return saved;
+    }
+  } catch {
+    // ignore
+  }
+  return 'dashboard';
+};
+
+export const saveStoredDashboardTab = (tab: 'dashboard' | 'coordinator'): void => {
+  try {
+    localStorage.setItem(WAZAN_DASHBOARD_TAB_KEY, tab);
+  } catch {
+    // ignore
+  }
+};
+
 export const resetStoredState = (): void => {
   try {
     localStorage.removeItem(STORAGE_KEY);
@@ -327,6 +370,8 @@ export const resetStoredState = (): void => {
       'wazan_added_goals',
       'wazan_added_hani_goals',
       'wazan_ai_mode',
+      WAZAN_COORDINATOR_UNLOCKED_KEY,
+      WAZAN_DASHBOARD_TAB_KEY,
     ];
     extraWazanKeys.forEach((key) => {
       try {
