@@ -184,6 +184,7 @@ export interface DayPlanTask {
   defaultSuggestions: string[]; // 3 smart suggestions
   selectedTask: string;
   customTask?: string;
+  customTasks?: string[];
   isCustomSelected?: boolean;
   isCompleted: boolean;
   completedAt?: number;
@@ -194,6 +195,7 @@ export interface ThirtyDayPlanState {
   createdAt: number;
   startDateStr: string;
   focusDomains: LifeAreaId[]; // 3 priority domains
+  isCustomFocus?: boolean;
   days: DayPlanTask[];
   currentDay: number;
 }

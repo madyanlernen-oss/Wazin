@@ -6,6 +6,7 @@ import {
 } from './arabicDomainLabels';
 
 const PLAN_STORAGE_KEY = 'wazan_30day_plan_v1';
+const CUSTOM_FOCUS_STORAGE_KEY = 'wazan_30day_custom_focus_v1';
 
 // أسماء وأيقونات المجالات (مرتبطة بالقاموس العربي الموحد لضمان عدم تسرب أي مفتاح إنجليزي)
 export const DOMAIN_META: Record<LifeAreaId, { title: string; icon: string; color: string }> = {
@@ -361,6 +362,13 @@ function buildDaysForFocusDomains(
 
     const prevDay = existingDays?.find((d) => d.dayNumber === dayNum);
     const sameDomain = prevDay && prevDay.domainId === domainId;
+    const legacyOrListCustomTasks = sameDomain
+      ? (Array.isArray(prevDay.customTasks)
+          ? prevDay.customTasks
+          : prevDay.customTask?.trim()
+            ? [prevDay.customTask.trim()]
+            : [])
+      : [];
 
     days.push({
       dayNumber: dayNum,
@@ -372,6 +380,7 @@ function buildDaysForFocusDomains(
       defaultSuggestions: [suggestionsPool[0], suggestionsPool[1], suggestionsPool[2]],
       selectedTask: sameDomain ? localizeDomainText(prevDay.selectedTask) : suggestionsPool[0],
       customTask: sameDomain ? (prevDay.customTask || '') : '',
+      customTasks: legacyOrListCustomTasks,
       isCustomSelected: sameDomain ? Boolean(prevDay.isCustomSelected) : false,
       isCompleted: sameDomain ? Boolean(prevDay.isCompleted) : false,
       completedAt: sameDomain ? prevDay.completedAt : undefined,
@@ -382,13 +391,67 @@ function buildDaysForFocusDomains(
   return days;
 }
 
+export function getStoredCustomFocusDomains(): LifeAreaId[] | null {
+  try {
+    const raw = localStorage.getItem(CUSTOM_FOCUS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length === 3) {
+      return parsed.filter((id): id is LifeAreaId => ALL_CANONICAL_DOMAINS.includes(id));
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export function saveCustomFocusDomainsToStorage(domains: LifeAreaId[] | null): void {
+  try {
+    if (!domains || domains.length === 0) {
+      localStorage.removeItem(CUSTOM_FOCUS_STORAGE_KEY);
+    } else {
+      localStorage.setItem(CUSTOM_FOCUS_STORAGE_KEY, JSON.stringify(domains.slice(0, 3)));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+/**
+ * تطبيق مجالات التركيز المخصصة (أو استعادة أضعف 3 مجالات) على الخطة مع الحفاظ على المهام وحالة الإنجاز
+ */
+export function applyFocusDomainsToPlan(
+  existingPlan: ThirtyDayPlanState,
+  selectedDomains: LifeAreaId[],
+  isCustomFocus: boolean
+): ThirtyDayPlanState {
+  const normalizedFocus = selectedDomains.slice(0, 3);
+  saveCustomFocusDomainsToStorage(isCustomFocus ? normalizedFocus : null);
+  const updatedDays = buildDaysForFocusDomains(normalizedFocus, existingPlan.days);
+  const nextPlan: ThirtyDayPlanState = {
+    ...existingPlan,
+    focusDomains: normalizedFocus,
+    isCustomFocus,
+    days: updatedDays,
+  };
+  saveThirtyDayPlanToStorage(nextPlan);
+  return nextPlan;
+}
+
 /**
  * توليد خطة ذكية متكاملة لـ 30 يوماً من أدنى المجالات المقيّمة فعلياً
  */
-export function generateThirtyDayPlan(scores: Record<string, number | null | undefined>): ThirtyDayPlanState {
+export function generateThirtyDayPlan(
+  scores: Record<string, number | null | undefined>,
+  overrideFocusDomains?: LifeAreaId[]
+): ThirtyDayPlanState {
   const evaluatedFocus = extractPriorityDomains(scores);
-  const focusDomains: LifeAreaId[] =
-    evaluatedFocus.length > 0 ? evaluatedFocus : ['health', 'financial', 'spiritual'];
+  const hasOverride = Array.isArray(overrideFocusDomains) && overrideFocusDomains.length === 3;
+  const focusDomains: LifeAreaId[] = hasOverride
+    ? overrideFocusDomains
+    : evaluatedFocus.length > 0
+      ? evaluatedFocus
+      : ['health', 'financial', 'spiritual'];
   const days = buildDaysForFocusDomains(focusDomains);
 
   // تاريخ اليوم بتنسيق عربي جميل
@@ -400,10 +463,14 @@ export function generateThirtyDayPlan(scores: Record<string, number | null | und
     createdAt: Date.now(),
     startDateStr,
     focusDomains,
+    isCustomFocus: hasOverride,
     days,
     currentDay: 1,
   };
 
+  if (!hasOverride) {
+    saveCustomFocusDomainsToStorage(null);
+  }
   saveThirtyDayPlanToStorage(newPlan);
   return newPlan;
 }
@@ -450,12 +517,22 @@ export function syncThirtyDayPlanWithScores(
     return { plan: existingPlan, didUpdate: false };
   }
 
-  const liveFocusDomains = extractPriorityDomains(scores);
+  const storedCustom = getStoredCustomFocusDomains();
+  const isCustomActive =
+    Boolean(existingPlan.isCustomFocus) ||
+    (Array.isArray(storedCustom) && storedCustom.length === 3);
+
+  const liveFocusDomains = isCustomActive
+    ? (Array.isArray(storedCustom) && storedCustom.length === 3
+        ? storedCustom
+        : existingPlan.focusDomains)
+    : extractPriorityDomains(scores);
   const currentFocus = Array.isArray(existingPlan.focusDomains) ? existingPlan.focusDomains : [];
 
   const isFocusSame =
     currentFocus.length === liveFocusDomains.length &&
-    currentFocus.every((id, idx) => id === liveFocusDomains[idx]);
+    currentFocus.every((id, idx) => id === liveFocusDomains[idx]) &&
+    Boolean(existingPlan.isCustomFocus) === isCustomActive;
 
   const areDaysSynced =
     Array.isArray(existingPlan.days) &&
@@ -473,6 +550,7 @@ export function syncThirtyDayPlanWithScores(
   const syncedPlan: ThirtyDayPlanState = {
     ...existingPlan,
     focusDomains: liveFocusDomains,
+    isCustomFocus: isCustomActive,
     days: updatedDays,
   };
 
@@ -486,6 +564,7 @@ export function syncThirtyDayPlanWithScores(
 export function clearThirtyDayPlanFromStorage(): void {
   try {
     localStorage.removeItem(PLAN_STORAGE_KEY);
+    localStorage.removeItem(CUSTOM_FOCUS_STORAGE_KEY);
   } catch {
     // ignore
   }
