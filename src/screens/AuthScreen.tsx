@@ -176,6 +176,47 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
       return;
     }
 
+    const isAhmedIdentifier =
+      identifier === 'ahmed' ||
+      identifier === 'ahmed@wazan.com' ||
+      identifier === 'أحمد' ||
+      identifier === 'احمد';
+
+    if (isAhmedIdentifier) {
+      if (pass !== '123456') {
+        setError('كلمة المرور غير صحيحة لحساب أحمد (كلمة المرور الافتراضية: 123456).');
+        setIsSubmitting(false);
+        return;
+      }
+      const ahmedAccount: UserProfile = {
+        name: 'أحمد',
+        email: 'ahmed@wazan.com',
+        hasPassword: true,
+        ageGroup: '25 - 34 سنة',
+        employmentStatus: 'موظف',
+        workStatus: 'موظف',
+        hasDependents: 'لا',
+        currentFocus: 'تحقيق التوازن الشامل وتحديد الأولويات',
+        registeredAt: new Date().toISOString(),
+      };
+      try {
+        saveStoredUser(ahmedAccount);
+        const pwdHash = await hashPassword('123456');
+        saveUserCredential('ahmed@wazan.com', pwdHash);
+        saveUserCredential('ahmed', pwdHash);
+        saveUserCredential('أحمد', pwdHash);
+        saveUserCredential('احمد', pwdHash);
+      } catch {
+        // ignore
+      }
+      setSuccessMsg('أهلاً بك يا أحمد! جاري الدخول...');
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => {
+        onLoginSuccess(ahmedAccount);
+      }, 400);
+      return;
+    }
+
     const currentUsers = getStoredUsers();
     const found = currentUsers.find(
       (u) =>
@@ -456,10 +497,29 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                 <div className="text-right">
                   <div className="flex items-center gap-1.5 font-black text-[#0B6E72] dark:text-cyan-300">
                     <Sparkles className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
-                    <span>حساب التجربة الجاهز:</span>
+                    <span>الحسابات التجريبية الجاهزة (كلمة المرور: 123456):</span>
                   </div>
                   <div className="text-xs text-[#475569] dark:text-slate-300 mt-1 flex flex-wrap items-center gap-2" dir="ltr">
-                    <span className="font-mono font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-teal-200/50 dark:border-slate-700">demo@wazan.com</span>
+                    <button
+                      type="button"
+                      onClick={handleQuickDemoFill}
+                      className="font-mono font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-teal-200/50 dark:border-slate-700 hover:border-teal-500 hover:text-[#0B6E72] dark:hover:text-cyan-300 cursor-pointer transition-colors"
+                      title="سعود المنصور (حساب مكتمل التقييم)"
+                    >
+                      demo@wazan.com
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEmailOrName('ahmed@wazan.com');
+                        setPassword('123456');
+                        setError(null);
+                      }}
+                      className="font-mono font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-teal-200/50 dark:border-slate-700 hover:border-teal-500 hover:text-[#0B6E72] dark:hover:text-cyan-300 cursor-pointer transition-colors"
+                      title="أحمد (حساب جديد للتقييم والتجربة)"
+                    >
+                      ahmed@wazan.com
+                    </button>
                   </div>
                 </div>
                 <button
