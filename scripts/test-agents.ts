@@ -28,7 +28,7 @@ import {
 } from '../src/utils/storage';
 import { ADVISORS_LIST } from '../src/data/advisorsData';
 import type { AdvisorConfig, UserProfile, LifeAreaId } from '../src/types/lifeBalance';
-import { activateDemoMode, isDemoModeActive, exitDemoMode, DEMO_STORAGE_FLAG_KEY } from '../src/utils/demoMode';
+import { activateDemoMode, isDemoModeActive, exitDemoMode, DEMO_STORAGE_FLAG_KEY, DEMO_ADVISOR_CHATS } from '../src/utils/demoMode';
 import { generateAgent11Suggestions, mapDomainNameToAreaId } from '../src/utils/eisenhowerAgent';
 import { INITIAL_EISENHOWER_GOALS } from '../src/components/eisenhower/initialGoals';
 import { generateFallbackDirectorReport } from '../server/routes/directorSummary';
@@ -51,6 +51,8 @@ import {
   resolveDayGoals,
   MAX_DAILY_GOALS,
   exportPlanAsText,
+  addGoalToThirtyDayPlanStorage,
+  getStoredThirtyDayPlan,
 } from '../src/utils/thirtyDayPlanGenerator';
 import { isolateNumbersForPlainText } from '../src/components/FormattedChatMessage';
 import {
@@ -3519,7 +3521,7 @@ async function testLatestUpgradesIntegrity() {
     const resolvedDay8Goals = resolveDayGoals(day8);
     assert(
       resolvedDay8Goals.length === 4 &&
-        resolvedDay8Goals.every((g) => !g.text.includes('خامس')),
+      resolvedDay8Goals.every((g) => !g.text.includes('خامس')),
       `resolveDayGoals must cap daily goals at 4; got ${resolvedDay8Goals.length}`
     );
 
@@ -3527,24 +3529,43 @@ async function testLatestUpgradesIntegrity() {
     const multiPdf = formatThirtyDayPlanForArabicPdf(plan, planScores);
     assert(
       multiExport.includes('أهداف اليوم') &&
-        multiExport.includes('توفير') &&
-        multiPdf.days[7].taskText.includes('توفير'),
+      multiExport.includes('توفير') &&
+      multiPdf.days[7].taskText.includes('توفير'),
       'Multi-goal days must export cleanly to text and Arabic PDF'
+    );
+
+    // 3. Free Consultation Clean Slate + Actionable Suggestion Injection into 30-Day Plan
+    assert(
+      Object.keys(DEMO_ADVISOR_CHATS).length === 0,
+      'DEMO_ADVISOR_CHATS must start clean/empty with zero fake pre-written messages'
+    );
+    const addedRes = addGoalToThirtyDayPlanStorage(
+      'تخصيص 10 دقائق للمشي الهادئ بعد العصر',
+      'health',
+      planScores as Record<LifeAreaId, number>
+    );
+    const reloadedPlan = getStoredThirtyDayPlan();
+    const targetDayGoals = reloadedPlan?.days.find((d) => d.dayNumber === addedRes.dayNumber);
+    assert(
+      addedRes.added === true &&
+        Boolean(targetDayGoals) &&
+        resolveDayGoals(targetDayGoals).some((g) => g.text.includes('للمشي الهادئ')),
+      `Plan inject failed: added=${addedRes.added}, day=${addedRes.dayNumber}, first=${targetDayGoals ? resolveDayGoals(targetDayGoals)[0]?.text : 'none'}`
     );
 
     results.push({
       suite: 'QA Regression Suite',
       domain: 'All 8',
-      name: 'Chat Persistence & 1-4 Daily Goals Cap Integrity',
+      name: 'Chat Persistence, Free Consult & Plan Cap',
       passed: true,
       durationMs: Date.now() - qaStart,
-      details: `Per-domain chat isolation OK; Day 8 goals capped at ${resolvedDay8Goals.length}/4 & exported cleanly`,
+      details: `Clean demo chats OK; Day ${addedRes.dayNumber} plan injection OK; Day 8 capped 4/4`,
     });
   } catch (err: any) {
     results.push({
       suite: 'QA Regression Suite',
       domain: 'All 8',
-      name: 'Chat Persistence & 1-4 Daily Goals Cap Integrity',
+      name: 'Chat Persistence, Free Consult & Plan Cap',
       passed: false,
       durationMs: Date.now() - qaStart,
       message: err.message,

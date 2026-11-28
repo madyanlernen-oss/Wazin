@@ -140,7 +140,9 @@ export const Navbar: React.FC<NavbarProps> = ({
         {NAV_ITEMS.filter((item) => item.inTopBar).map((item) => {
           const isActive =
             currentScreen === item.screen ||
-            (item.screen === 'thirty_day_plan' && currentScreen === 'goals_matrix');
+            (item.screen === 'dashboard' && currentScreen === 'comparison') ||
+            (item.screen === 'thirty_day_plan' && currentScreen === 'goals_matrix') ||
+            (item.screen === 'onboarding' && currentScreen === 'advisor_chat');
           const isAssessmentTab = item.screen === 'onboarding';
           const hasBadge = isAssessmentTab && completedCount !== undefined && completedCount < 8;
 

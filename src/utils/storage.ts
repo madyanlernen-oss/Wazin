@@ -305,10 +305,10 @@ export const setCoordinatorUnlockedInStorage = (unlocked: boolean): void => {
   }
 };
 
-export const getStoredDashboardTab = (): 'dashboard' | 'coordinator' => {
+export const getStoredDashboardTab = (): 'dashboard' | 'comparison' | 'coordinator' => {
   try {
     const saved = localStorage.getItem(WAZAN_DASHBOARD_TAB_KEY);
-    if (saved === 'coordinator' || saved === 'dashboard') {
+    if (saved === 'coordinator' || saved === 'comparison' || saved === 'dashboard') {
       return saved;
     }
   } catch {
@@ -317,7 +317,7 @@ export const getStoredDashboardTab = (): 'dashboard' | 'coordinator' => {
   return 'dashboard';
 };
 
-export const saveStoredDashboardTab = (tab: 'dashboard' | 'coordinator'): void => {
+export const saveStoredDashboardTab = (tab: 'dashboard' | 'comparison' | 'coordinator'): void => {
   try {
     localStorage.setItem(WAZAN_DASHBOARD_TAB_KEY, tab);
   } catch {

@@ -659,6 +659,104 @@ export function getStoredThirtyDayPlan(): ThirtyDayPlanState | null {
   }
 }
 
+export interface AddThirtyDayPlanGoalResult {
+  added: boolean;
+  dayNumber?: number;
+  alreadyExists?: boolean;
+  planFull?: boolean;
+  updatedPlan?: ThirtyDayPlanState;
+}
+
+/**
+ * إضافة مهمة أو عادة مقترحة من الاستشارة الحرة مباشرة إلى خطة الـ 30 يوماً في localStorage
+ * مع الالتزام بالحد الأقصى (MAX_DAILY_GOALS = 4) أهداف لكل يوم.
+ */
+export function addGoalToThirtyDayPlanStorage(
+  goalText: string,
+  _areaId: LifeAreaId,
+  scores: Record<LifeAreaId, number>
+): AddThirtyDayPlanGoalResult {
+  const trimmed = goalText.trim();
+  if (!trimmed) {
+    return { added: false };
+  }
+
+  let plan = getStoredThirtyDayPlan();
+  if (!plan || !Array.isArray(plan.days) || plan.days.length === 0) {
+    plan = generateThirtyDayPlan(scores);
+  }
+
+  const activeDayNum = Math.min(30, Math.max(1, Number(plan.currentDay) || 1));
+
+  // تحقق أولاً إن كانت المهمة موجودة مسبقاً في أي يوم من أيام الخطة كهدف مخصص
+  const duplicateDay = plan.days.find((d) =>
+    resolveDayGoals(d).some((g) => g.text.trim() === trimmed)
+  );
+  if (duplicateDay) {
+    saveThirtyDayPlanToStorage(plan);
+    return {
+      added: true,
+      alreadyExists: true,
+      dayNumber: duplicateDay.dayNumber,
+      updatedPlan: plan,
+    };
+  }
+
+  // ترتيب البحث عن أول يوم متاح بسعة أقل من 4 أهداف: اليوم الحالي أولاً، ثم الأيام التالية، ثم السابقة
+  const orderedDays = [
+    ...plan.days.filter((d) => d.dayNumber >= activeDayNum),
+    ...plan.days.filter((d) => d.dayNumber < activeDayNum),
+  ];
+
+  const targetDay = orderedDays.find((d) => resolveDayGoals(d).length < MAX_DAILY_GOALS);
+  if (!targetDay) {
+    return {
+      added: false,
+      planFull: true,
+      updatedPlan: plan,
+    };
+  }
+
+  const currentGoals = resolveDayGoals(targetDay);
+  const newGoal: DailyGoalItem = {
+    id: `consult_${targetDay.dayNumber}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    text: trimmed,
+    isCompleted: false,
+    isCustom: true,
+  };
+
+  const nextGoals = [newGoal, ...currentGoals].slice(0, MAX_DAILY_GOALS);
+  const customList = nextGoals.filter((g) => g.isCustom).map((g) => g.text);
+  const primaryGoal = nextGoals[0];
+  const allDone = nextGoals.every((g) => g.isCompleted);
+
+  const updatedDays = plan.days.map((d) => {
+    if (d.dayNumber !== targetDay.dayNumber) return d;
+    return {
+      ...d,
+      dailyGoals: nextGoals,
+      customTasks: customList,
+      customTask: customList[0] || '',
+      selectedTask: primaryGoal.text,
+      isCustomSelected: Boolean(primaryGoal.isCustom),
+      isCompleted: allDone,
+      completedAt: allDone ? d.completedAt : undefined,
+    };
+  });
+
+  const updatedPlan: ThirtyDayPlanState = {
+    ...plan,
+    days: updatedDays,
+  };
+
+  saveThirtyDayPlanToStorage(updatedPlan);
+  return {
+    added: true,
+    dayNumber: targetDay.dayNumber,
+    updatedPlan,
+  };
+}
+
 /**
  * تصدير الخطة كنص كامل للمشاركة أو النسخ بتسميات عربية موحدة بدون مفاتيح إنجليزية
  */

@@ -9,12 +9,12 @@ import { Sidebar } from './components/Sidebar';
 import { WazanLogo } from './components/WazanLogo';
 import { LandingScreen } from './screens/LandingScreen';
 import { AuthScreen } from './screens/AuthScreen';
-import { OnboardingScreen } from './screens/OnboardingScreen';
 import { DashboardScreen } from './screens/DashboardScreen';
-import { AdvisorChatScreen } from './screens/AdvisorChatScreen';
-import { ComparisonScreen } from './screens/ComparisonScreen';
 import { UnifiedThirtyDayWorkspace } from './screens/UnifiedThirtyDayWorkspace';
+import { UnifiedAssessmentWorkspace } from './screens/UnifiedAssessmentWorkspace';
 import {
+  addGoalToThirtyDayPlanStorage,
+  AddThirtyDayPlanGoalResult,
   clearThirtyDayPlanFromStorage,
   getStoredThirtyDayPlan,
   syncThirtyDayPlanWithScores,
@@ -94,6 +94,9 @@ export default function App() {
     if (target === 'director_summary' && !isUnlocked) {
       target = 'dashboard';
       setLockedDirectorNoticeSeq((s) => s + 1);
+    }
+    if (target === 'dashboard') {
+      saveStoredDashboardTab('dashboard');
     }
     if (target !== activeScreen) {
       setPreviousScreen(activeScreen);
@@ -195,6 +198,7 @@ export default function App() {
       localStorage.removeItem('wazan_dashboard_active_tab_v1');
       localStorage.removeItem('wazan_advisor_chats');
       localStorage.removeItem('wazan_added_goals');
+      localStorage.removeItem('wazan_added_plan_goals');
     } catch {
       // ignore
     }
@@ -241,6 +245,7 @@ export default function App() {
         localStorage.removeItem(WAZAN_EVAL_ACTIVE_DOMAIN_KEY);
         localStorage.removeItem('wazan_advisor_chats');
         localStorage.removeItem('wazan_added_goals');
+      localStorage.removeItem('wazan_added_plan_goals');
       } catch {
         // ignore
       }
@@ -514,23 +519,65 @@ export default function App() {
 
   // Handler: Automatically add advisor action to Eisenhower Matrix (Quadrant 2)
   const handleAddEisenhowerGoal = (title: string, advisorName: string, areaId: LifeAreaId) => {
+    const cleanTitle = title.trim();
+    if (!cleanTitle) return;
+
     setAppState((prev) => {
-      const existing = prev.eisenhowerGoals && prev.eisenhowerGoals.length > 0 ? prev.eisenhowerGoals : [];
+      let existing = prev.eisenhowerGoals && prev.eisenhowerGoals.length > 0 ? prev.eisenhowerGoals : [];
+      if (existing.length === 0) {
+        try {
+          const storedRaw = localStorage.getItem('wazan_eisenhower_goals');
+          if (storedRaw) {
+            const parsed = JSON.parse(storedRaw);
+            if (Array.isArray(parsed)) existing = parsed;
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const alreadyPresent = existing.some(
+        (g) => g.title.trim() === cleanTitle && g.areaId === areaId
+      );
+      if (alreadyPresent) return prev;
+
       const newGoal = {
-        id: `eisen_${Date.now()}`,
-        title,
+        id: `eisen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        title: cleanTitle,
         quadrant: 'q2_important_not_urgent' as const,
         timeframe: 'weekly' as const,
         areaId,
         completed: false,
         source: 'advisor' as const,
         advisorName,
+        createdAt: new Date().toISOString(),
       };
+      const updated = [newGoal, ...existing];
+      try {
+        localStorage.setItem('wazan_eisenhower_goals', JSON.stringify(updated));
+      } catch {
+        // ignore
+      }
       return {
         ...prev,
-        eisenhowerGoals: [newGoal, ...existing],
+        eisenhowerGoals: updated,
       };
     });
+  };
+
+  // Handler: Add advisor suggestion directly to the active 30-Day Plan
+  const handleAddThirtyDayPlanGoal = (
+    title: string,
+    areaId: LifeAreaId
+  ): AddThirtyDayPlanGoalResult => {
+    const result = addGoalToThirtyDayPlanStorage(title, areaId, appState.scores);
+    if (result.updatedPlan) {
+      setAppState((prev) => ({
+        ...prev,
+        thirtyDayPlan: result.updatedPlan,
+      }));
+    }
+    return result;
   };
 
   // Handler: Save AI Director Report
@@ -554,6 +601,7 @@ export default function App() {
       localStorage.removeItem('wazan_dashboard_active_tab_v1');
       localStorage.removeItem('wazan_advisor_chats');
       localStorage.removeItem('wazan_added_goals');
+      localStorage.removeItem('wazan_added_plan_goals');
     } catch {
       // ignore
     }
@@ -576,12 +624,12 @@ export default function App() {
   // Screen titles for mobile header
   const screenTitles: Record<string, string> = {
     dashboard: 'عجلة الحياة ولوحة التحكم',
-    onboarding: 'تقييم أبعاد الحياة',
-    advisor_chat: 'استشارة المستشارين',
+    onboarding: 'التقييم والاستشارة',
+    advisor_chat: 'التقييم والاستشارة',
     director_summary: 'تقرير المنسق العام',
     thirty_day_plan: 'خطة 30 يوم',
     goals_matrix: 'خطة 30 يوم',
-    comparison: 'المقارنة والتحليلات',
+    comparison: 'لوحة التحكم وعجلة الحياة',
   };
 
   // If on landing or login screen, render with clean top navbar
@@ -697,12 +745,14 @@ export default function App() {
 
         {/* Screen Routing */}
         <main className="flex-1 transition-all duration-300">
-          {(activeScreen === 'dashboard' || activeScreen === 'director_summary') && (
+          {(activeScreen === 'dashboard' || activeScreen === 'director_summary' || activeScreen === 'comparison') && (
             <DashboardScreen
               activeTab={
                 appState.completedAdvisors.length >= 8 &&
                 (activeScreen === 'director_summary' || getStoredDashboardTab() === 'coordinator')
                   ? 'coordinator'
+                  : activeScreen === 'comparison' || getStoredDashboardTab() === 'comparison'
+                  ? 'comparison'
                   : 'dashboard'
               }
               onSelectTab={(tab) => {
@@ -712,6 +762,8 @@ export default function App() {
                   } else {
                     setLockedDirectorNoticeSeq((s) => s + 1);
                   }
+                } else if (tab === 'comparison') {
+                  setActiveScreen('comparison');
                 } else {
                   setActiveScreen('dashboard');
                 }
@@ -760,14 +812,20 @@ export default function App() {
             />
           )}
 
-          {activeScreen === 'onboarding' && (
-            <OnboardingScreen
-              key={`onboarding_${weeklySessionKey}`}
-              initialAdvisorId={selectedAdvisorId}
-              assessmentMode={appState.assessmentMode}
-              assessmentSessionId={weeklySessionKey}
-              answers={appState.answers}
+          {(activeScreen === 'onboarding' || activeScreen === 'advisor_chat') && (
+            <UnifiedAssessmentWorkspace
+              activeTab={activeScreen === 'advisor_chat' ? 'free_chat' : 'assessment'}
+              onSelectTab={(tab) => setActiveScreen(tab === 'free_chat' ? 'advisor_chat' : 'onboarding')}
+              weeklySessionKey={weeklySessionKey}
+              selectedAdvisorId={selectedAdvisorId}
+              onSelectAdvisor={(id) => setSelectedAdvisorId(id)}
               userProfile={appState.userProfile}
+              assessmentMode={appState.assessmentMode}
+              scores={appState.scores}
+              answers={appState.answers}
+              goals={appState.goals}
+              completedAdvisors={appState.completedAdvisors}
+              completedDates={appState.completedDates}
               onUpdateProfile={handleUpdateUserProfile}
               onSaveAnswer={handleSaveAnswer}
               onFinishAdvisor={handleFinishAdvisor}
@@ -775,9 +833,9 @@ export default function App() {
               onResetAdvisor={handleResetAdvisorStation}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               onCompleteAll={handleCompleteAll}
+              onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
-              completedAdvisors={appState.completedAdvisors}
-              completedDates={appState.completedDates}
+              onAddThirtyDayPlanGoal={handleAddThirtyDayPlanGoal}
               onNavigateToDashboard={() => navigateTo('dashboard')}
               onNavigateBack={() => {
                 const target = previousScreen === 'onboarding' ? 'dashboard' : previousScreen;
@@ -787,35 +845,8 @@ export default function App() {
                 setSelectedAdvisorId(advisorId);
                 navigateTo('advisor_chat');
               }}
-              theme={theme}
-            />
-          )}
-
-          {activeScreen === 'advisor_chat' && (
-            <AdvisorChatScreen
-              key={`chat_${appState.userProfile?.email || 'guest'}_${weeklySessionKey}`}
-              currentAdvisorId={selectedAdvisorId}
-              onSelectAdvisor={(id) => setSelectedAdvisorId(id)}
-              userProfile={appState.userProfile}
-              scores={appState.scores}
-              answers={appState.answers}
-              goals={appState.goals}
-              onAddGoal={handleAddGoal}
-              onAddEisenhowerGoal={handleAddEisenhowerGoal}
-              onFinishAdvisor={handleFinishAdvisor}
-              onResetAdvisor={handleResetAdvisorStation}
-              onSaveAnswer={handleSaveAnswer}
-              onSaveStationGoals={handleSaveStationGoals}
               onNavigateToGoalsMatrix={() => setActiveScreen('goals_matrix')}
-              onBackToDashboard={() => setActiveScreen('dashboard')}
-              theme={theme}
-            />
-          )}
-
-          {activeScreen === 'comparison' && (
-            <ComparisonScreen
-              userProfile={appState.userProfile}
-              onNavigateToDashboard={() => setActiveScreen('dashboard')}
+              onNavigateToThirtyDayPlan={() => setActiveScreen('thirty_day_plan')}
               theme={theme}
             />
           )}

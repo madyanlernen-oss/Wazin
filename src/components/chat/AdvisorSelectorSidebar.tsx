@@ -4,9 +4,10 @@ import { AdvisorConfig, LifeAreaId } from '../../types/lifeBalance';
 
 interface AdvisorSelectorSidebarProps {
   currentAdvisorId: LifeAreaId;
-  scores: Record<LifeAreaId, number>;
+  scores?: Record<LifeAreaId, number>;
   onSelectAdvisor: (advisorId: LifeAreaId) => void;
   advisors?: AdvisorConfig[];
+  showScores?: boolean;
 }
 
 export const AdvisorSelectorSidebar: React.FC<AdvisorSelectorSidebarProps> = ({
@@ -14,20 +15,21 @@ export const AdvisorSelectorSidebar: React.FC<AdvisorSelectorSidebarProps> = ({
   scores,
   onSelectAdvisor,
   advisors = ADVISORS_LIST,
+  showScores = false,
 }) => {
   return (
     <div className="lg:col-span-4 bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-4 shadow-xs space-y-3 transition-colors">
       <div className="px-2 py-1">
         <h3 className="font-extrabold text-sm text-[#0F172A] dark:text-[#F1F5F9]">اختر المستشار للمحادثة</h3>
         <p className="text-[11px] text-[#475569] dark:text-[#94A3B8]">
-          لكل مستشار سياق مستقل مبني على نتائجك وأهدافك
+          مساحة استشارة حرة وسريعة في كل مجال بعيداً عن التقييم
         </p>
       </div>
 
       <div className="space-y-1.5 overflow-y-auto max-h-[75vh] pr-1">
         {advisors.map((advisor) => {
           const isSelected = advisor.id === currentAdvisorId;
-          const sc = scores[advisor.id] || 0;
+          const sc = scores?.[advisor.id] || 0;
 
           return (
             <button
@@ -53,12 +55,25 @@ export const AdvisorSelectorSidebar: React.FC<AdvisorSelectorSidebarProps> = ({
                 </div>
               </div>
 
-              <div dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-left font-mono font-bold">
-                <span className="text-xs" style={{ color: advisor.themeColor }}>
-                  {sc.toFixed(1)}
+              {showScores ? (
+                <div dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-left font-mono font-bold">
+                  <span className="text-xs" style={{ color: advisor.themeColor }}>
+                    {sc.toFixed(1)}
+                  </span>
+                  <span className="text-[9px] text-[#64748B] dark:text-[#94A3B8]"> / 10</span>
+                </div>
+              ) : (
+                <span
+                  className="text-[10px] font-bold px-2 py-0.5 rounded-full border flex-shrink-0"
+                  style={{
+                    color: advisor.themeColor,
+                    borderColor: `${advisor.themeColor}30`,
+                    backgroundColor: `${advisor.themeColor}10`,
+                  }}
+                >
+                  {advisor.badge}
                 </span>
-                <span className="text-[9px] text-[#64748B] dark:text-[#94A3B8]"> / 10</span>
-              </div>
+              )}
             </button>
           );
         })}

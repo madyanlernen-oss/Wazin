@@ -316,12 +316,14 @@ interface ComparisonScreenProps {
   userProfile: UserProfile | null;
   onNavigateToDashboard: () => void;
   theme?: 'light' | 'dark';
+  embedded?: boolean;
 }
 
 export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
   userProfile,
   onNavigateToDashboard,
   theme = 'light',
+  embedded = false,
 }) => {
   const [periodType, setPeriodType] = useState<'weeks' | 'months' | 'years'>('months');
 
@@ -440,18 +442,26 @@ export const ComparisonScreen: React.FC<ComparisonScreenProps> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">
+    <div
+      className={
+        embedded
+          ? 'space-y-8 text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300'
+          : 'min-h-[calc(100vh-4.5rem)] max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24 space-y-8 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300'
+      }
+    >
       {/* Top Banner */}
       <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-3xl p-6 sm:p-8 shadow-xs flex flex-col lg:flex-row lg:items-center justify-between gap-6 transition-colors">
         <div>
-          <button
-            type="button"
-            onClick={onNavigateToDashboard}
-            className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F6E6E] dark:text-[#22D3EE] hover:underline mb-3 cursor-pointer"
-          >
-            <ArrowRight className="w-3.5 h-3.5" />
-            <span>العودة للوحة التحكم</span>
-          </button>
+          {!embedded && (
+            <button
+              type="button"
+              onClick={onNavigateToDashboard}
+              className="inline-flex items-center gap-1.5 text-xs font-bold text-[#0F6E6E] dark:text-[#22D3EE] hover:underline mb-3 cursor-pointer"
+            >
+              <ArrowRight className="w-3.5 h-3.5" />
+              <span>العودة للوحة التحكم</span>
+            </button>
+          )}
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#0F6E6E]/10 dark:bg-[#0891B2]/20 text-[#0F6E6E] dark:text-[#22D3EE] text-xs font-bold mb-2">
             <GitCompare className="w-3.5 h-3.5 text-[#8A5A00] dark:text-amber-400" />
             أداة المقارنة التراكمية

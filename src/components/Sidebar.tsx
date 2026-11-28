@@ -164,7 +164,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const isActive =
               currentScreen === item.screen ||
               (item.screen === 'thirty_day_plan' && currentScreen === 'goals_matrix') ||
-              (item.screen === 'dashboard' && currentScreen === 'director_summary' && !isDirectorUnlocked);
+              (item.screen === 'onboarding' && currentScreen === 'advisor_chat') ||
+              (item.screen === 'dashboard' &&
+                (currentScreen === 'comparison' ||
+                  (currentScreen === 'director_summary' && !isDirectorUnlocked)));
 
             return (
               <button

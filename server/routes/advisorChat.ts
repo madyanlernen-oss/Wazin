@@ -491,6 +491,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
     : [];
   const isAcuteIsolationContext = hasAcuteIsolationOrRejection([...historyUserOnlyTexts, message]);
   const isEvaluationMode = Boolean(isEvaluationSession);
+  const isFreeConsultation = isEvaluationSession === false;
   const isEarlyContinueIntent =
     /(نكمل\s*قليلا|نكمل\s*شوية|نكمل\s*شوي|نكمل\s*الحوار|نكمل|نواصل|مواصلة|استمر|نستمر|نتابع|اطيل|أطيل|نطيل|طول|أريد\s*أن\s*أطيل|ودي\s*اطيل|ودي\s*نطيل|نتعمق|تعمق|لسه|لسة|باقي|حوار|المزيد|فهم\s*أكثر|فهم\s*اكثر|تقييم\s*أدق|تقييم\s*ادق)/i.test(message) &&
     !/(نكمل\s*للمحطة|نكمل\s*المحطة\s*التالية|ننتقل\s*للمحطة|ننتقل\s*للتالية|المحطة التالية)/i.test(message);
@@ -636,8 +637,8 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 
   const isEightDomain = EIGHT_EVALUATION_DOMAINS.has(agentKey);
   const isSafetyOrCrisisMsg = /(انتحار|الانتحار|انتحر|أنتحر|قتل نفسي|أقتل نفسي|ايذاء النفس|إيذاء نفسي|الموت|بالموت|للموت|ودي أموت|ودي اموت|لا اشعر باي سلام|لا اشعر بأي سلام|أكره حياتي|كرهت حياتي)/i.test(message);
-  const isEarlyDialogueTurn = isEightDomain && stationTurnCount < 2 && !isAdoptionIntent && !isSafetyOrCrisisMsg;
-  const isThirdOrLaterTurn = isEightDomain && stationTurnCount >= 2 && !isSafetyOrCrisisMsg;
+  const isEarlyDialogueTurn = !isFreeConsultation && isEightDomain && stationTurnCount < 2 && !isAdoptionIntent && !isSafetyOrCrisisMsg;
+  const isThirdOrLaterTurn = !isFreeConsultation && isEightDomain && stationTurnCount >= 2 && !isSafetyOrCrisisMsg;
 
   const sessionUserMessagesForEval = [...historyUserOnlyTexts, message]
     .map((t) => String(t || '').trim())
@@ -889,10 +890,15 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 `;
   } else {
     evaluationSessionGuideline = `
-[بروتوكول جلسة الاستشارة المفتوحة المستقلة 💬]
-المستفيد حالياً في غرفة الاستشارة الحرة المستمرة معك (${advisorName}).
-1. ⚠️ إلزام صارم: يجب أن تكون قيمة "station_completed": false دائماً في هذه الجلسة.
-2. ركز على الإجابة الاستشارية المعمقة، الإرشاد المستمر، والعصف الذهني في مجال (${stationTitle}).
+[بروتوكول جلسة الاستشارة الحرة المستمرة 💬]
+المستفيد حالياً يتحدث معك (${advisorName}) داخل مساحة «استشارة حرة» مستقلة تماماً عن تقييم عجلة الحياة.
+1. ⚠️ فصل كامل عن التقييم والدرجات:
+   - يُمنع منعاً باتاً ذكر أي درجة رقمية (مثل X/10) أو الإشارة إلى تقييم المحطة أو طلب اعتماد التقييم أو إنهاء الجلسة.
+   - يجب أن تكون قيمة "station_completed": false دائماً.
+2. دورك كمستشار شخصي عملي ومباشر:
+   - قدّم إجابة مركزة، عملية، ودافئة تعالج مباشرة التحدي الذي طرحه المستفيد اليوم في مجال (${stationTitle}) دون أسئلة تشخيصية مطوّلة أو مقدمات قالبية.
+   - أدرج في حقل "actionSteps" من 1 إلى 3 مهام أو خطوات عملية قصيرة ومحددة وواضحة (كل خطوة جملة تنفيذية مختصرة من 5 إلى 12 كلمة) كلما كان ذلك مناسباً، ليتمكن المستفيد من إضافتها مباشرة إلى مصفوفة أيزنهاور أو خطة الـ 30 يوماً.
+   - اختم عند الحاجة بسؤال متابعة لطيف ومختصر لفتح باب الاستمرار دون فرض استبيان تقييمي.
 `;
   }
 
@@ -1038,7 +1044,7 @@ ${hasPriorConversation ? `3. ⛔ محظور في هذا الرد البدء بت
         cleaned = cleaned.replace(lastQ, buildSmartReplacement()).trim();
       }
     }
-    if (isEarlyDialogueTurn) {
+    if (isEarlyDialogueTurn || isFreeConsultation) {
       return stripAccidentalScoreMentions(cleaned);
     }
     if (
@@ -1078,10 +1084,10 @@ ${agentRoleDescription}
 ${modeGuideline}
 ${clinicSpecialGuideline}
 ${roleBoundariesGuideline}
-${questionQualityGuideline}
+${isFreeConsultation ? '' : questionQualityGuideline}
 ${styleAndToneGuideline}
-${isEarlyDialogueTurn ? earlyDialoguePersonaGuideline : `${scoringAndCompletionGuideline}
-${isThirdOrLaterTurn ? '\n⛔ قاعدة الفصل الحواري (Turn 3+): لا تكتب أي درجة رقمية (مثل X/10) في نص الرد، فستتولى أداة التقييم الموحدة حساب الدرجة برمجياً وإرفاقها.\n' : ''}`}
+${isFreeConsultation ? '' : (isEarlyDialogueTurn ? earlyDialoguePersonaGuideline : `${scoringAndCompletionGuideline}
+${isThirdOrLaterTurn ? '\n⛔ قاعدة الفصل الحواري (Turn 3+): لا تكتب أي درجة رقمية (مثل X/10) في نص الرد، فستتولى أداة التقييم الموحدة حساب الدرجة برمجياً وإرفاقها.\n' : ''}`)}
 ${evaluationSessionGuideline}
 
 سياق المستفيد من منصة وزان:
@@ -1092,14 +1098,14 @@ ${parsedCtx.ageGroup ? `- الفئة العمرية: ${parsedCtx.ageGroup}` : ''
 ${parsedCtx.incomeSource ? `- مصدر الدخل: ${parsedCtx.incomeSource}` : ''}
 ${parsedCtx.incomeStability ? `- طبيعة الدخل: ${parsedCtx.incomeStability}` : ''}
 ${parsedCtx.currentFocus ? `- التركيز الحالي: ${parsedCtx.currentFocus}` : ''}
-${isEightDomain || isEvaluationMode ? '' : `- الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}`}
+${isEightDomain || isEvaluationMode || isFreeConsultation ? '' : `- الدرجة الحالية: ${effectiveScore}/10 ${userSelfScore !== undefined ? `(التقييم الذاتي للمستفيد: ${userSelfScore}/10)` : ''}`}
 - التحديات المرصودة: ${advisor?.challenges?.join('، ') || 'لم تُحدد بعد'}
 - الأهداف: ${effectiveGoals?.join('، ') || 'لم تُحدد بعد'}
-${Object.keys(sanitizedAnswersForPrompt).length > 0 ? `- إجابات مساعدة من سياق المستفيد (دون درجات): ${JSON.stringify(sanitizedAnswersForPrompt)}` : ''}
-${pastStationsContextText}${stationSummaryContextText}
-[تذكير ختامي ملزم حول عدد التبادلات والمحطة]:
+${isFreeConsultation ? '' : (Object.keys(sanitizedAnswersForPrompt).length > 0 ? `- إجابات مساعدة من سياق المستفيد (دون درجات): ${JSON.stringify(sanitizedAnswersForPrompt)}` : '')}
+${isFreeConsultation ? '' : pastStationsContextText}${stationSummaryContextText}
+${isFreeConsultation ? '[تذكير ملزم]: هذه استشارة حرة ومستمرة لا تؤثر على التقييم؛ التزم بـ station_completed: false، ولا تذكر أي درجات، وقدم نصيحة عملية موجزة مع 1 إلى 3 خطوات تنفيذية مختصرة في actionSteps.' : `[تذكير ختامي ملزم حول عدد التبادلات والمحطة]:
 - عدد التبادلات الحالية التي تمت في هذه المحطة (stationTurnCount): ${stationTurnCount}.
-${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التشخيص (station_completed: false حتماً): لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة"، واختم ردك بسؤال تشخيصي محدد واحد مرتبط بآخر ما قاله.` : ''}
+${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التشخيص (station_completed: false حتماً): لا تقل أبداً "أتممنا المحطة" أو "انتهت المحطة"، واختم ردك بسؤال تشخيصي محدد واحد مرتبط بآخر ما قاله.` : ''}`}
 `;
 
   // تطهير وبناء تسلسل المحادثة التفاعلية بما يتوافق بدقة مع متطلبات Google GenAI
@@ -1491,7 +1497,24 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
     }
 
     // رابعاً وثالثاً وخامساً: فصل الحوار عن التقييم الموحد
-    if (isEarlyDialogueTurn) {
+    if (isFreeConsultation) {
+      parsed.station_completed = false;
+      parsed.strengths = [];
+      parsed.challenges = [];
+      parsed.score = null;
+      parsed.reply = stripAccidentalScoreMentions(
+        enforceAntiRepeatOnReply(
+          sanitizeAdvisorReply(parsed.reply || '', false),
+          false,
+          0
+        )
+      );
+      if (Array.isArray(parsed.actionSteps)) {
+        parsed.actionSteps = parsed.actionSteps
+          .filter((s: any) => typeof s === 'string' && s.trim().length > 0)
+          .slice(0, 3);
+      }
+    } else if (isEarlyDialogueTurn) {
       parsed.station_completed = false;
       parsed.strengths = [];
       parsed.challenges = [];
@@ -1774,7 +1797,24 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
         }
 
         // رابعاً وثالثاً وخامساً: فصل الحوار عن التقييم الموحد
-        if (isEarlyDialogueTurn) {
+        if (isFreeConsultation) {
+          parsed.station_completed = false;
+          parsed.strengths = [];
+          parsed.challenges = [];
+          parsed.score = null;
+          parsed.reply = stripAccidentalScoreMentions(
+            enforceAntiRepeatOnReply(
+              sanitizeAdvisorReply(parsed.reply || '', false),
+              false,
+              0
+            )
+          );
+          if (Array.isArray(parsed.actionSteps)) {
+            parsed.actionSteps = parsed.actionSteps
+              .filter((s: any) => typeof s === 'string' && s.trim().length > 0)
+              .slice(0, 3);
+          }
+        } else if (isEarlyDialogueTurn) {
           parsed.station_completed = false;
           parsed.strengths = [];
           parsed.challenges = [];
@@ -1898,7 +1938,21 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
       Boolean(isEditedOrResent),
       historyUserOnlyTexts
     );
-    if (isEarlyDialogueTurn || (localFallback as any).skipTurnIncrement) {
+    if (isFreeConsultation) {
+      (localFallback as any).score = null;
+      (localFallback as any).station_completed = false;
+      (localFallback as any).reply = stripAccidentalScoreMentions(
+        String((localFallback as any).reply || '')
+      );
+      const stepsRaw = Array.isArray((localFallback as any).actionSteps)
+        ? (localFallback as any).actionSteps.filter((s: any) => typeof s === 'string' && s.trim().length > 0)
+        : [];
+      if (stepsRaw.length === 0 && (localFallback as any).advice) {
+        (localFallback as any).actionSteps = [String((localFallback as any).advice)];
+      } else {
+        (localFallback as any).actionSteps = stepsRaw.slice(0, 3);
+      }
+    } else if (isEarlyDialogueTurn || (localFallback as any).skipTurnIncrement) {
       (localFallback as any).score = null;
     } else if (isAdoptionIntent && offeredScoreFromLastAdvisor !== null) {
       (localFallback as any).score = offeredScoreFromLastAdvisor;

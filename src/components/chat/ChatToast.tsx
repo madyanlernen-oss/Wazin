@@ -4,15 +4,22 @@ import { CheckCircle2, ArrowLeft, X } from 'lucide-react';
 interface ChatToastProps {
   toastMessage: string | null;
   onClose: () => void;
+  actionLabel?: string;
+  onAction?: () => void;
   onNavigateToGoalsMatrix?: () => void;
 }
 
 export const ChatToast: React.FC<ChatToastProps> = ({
   toastMessage,
   onClose,
+  actionLabel,
+  onAction,
   onNavigateToGoalsMatrix,
 }) => {
   if (!toastMessage) return null;
+
+  const handleActionClick = onAction || onNavigateToGoalsMatrix;
+  const resolvedLabel = actionLabel || 'فتح المصفوفة';
 
   return (
     <div
@@ -24,13 +31,13 @@ export const ChatToast: React.FC<ChatToastProps> = ({
       <span className="text-xs font-bold leading-relaxed flex-1">
         {toastMessage}
       </span>
-      {onNavigateToGoalsMatrix && (
+      {handleActionClick && (
         <button
           type="button"
-          onClick={onNavigateToGoalsMatrix}
+          onClick={handleActionClick}
           className="px-2.5 py-1 rounded-lg bg-emerald-800 hover:bg-emerald-700 text-[11px] font-black text-emerald-100 hover:text-white transition-all flex items-center gap-1 flex-shrink-0 cursor-pointer shadow-xs"
         >
-          <span>فتح المصفوفة</span>
+          <span>{resolvedLabel}</span>
           <ArrowLeft className="w-3 h-3" />
         </button>
       )}

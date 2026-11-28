@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowRight, Sparkles } from 'lucide-react';
+import { ArrowRight } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import {
   AdvisorConfig,
@@ -8,14 +8,14 @@ import {
   UserProfile,
 } from '../types/lifeBalance';
 import { isCrisisMessage } from '../components/CrisisSupportCard';
-import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   WAZAN_ADVISOR_CHATS_KEY,
   loadChatHistoryFromStorage,
   saveChatHistoryToStorage,
 } from '../utils/storage';
-import { parseUserContext, getDomainContextConfig } from '../utils/contextPersonalization';
+import { parseUserContext } from '../utils/contextPersonalization';
 import { generateDynamicQuickSuggestions } from '../utils/dynamicSuggestions';
+import { addGoalToThirtyDayPlanStorage } from '../utils/thirtyDayPlanGenerator';
 import { getClientAdvisorResponse } from '../components/onboarding/clientIntelligence';
 import {
   stripRepeatedOpeningGreeting,
@@ -40,16 +40,16 @@ interface AdvisorChatScreenProps {
   currentAdvisorId: LifeAreaId;
   onSelectAdvisor: (advisorId: LifeAreaId) => void;
   userProfile: UserProfile | null;
-  scores: Record<LifeAreaId, number>;
-  answers: Record<string, any>;
+  scores?: Record<LifeAreaId, number>;
   goals: Record<LifeAreaId, string[]>;
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
   onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
-  onFinishAdvisor?: (advisorId: LifeAreaId, score: number) => boolean | void;
-  onResetAdvisor?: (advisorId: LifeAreaId) => void;
-  onSaveAnswer?: (advisorId: LifeAreaId, questionId: string, value: any) => void;
-  onSaveStationGoals?: (advisorId: LifeAreaId, stationGoals: string[]) => void;
+  onAddThirtyDayPlanGoal?: (
+    title: string,
+    areaId: LifeAreaId
+  ) => { added: boolean; dayNumber?: number; alreadyExists?: boolean; planFull?: boolean } | void;
   onNavigateToGoalsMatrix?: () => void;
+  onNavigateToThirtyDayPlan?: () => void;
   onBackToDashboard: () => void;
   theme?: 'light' | 'dark';
 }
@@ -59,27 +59,35 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   onSelectAdvisor,
   userProfile,
   scores,
-  answers,
   goals,
   onAddGoal,
   onAddEisenhowerGoal,
-  onFinishAdvisor,
-  onResetAdvisor,
-  onSaveAnswer,
+  onAddThirtyDayPlanGoal,
   onNavigateToGoalsMatrix,
+  onNavigateToThirtyDayPlan,
   onBackToDashboard,
   theme: _theme = 'light',
 }) => {
   const currentAdvisor: AdvisorConfig =
     ADVISORS_LIST.find((a) => a.id === currentAdvisorId) || ADVISORS_LIST[0];
 
-  const currentScore = scores[currentAdvisor.id] || 0;
   const currentGoals = goals[currentAdvisor.id] || [];
 
-  // Chat message history per advisor (persisted to localStorage under wazan_advisor_chats)
-  const [messagesByAdvisor, setMessagesByAdvisor] = useState<Record<string, ChatMessage[]>>(() =>
-    loadChatHistoryFromStorage<ChatMessage>(WAZAN_ADVISOR_CHATS_KEY)
-  );
+  // Chat message history per advisor (persisted cleanly under wazan_advisor_chats, stripping legacy fake demo chats)
+  const [messagesByAdvisor, setMessagesByAdvisor] = useState<Record<string, ChatMessage[]>>(() => {
+    const rawStored = loadChatHistoryFromStorage<ChatMessage>(WAZAN_ADVISOR_CHATS_KEY);
+    const cleaned: Record<string, ChatMessage[]> = {};
+    for (const [domainKey, list] of Object.entries(rawStored)) {
+      if (!Array.isArray(list)) continue;
+      const nonDemo = list.filter(
+        (m) => m && !m.id?.startsWith('demo_') && !m.id?.startsWith('score_confirmed_')
+      );
+      if (nonDemo.length > 0) {
+        cleaned[domainKey] = nonDemo;
+      }
+    }
+    return cleaned;
+  });
   const [draftsByAdvisor, setDraftsByAdvisor] = useState<Record<string, string>>({});
   const inputMessage = draftsByAdvisor[currentAdvisor.id] || '';
   const setInputMessage = (val: string) => {
@@ -88,8 +96,6 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
   };
   const [isLoading, setIsLoading] = useState(false);
   const [isEditResendByAdvisor, setIsEditResendByAdvisor] = useState<Record<string, boolean>>({});
-  const [evalModeByAdvisor, setEvalModeByAdvisor] = useState<Record<string, boolean>>({});
-  const [pendingScoreByAdvisor, setPendingScoreByAdvisor] = useState<Record<string, number | null>>({});
   const [addedGoals, setAddedGoals] = useState<Record<string, boolean>>(() => {
     try {
       const stored = localStorage.getItem('wazan_added_goals');
@@ -97,7 +103,19 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
         const parsed = JSON.parse(stored);
         if (parsed && typeof parsed === 'object') return parsed;
       }
-    } catch (e) {
+    } catch {
+      // ignore
+    }
+    return {};
+  });
+  const [addedPlanGoals, setAddedPlanGoals] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('wazan_added_plan_goals');
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === 'object') return parsed;
+      }
+    } catch {
       // ignore
     }
     return {};
@@ -118,7 +136,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     return 'balanced';
   });
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [showStationResetConfirm, setShowStationResetConfirm] = useState(false);
+  const [toastActionTarget, setToastActionTarget] = useState<'matrix' | 'plan' | null>(null);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -150,7 +168,7 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     lastSentMsgIdRef.current = '';
     lastSentAdvisorIdRef.current = '';
     setToastMessage(null);
-    setShowStationResetConfirm(false);
+    setToastActionTarget(null);
   }, [currentAdvisor.id]);
 
   const handleSelectAiMode = (mode: AiModelMode) => {
@@ -176,7 +194,18 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
     }
   }, [addedGoals]);
 
-  // Initialize or refresh welcoming message when empty OR when profile/score updates before conversation begins
+  // Persist addedPlanGoals to localStorage under wazan_added_plan_goals
+  useEffect(() => {
+    try {
+      if (Object.keys(addedPlanGoals).length > 0) {
+        localStorage.setItem('wazan_added_plan_goals', JSON.stringify(addedPlanGoals));
+      }
+    } catch {
+      // ignore
+    }
+  }, [addedPlanGoals]);
+
+  // Initialize clean slate welcoming message when empty — free consultation only, decoupled from scoring
   useEffect(() => {
     const existingMsgs = messagesByAdvisor[currentAdvisor.id] || [];
     const isUntouchedWelcome =
@@ -184,28 +213,20 @@ export const AdvisorChatScreen: React.FC<AdvisorChatScreenProps> = ({
       (existingMsgs.length === 1 && existingMsgs[0].id.startsWith('welcome_'));
     if (!isUntouchedWelcome) return;
 
-    const isEvalResetActive = Boolean(evalModeByAdvisor[currentAdvisor.id]);
     const parsedCtx = parseUserContext(userProfile);
-    const domainCtx = getDomainContextConfig(currentAdvisor.id, parsedCtx);
     const initialChips = generateDynamicQuickSuggestions({
       domainId: currentAdvisor.id,
       roundNumber: 1,
       userProfile,
     });
-    const scoreLine =
-      currentScore > 0 && !isEvalResetActive
-        ? `رصدت تقييمك الحالي في "${currentAdvisor.title}" بدرجة (${currentScore.toFixed(1)} من 10).`
-        : `بدأنا جلسة تقييم جديدة في "${currentAdvisor.title}" من الصفر؛ شاركني واقعك الحالي الآن.`;
-    const welcomeContent = `أهلاً بك يا ${parsedCtx.name} في منصة وزان. أنا ${currentAdvisor.name}، ${currentAdvisor.role}.
-${scoreLine}
-${domainCtx.contextIntro}
-
-${domainCtx.openingQuestion}`;
+    const greetingName =
+      parsedCtx.name && parsedCtx.name !== 'عزيزي' ? ` يا ${parsedCtx.name}` : '';
+    const welcomeContent = `أهلاً بك${greetingName}، أنا ${currentAdvisor.name}. هذه مساحة استشارة حرة وسريعة—اسألني عن أي تحدٍ يواجهك اليوم، وسأعطيك نصائح عملية يمكنك إضافتها مباشرة لخطتك دون التأثير على تقييمك.`;
 
     if (
       existingMsgs.length === 1 &&
       existingMsgs[0].content === welcomeContent &&
-      existingMsgs[0].reflectionQuestion === domainCtx.exploratoryQuestions[0]
+      (!existingMsgs[0].actionSteps || existingMsgs[0].actionSteps.length === 0)
     ) {
       return;
     }
@@ -217,8 +238,7 @@ ${domainCtx.openingQuestion}`;
       timestamp:
         existingMsgs[0]?.timestamp ||
         new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-      actionSteps: currentAdvisor.defaultGoals.slice(0, 2),
-      reflectionQuestion: domainCtx.exploratoryQuestions[0],
+      actionSteps: [],
       suggestedReplies: initialChips,
     };
 
@@ -228,8 +248,7 @@ ${domainCtx.openingQuestion}`;
     }));
   }, [
     currentAdvisor.id,
-    currentScore,
-    evalModeByAdvisor[currentAdvisor.id],
+    currentAdvisor.name,
     userProfile?.name,
     userProfile?.employmentStatus,
     userProfile?.workStatus,
@@ -246,79 +265,15 @@ ${domainCtx.openingQuestion}`;
   }, [messagesByAdvisor, isLoading]);
 
   const activeMessages = messagesByAdvisor[currentAdvisor.id] || [];
-  const activePendingScore = pendingScoreByAdvisor[currentAdvisor.id] ?? null;
 
-  const showToastNotice = (msg: string) => {
+  const showToastNotice = (msg: string, target: 'matrix' | 'plan' | null = null) => {
     setToastMessage(msg);
+    setToastActionTarget(target);
     if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     toastTimeoutRef.current = setTimeout(() => {
       setToastMessage(null);
-    }, 4500);
-  };
-
-  const handleConfirmAdvisorScore = (scoreToConfirm: number, advisorObj: AdvisorConfig = currentAdvisor) => {
-    const normalized = Number(Number(scoreToConfirm).toFixed(1));
-    if (isNaN(normalized) || normalized < 1 || normalized > 10) return;
-
-    onSaveAnswer?.(advisorObj.id, `${advisorObj.id}_score`, normalized);
-    onFinishAdvisor?.(advisorObj.id, normalized);
-
-    setEvalModeByAdvisor((prev) => ({ ...prev, [advisorObj.id]: false }));
-    setPendingScoreByAdvisor((prev) => ({ ...prev, [advisorObj.id]: null }));
-
-    const confirmMsg: ChatMessage = {
-      id: `score_confirmed_${Date.now()}`,
-      sender: 'advisor',
-      content: `✨ **تم اعتماد التقييم الجديد (${advisorObj.title}):** (${normalized.toFixed(1)} من 10).\n\nتم تحديث شارة المستشار وعجلة الحياة والملخص بنجاح!`,
-      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-    };
-    setMessagesByAdvisor((prev) => ({
-      ...prev,
-      [advisorObj.id]: [...(prev[advisorObj.id] || []), confirmMsg],
-    }));
-    showToastNotice(`تم اعتماد الدرجة الجديدة (${normalized.toFixed(1)}/10) وتحديث عجلة الحياة واللوحة بنجاح 🎯`);
-  };
-
-  const handleReevaluateAdvisor = () => {
-    const advisorObj = currentAdvisor;
-    currentRequestIdRef.current = `reeval_${advisorObj.id}_${Date.now()}`;
-    if (abortControllerRef.current) {
-      try {
-        abortControllerRef.current.abort();
-      } catch {
-        // ignore
-      }
-      abortControllerRef.current = null;
-    }
-    setIsLoading(false);
-    setIsEditResendByAdvisor((prev) => ({ ...prev, [advisorObj.id]: false }));
-    setPendingScoreByAdvisor((prev) => ({ ...prev, [advisorObj.id]: null }));
-    setDraftsByAdvisor((prev) => ({ ...prev, [advisorObj.id]: '' }));
-    setEvalModeByAdvisor((prev) => ({ ...prev, [advisorObj.id]: true }));
-    onResetAdvisor?.(advisorObj.id);
-
-    const parsedCtx = parseUserContext(userProfile);
-    const domainCtx = getDomainContextConfig(advisorObj.id, parsedCtx);
-    const initialChips = generateDynamicQuickSuggestions({
-      domainId: advisorObj.id,
-      roundNumber: 1,
-      userProfile,
-    });
-    const freshWelcome: ChatMessage = {
-      id: `welcome_${advisorObj.id}`,
-      sender: 'advisor',
-      content: `أهلاً بك يا ${parsedCtx.name} في منصة وزان. أنا ${advisorObj.name}، ${advisorObj.role}.\nبدأنا جلسة تقييم جديدة في "${advisorObj.title}" من الصفر؛ شاركني واقعك الحالي الآن.\n${domainCtx.contextIntro}\n\n${domainCtx.openingQuestion}`,
-      timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-      actionSteps: advisorObj.defaultGoals.slice(0, 2),
-      reflectionQuestion: domainCtx.exploratoryQuestions[0],
-      suggestedReplies: initialChips,
-    };
-
-    setMessagesByAdvisor((prev) => ({
-      ...prev,
-      [advisorObj.id]: [freshWelcome],
-    }));
-    showToastNotice(`تم بدء جلسة تقييم جديدة معزولة مع ${advisorObj.name} — تقييمك السابق لا يؤثر على هذه الجلسة.`);
+      setToastActionTarget(null);
+    }, 4200);
   };
 
   const handleSendMessage = async (textToSend?: string) => {
@@ -327,11 +282,9 @@ ${domainCtx.openingQuestion}`;
     const text = rawText.trim();
 
     const targetAdvisor = currentAdvisor;
-    const targetScore = currentScore;
     const targetGoals = currentGoals;
     const currentConv = messagesByAdvisor[targetAdvisor.id] || [];
     const currentTurnCount = currentConv.filter((m) => m.sender === 'user' && !m.ignoredForTurnCount).length;
-    const isEvalModeActive = Boolean(evalModeByAdvisor[targetAdvisor.id]) || targetScore <= 0;
 
     // Input Guardrail: empty or meaningless message prompts gently in Arabic without advancing turn count
     if (isEmptyOrMeaninglessInput(rawText)) {
@@ -431,14 +384,7 @@ ${domainCtx.openingQuestion}`;
           content: m.content,
         }));
 
-      const isolatedAnswers: Record<string, any> = {};
-      for (const [k, v] of Object.entries(answers || {})) {
-        if (/(?:^|_)(?:score|self_rating)$/i.test(k)) continue;
-        if (isEvalModeActive && (k === targetAdvisor.id || k.startsWith(`${targetAdvisor.id}_`))) continue;
-        isolatedAnswers[k] = v;
-      }
-
-      // Sanitize user profile so no empty string context field is sent to the server
+      // Free Consultation is completely decoupled from Wheel of Life answers & scoring
       const cleanUserProfile = userProfile ? {
         name: userProfile.name,
         ...(userProfile.email?.trim() ? { email: userProfile.email.trim() } : {}),
@@ -459,15 +405,15 @@ ${domainCtx.openingQuestion}`;
         },
         body: JSON.stringify({
           advisor: targetAdvisor,
-          userScore: isEvalModeActive ? 0 : targetScore,
+          userScore: 0,
           userName: userProfile?.name?.trim() || 'عزيزي',
           userProfile: cleanUserProfile,
           userGoals: targetGoals,
-          userAnswers: isolatedAnswers,
+          userAnswers: {},
           message: text,
           history: conversationHistory,
           aiMode,
-          isEvaluationSession: isEvalModeActive,
+          isEvaluationSession: false,
           stationTurnCount: currentTurnCount,
           previousSuggestions,
           isEditedOrResent,
@@ -526,15 +472,11 @@ ${domainCtx.openingQuestion}`;
       });
 
       const isGuardrailSkip = Boolean(data.skipTurnIncrement || data.needsClarification);
-      const returnedScore =
-        !isGuardrailSkip &&
-        data.score !== undefined &&
-        data.score !== null &&
-        !isNaN(Number(data.score)) &&
-        Number(data.score) >= 1 &&
-        Number(data.score) <= 10
-          ? Number(Number(data.score).toFixed(1))
-          : null;
+      const rawSteps: string[] = Array.isArray(data.actionSteps)
+        ? data.actionSteps.filter((s: any) => typeof s === 'string' && s.trim().length > 0).slice(0, 3)
+        : parsedAdvice && parsedAdvice.trim().length > 0
+        ? [parsedAdvice.trim()]
+        : [];
 
       const advisorReply: ChatMessage = {
         id: `advisor_${Date.now()}`,
@@ -544,10 +486,10 @@ ${domainCtx.openingQuestion}`;
         summary: parsedSummary,
         advice: parsedAdvice,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
-        actionSteps: data.actionSteps || (parsedAdvice ? [parsedAdvice] : []),
-        reflectionQuestion: data.reflectionQuestion,
+        actionSteps: isGuardrailSkip ? [] : rawSteps,
+        reflectionQuestion: undefined,
         suggestedReplies: nextDynamicReplies,
-        offeredScore: returnedScore,
+        offeredScore: null,
         ignoredForTurnCount: isGuardrailSkip,
         isCrisis: isCrisisMessage(cleanContent) || isCrisisMessage(text),
         source: data.source || 'gemini',
@@ -563,17 +505,6 @@ ${domainCtx.openingQuestion}`;
           [targetAdvisor.id]: [...patchedList, advisorReply],
         };
       });
-
-      if (returnedScore !== null) {
-        if (Boolean(data.station_completed)) {
-          handleConfirmAdvisorScore(returnedScore, targetAdvisor);
-        } else if (isEvalModeActive || currentTurnCount >= 2) {
-          setPendingScoreByAdvisor((prev) => ({
-            ...prev,
-            [targetAdvisor.id]: returnedScore,
-          }));
-        }
-      }
     } catch (err: any) {
       console.log('[AdvisorChat] catch in handleSendMessage:', err?.name, err?.message, 'aborted:', controller.signal.aborted, 'currentReqId:', currentRequestIdRef.current, 'reqId:', reqId);
       if (
@@ -603,11 +534,8 @@ ${domainCtx.openingQuestion}`;
       const isAskingHowAdvisorIs = !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && /(^|\s)(كيف حالك|كيفك|شلونك|شخبارك|اخبارك|أنا أسألك عن حالك|انا اسالك عن حالك|أنا أسألك كيف حالك|انا اسالك كيف حالك|كيف انت|عساك بخير|عساك طيب|طمني عنك|طمنا عنك)(\s|\?|؟|$)/i.test(lowerText);
       const isSimpleGreeting = !isEditedOrResent && currentConv.length === 0 && !isCrisisOrDeath && !isGriefOrExhaustion && !isCurseOrAnger && !isAskingHowAdvisorIs && /(^|\s)(مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام عليكم|صباح الخير|مساء الخير|هلا|هاي|حيّاك|أهلين)(\s|$)/i.test(lowerText);
 
-      let fallbackActionSteps: string[] = targetAdvisor.defaultGoals.slice(0, 1);
+      let fallbackActionSteps: string[] = targetAdvisor.defaultGoals.slice(0, 2);
       let fallbackReflectionQuestion: string | undefined = undefined;
-
-      let fallbackScore: number | null = null;
-      let fallbackCompleted = false;
 
       if (isCrisisOrDeath) {
         fallbackReasoning = `تدخل إنساني طارئ (Safety & Empathy Override): المستفيد يعبر عن ألم نفسي وإنهاك شديد وتفكير في الموت أو إيذاء النفس. تم فوراً تعليق وتجميد كافة الأسئلة الروتينية، وتكريس كامل الحضور النفسي لاحتواء هذا الألم الوجودي الحاد، والتأكيد القاطع على قيمة حياته، وتقديم الدعم الإنساني والمساندة العاجلة.`;
@@ -674,17 +602,19 @@ ${domainCtx.openingQuestion}`;
       } else if (isAskingHowAdvisorIs) {
         fallbackReasoning = `تجاوب حواري إنساني مباشر وكسر الجمود لتقديم التحية والاطمئنان الدافئ كمرشد ورفيق درب.`;
         fallbackAdvice = `أنا بخير وبأحسن حال وسعيد وممتن جداً بسؤالك الطيب!`;
-        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${targetAdvisor.name} (${targetAdvisor.role})، أنا معك هنا بكامل حضوري وطاقتي لنفكر معاً خطوة بخطوة في رحلتك نحو التوازن. كيف تشعر اليوم وما الذي يشغل تفكيرك؟`;
+        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! أنا بخير وبأحسن حال، وسعيد وممتن جداً بسؤالك الطيب عني ودفء حضورك. 🌿\n\nبصفتي ${targetAdvisor.name} (${targetAdvisor.role})، أنا معك هنا بكامل حضوري وطاقتي لنفكر معاً خطوة بخطوة في أي تحدٍ يواجهك اليوم. كيف تشعر وما الذي تود استشارتي فيه؟`;
+        fallbackActionSteps = [];
       } else if (isSimpleGreeting) {
         fallbackReasoning = `تحية إنسانية عفوية من المستفيد: الترحيب الدافئ كمرشد ورفيق درب وفتح باب الحوار بأريحية تامة دون أي قوالب جامدة.`;
         fallbackAdvice = `أهلاً بك دائماً؛ كامل الحضور والإصغاء معك لنبدأ بأي جانب تود التركيز عليه.`;
-        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${targetAdvisor.name} (${targetAdvisor.role}). أنا هنا معك ومستعد للإصغاء والتفكير معك في كل ما يشغل بالك في ${targetAdvisor.title}.\n\nكيف تسير أمورك اليوم؟ وما الذي تود أن نتناوله معاً؟`;
+        fallbackText = `أهلاً وسهلاً بك يا ${userProfile?.name?.trim() || 'عزيزي'}! يسعدني جداً حضورك وتواصلك. 🌿\n\nمعك ${targetAdvisor.name} (${targetAdvisor.role}). هذه مساحتك الحرة والسريعة للتشاور في ${targetAdvisor.title}—ما التحدي أو السؤال الذي يشغل بالك اليوم؟`;
+        fallbackActionSteps = [];
       } else {
         const localRoomResponse = getClientAdvisorResponse(
           targetAdvisor,
           text,
           1,
-          isEvalModeActive ? 0 : targetScore,
+          0,
           currentTurnCount,
           currentConv.filter((m) => !m.ignoredForTurnCount).map((m) => m.content),
           userProfile,
@@ -696,12 +626,14 @@ ${domainCtx.openingQuestion}`;
         fallbackText = stripRepeatedOpeningGreeting(
           localRoomResponse.reply,
           isEditedOrResent || currentConv.length > 0
-        );
-        fallbackActionSteps = [localRoomResponse.advice || targetAdvisor.defaultGoals[0]];
-        if (localRoomResponse.score >= 1 && localRoomResponse.score <= 10 && currentTurnCount >= 2) {
-          fallbackScore = Number(localRoomResponse.score.toFixed(1));
-          fallbackCompleted = Boolean(localRoomResponse.station_completed);
-        }
+        )
+          .replace(/بعد\s*ما\s*شاركتني[\s\S]*?(?:أكثر\s*دقة\s*[؟?]|المحطة\s*التالية\s*[؟?]?)/gi, '')
+          .replace(/\(\s*\d+(?:\.\d+)?\s*(?:\/|\s*من\s*)\s*10\s*\)/g, '')
+          .trim();
+        fallbackActionSteps = [
+          localRoomResponse.advice || targetAdvisor.defaultGoals[0],
+          ...targetAdvisor.defaultGoals.filter((g) => g !== localRoomResponse.advice).slice(0, 1),
+        ].slice(0, 3);
       }
 
       const nextFallbackChips = generateDynamicQuickSuggestions({
@@ -719,13 +651,13 @@ ${domainCtx.openingQuestion}`;
         sender: 'advisor',
         content: fallbackText,
         reasoning: fallbackReasoning,
-        summary: `تفاعل واستشارة مباشرة في ${targetAdvisor.title}`,
+        summary: `استشارة حرة مباشرة في ${targetAdvisor.title}`,
         advice: fallbackAdvice,
         timestamp: new Date().toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }),
         actionSteps: fallbackActionSteps,
         reflectionQuestion: fallbackReflectionQuestion,
         suggestedReplies: nextFallbackChips,
-        offeredScore: fallbackScore,
+        offeredScore: null,
         isCrisis: isCrisisMessage(fallbackText) || isCrisisMessage(text),
         source: 'local-fallback',
       };
@@ -734,17 +666,6 @@ ${domainCtx.openingQuestion}`;
         ...prev,
         [targetAdvisor.id]: [...(prev[targetAdvisor.id] || []), fallbackReply],
       }));
-
-      if (fallbackScore !== null) {
-        if (fallbackCompleted) {
-          handleConfirmAdvisorScore(fallbackScore, targetAdvisor);
-        } else if (isEvalModeActive || currentTurnCount >= 2) {
-          setPendingScoreByAdvisor((prev) => ({
-            ...prev,
-            [targetAdvisor.id]: fallbackScore,
-          }));
-        }
-      }
     } finally {
       if (currentRequestIdRef.current === reqId) {
         setIsLoading(false);
@@ -839,13 +760,45 @@ ${domainCtx.openingQuestion}`;
     onAddGoal(currentAdvisor.id, actionText);
     if (onAddEisenhowerGoal) {
       onAddEisenhowerGoal(actionText, currentAdvisor.name, currentAdvisor.id);
+    } else {
+      try {
+        const storedRaw = localStorage.getItem('wazan_eisenhower_goals');
+        const existing = storedRaw ? JSON.parse(storedRaw) : [];
+        const list = Array.isArray(existing) ? existing : [];
+        if (!list.some((g: any) => g?.title?.trim() === actionText.trim())) {
+          list.unshift({
+            id: `eisen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            title: actionText.trim(),
+            quadrant: 'q2_important_not_urgent',
+            timeframe: 'weekly',
+            areaId: currentAdvisor.id,
+            completed: false,
+            source: 'advisor',
+            advisorName: currentAdvisor.name,
+            createdAt: new Date().toISOString(),
+          });
+          localStorage.setItem('wazan_eisenhower_goals', JSON.stringify(list));
+        }
+      } catch {
+        // ignore
+      }
     }
     setAddedGoals((prev) => ({ ...prev, [actionText]: true }));
-    setToastMessage(`تمت إضافة المهمة إلى المربع الثاني (مهم وغير عاجل) بمصفوفة أيزنهاور بنجاح 🎯`);
-    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-    toastTimeoutRef.current = setTimeout(() => {
-      setToastMessage(null);
-    }, 4000);
+    showToastNotice('تمت الإضافة إلى مصفوفة أيزنهاور', 'matrix');
+  };
+
+  const handleAddActionToThirtyDayPlan = (actionText: string) => {
+    const res = onAddThirtyDayPlanGoal
+      ? onAddThirtyDayPlanGoal(actionText, currentAdvisor.id)
+      : addGoalToThirtyDayPlanStorage(actionText, currentAdvisor.id, scores || ({} as Record<LifeAreaId, number>));
+
+    if (res && res.planFull) {
+      showToastNotice('خطة 30 يوماً ممتلئة حالياً (4 أهداف في كل يوم)', 'plan');
+      return;
+    }
+
+    setAddedPlanGoals((prev) => ({ ...prev, [actionText]: true }));
+    showToastNotice('تمت الإضافة إلى خطة 30 يوماً', 'plan');
   };
 
   const lastAdvisorChatMessage = [...activeMessages].reverse().find((m) => m.sender === 'advisor');
@@ -909,6 +862,7 @@ ${domainCtx.openingQuestion}`;
           currentAdvisorId={currentAdvisor.id}
           scores={scores}
           onSelectAdvisor={onSelectAdvisor}
+          showScores={false}
         />
 
         {/* Right: The Active Advisor Consultation Room */}
@@ -916,10 +870,8 @@ ${domainCtx.openingQuestion}`;
           {/* Room Header Banner */}
           <ChatRoomHeader
             currentAdvisor={currentAdvisor}
-            currentScore={currentScore}
             aiMode={aiMode}
             onSelectAiMode={handleSelectAiMode}
-            onReevaluateAdvisor={() => setShowStationResetConfirm(true)}
           />
 
           {/* Chat Messages Area */}
@@ -930,52 +882,12 @@ ${domainCtx.openingQuestion}`;
             isLoading={isLoading}
             aiMode={aiMode}
             addedGoals={addedGoals}
+            addedPlanGoals={addedPlanGoals}
             onAddActionToGoals={handleAddActionToGoals}
+            onAddActionToThirtyDayPlan={handleAddActionToThirtyDayPlan}
             onUndoLastExchange={handleUndoLastExchange}
             messagesEndRef={messagesEndRef}
           />
-
-          {/* Live Offered Score Confirmation Bar (updates sidebar badge, header & Life Wheel immediately) */}
-          {activePendingScore !== null && activePendingScore > 0 && (
-            <div
-              dir="rtl"
-              className="px-4 sm:px-5 py-2.5 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 dark:from-emerald-950/70 dark:via-cyan-950/50 dark:to-emerald-950/70 border-t border-emerald-300 dark:border-emerald-700/60 flex items-center justify-between gap-3 flex-wrap"
-            >
-              <div className="flex items-center gap-2 text-xs sm:text-sm font-black text-emerald-950 dark:text-emerald-100">
-                <Sparkles className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                <span>التقييم المقترح بناءً على الحوار الحالي:</span>
-                <span
-                  dir="ltr"
-                  style={{ unicodeBidi: 'isolate' }}
-                  className="font-mono px-2.5 py-0.5 rounded-lg bg-emerald-200/90 dark:bg-emerald-900/90 text-emerald-950 dark:text-emerald-100 font-black"
-                >
-                  {activePendingScore.toFixed(1)} / 10
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => {
-                    setPendingScoreByAdvisor((prev) => ({ ...prev, [currentAdvisor.id]: null }));
-                    handleSendMessage('أرغب في الاستمرار في الحوار ومناقشة تفاصيل إضافية');
-                  }}
-                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-[#0E1D24] border border-emerald-300 dark:border-emerald-700 text-emerald-950 dark:text-emerald-200 text-xs font-bold transition-all cursor-pointer"
-                >
-                  مواصلة الحوار
-                </button>
-                <button
-                  type="button"
-                  disabled={isLoading}
-                  onClick={() => handleConfirmAdvisorScore(activePendingScore)}
-                  className="px-4 py-1.5 rounded-xl bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#22D3EE] dark:hover:bg-cyan-300 text-white dark:text-[#071318] text-xs font-black transition-all shadow-sm cursor-pointer flex items-center gap-1.5"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>اعتماد التقييم</span>
-                </button>
-              </div>
-            </div>
-          )}
 
           {/* Input Bar with quick questions chips & send/stop */}
           <ChatPromptInputBar
@@ -993,26 +905,15 @@ ${domainCtx.openingQuestion}`;
         </div>
       </div>
 
-      {/* Confirmation Dialog for Per-Station Re-evaluation */}
-      <ConfirmDialog
-        open={showStationResetConfirm}
-        title="إعادة تقييم هذه المحطة"
-        description="سيتم تصفير المحطة الحالية ومسح رسائل محادثتها فقط لإعادة التقييم من جديد، مع الاحتفاظ ببقية المحطات كما هي. هل تريد المتابعة؟"
-        confirmLabel="نعم، إعادة تقييم هذه المحطة"
-        cancelLabel="إلغاء"
-        variant="warning"
-        onCancel={() => setShowStationResetConfirm(false)}
-        onConfirm={() => {
-          setShowStationResetConfirm(false);
-          handleReevaluateAdvisor();
-        }}
-      />
-
-      {/* Floating Confirmation Toast for Eisenhower Injection */}
+      {/* Floating Confirmation Toast for Eisenhower Matrix / 30-Day Plan Injection */}
       <ChatToast
         toastMessage={toastMessage}
-        onClose={() => setToastMessage(null)}
-        onNavigateToGoalsMatrix={onNavigateToGoalsMatrix}
+        onClose={() => {
+          setToastMessage(null);
+          setToastActionTarget(null);
+        }}
+        actionLabel={toastActionTarget === 'plan' ? 'فتح خطة 30 يوماً' : 'فتح المصفوفة'}
+        onAction={toastActionTarget === 'plan' ? onNavigateToThirtyDayPlan : onNavigateToGoalsMatrix}
       />
     </div>
   );

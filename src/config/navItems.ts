@@ -3,9 +3,7 @@ import {
   LayoutDashboard,
   CalendarDays,
   ClipboardList,
-  MessageSquare,
   Compass,
-  GitCompare,
 } from 'lucide-react';
 import { Screen } from '../types/lifeBalance';
 
@@ -35,15 +33,8 @@ export const NAV_ITEMS: NavItemConfig[] = [
   {
     screen: 'onboarding',
     icon: ClipboardList,
-    label: 'قيّم أسبوعك الآن',
+    label: 'التقييم والاستشارة',
     shortLabel: 'التقييم',
-    inTopBar: true,
-  },
-  {
-    screen: 'advisor_chat',
-    icon: MessageSquare,
-    label: 'استشارة المستشارين',
-    shortLabel: 'المستشارون',
     inTopBar: true,
   },
   {
@@ -51,13 +42,6 @@ export const NAV_ITEMS: NavItemConfig[] = [
     icon: Compass,
     label: 'رؤية المنسق العام',
     shortLabel: 'المنسق',
-    inTopBar: true,
-  },
-  {
-    screen: 'comparison',
-    icon: GitCompare,
-    label: 'المقارنة والتحليلات',
-    shortLabel: 'المقارنة',
     inTopBar: true,
   },
 ];

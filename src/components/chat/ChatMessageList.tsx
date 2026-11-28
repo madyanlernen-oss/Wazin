@@ -3,7 +3,6 @@ import {
   User,
   Sparkles,
   Check,
-  Plus,
   Lightbulb,
   Loader2,
   Undo2,
@@ -20,7 +19,9 @@ interface ChatMessageListProps {
   isLoading: boolean;
   aiMode: AiModelMode;
   addedGoals: Record<string, boolean>;
+  addedPlanGoals?: Record<string, boolean>;
   onAddActionToGoals: (actionText: string) => void;
+  onAddActionToThirtyDayPlan?: (actionText: string) => void;
   onUndoLastExchange: () => void;
   messagesEndRef: React.RefObject<HTMLDivElement | null>;
 }
@@ -31,7 +32,9 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
   isLoading,
   aiMode,
   addedGoals,
+  addedPlanGoals = {},
   onAddActionToGoals,
+  onAddActionToThirtyDayPlan,
   onUndoLastExchange,
   messagesEndRef,
 }) => {
@@ -111,48 +114,80 @@ export const ChatMessageList: React.FC<ChatMessageListProps> = ({
               )}
 
               {/* Actionable Steps suggested by advisor */}
-              {!isUser && msg.actionSteps && msg.actionSteps.length > 0 && (
-                <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-3.5 space-y-2 shadow-xs transition-colors">
-                  <span className="text-[11px] font-bold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
-                    خطوات عملية مقترحة من المستشار:
-                  </span>
-                  <div className="space-y-1.5">
-                    {msg.actionSteps.map((step, sIdx) => {
-                      const isAdded = addedGoals[step];
-                      return (
-                        <div
-                          key={sIdx}
-                          className="flex items-center justify-between gap-2 p-2 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9]"
-                        >
-                          <span>{isolateNumbersInText(step)}</span>
-                          <button
-                            type="button"
-                            onClick={() => onAddActionToGoals(step)}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold flex items-center gap-1 transition-all flex-shrink-0 shadow-xs cursor-pointer ${
-                              isAdded
-                                ? 'bg-emerald-700 text-white'
-                                : 'bg-white dark:bg-[#0E1D24] text-[#0F6E6E] dark:text-[#22D3EE] border border-[#E2E8F0] dark:border-[#1E343F] hover:bg-[#F7F6F2] dark:hover:bg-[#162734]'
-                            }`}
+              {!isUser && (() => {
+                const isWelcomeMsg = msg.id.startsWith('welcome_');
+                const items =
+                  Array.isArray(msg.actionSteps) && msg.actionSteps.length > 0
+                    ? msg.actionSteps.filter((s) => typeof s === 'string' && s.trim().length > 0).slice(0, 3)
+                    : !isWelcomeMsg && msg.advice && msg.advice.trim().length > 0 && !msg.ignoredForTurnCount
+                    ? [msg.advice.trim()]
+                    : [];
+                if (items.length === 0) return null;
+
+                return (
+                  <div className="bg-white dark:bg-[#0E1D24] border border-[#E2E8F0] dark:border-[#1E343F] rounded-2xl p-3.5 space-y-2.5 shadow-xs transition-colors">
+                    <span className="text-[11px] font-bold text-[#0F6E6E] dark:text-[#22D3EE] flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#bd9240]" />
+                      مهام وخطوات عملية مقترحة:
+                    </span>
+                    <div className="space-y-2">
+                      {items.map((step, sIdx) => {
+                        const isAddedMatrix = Boolean(addedGoals[step]);
+                        const isAddedPlan = Boolean(addedPlanGoals[step]);
+                        return (
+                          <div
+                            key={sIdx}
+                            className="flex flex-col gap-2 p-2.5 rounded-xl bg-[#F7F6F2] dark:bg-[#071318] border border-[#E2E8F0] dark:border-[#1E343F] text-xs text-[#0F172A] dark:text-[#F1F5F9]"
                           >
-                            {isAdded ? (
-                              <>
-                                <Check className="w-3 h-3" />
-                                <span>أُضيفت لمصفوفة أيزنهاور</span>
-                              </>
-                            ) : (
-                              <>
-                                <Plus className="w-3 h-3" />
-                                <span>إضافة إلى المربع الثاني بمصفوفة أيزنهاور</span>
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      );
-                    })}
+                            <span className="leading-relaxed font-medium">{isolateNumbersInText(step)}</span>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <button
+                                type="button"
+                                onClick={() => onAddActionToGoals(step)}
+                                className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
+                                  isAddedMatrix
+                                    ? 'bg-emerald-700 text-white'
+                                    : 'bg-white dark:bg-[#0E1D24] text-[#0F6E6E] dark:text-[#22D3EE] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] hover:bg-teal-50/60 dark:hover:bg-[#162734]'
+                                }`}
+                              >
+                                {isAddedMatrix ? (
+                                  <>
+                                    <Check className="w-3 h-3 flex-shrink-0" />
+                                    <span>أُضيف لمصفوفة أيزنهاور</span>
+                                  </>
+                                ) : (
+                                  <span>+ أضف لمصفوفة أيزنهاور</span>
+                                )}
+                              </button>
+
+                              {onAddActionToThirtyDayPlan && (
+                                <button
+                                  type="button"
+                                  onClick={() => onAddActionToThirtyDayPlan(step)}
+                                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-bold flex items-center gap-1 transition-all shadow-xs cursor-pointer ${
+                                    isAddedPlan
+                                      ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white'
+                                      : 'bg-white dark:bg-[#0E1D24] text-[#0F6E6E] dark:text-[#22D3EE] border border-[#CBD5E1] dark:border-[#1E343F] hover:border-[#0F6E6E] dark:hover:border-[#22D3EE] hover:bg-teal-50/60 dark:hover:bg-[#162734]'
+                                  }`}
+                                >
+                                  {isAddedPlan ? (
+                                    <>
+                                      <Check className="w-3 h-3 flex-shrink-0" />
+                                      <span>أُضيف لخطة 30 يوماً</span>
+                                    </>
+                                  ) : (
+                                    <span>+ أضف لخطة 30 يوماً</span>
+                                  )}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Reflection Question */}
               {!isUser && msg.reflectionQuestion && (

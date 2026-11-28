@@ -20,6 +20,7 @@ import {
   RotateCcw,
   Lock,
   LayoutDashboard,
+  GitCompare,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
 import { RadarChart } from '../components/RadarChart';
@@ -43,8 +44,9 @@ import {
 import { isolateNumbersInText } from '../components/FormattedChatMessage';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DirectorSummaryScreen } from './DirectorSummaryScreen';
+import { ComparisonScreen } from './ComparisonScreen';
 
-export type DashboardTab = 'dashboard' | 'coordinator';
+export type DashboardTab = 'dashboard' | 'comparison' | 'coordinator';
 
 interface DashboardScreenProps {
   initialTab?: DashboardTab;
@@ -98,19 +100,28 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   // Keep storage synchronized strictly with actual 8/8 completion state
   React.useEffect(() => {
     setCoordinatorUnlockedInStorage(isAssessmentComplete);
-    if (!isAssessmentComplete) {
+    if (!isAssessmentComplete && getStoredDashboardTab() === 'coordinator') {
       saveStoredDashboardTab('dashboard');
     }
   }, [isAssessmentComplete]);
 
   const [internalTab, setInternalTab] = useState<DashboardTab>(() => {
-    if (completedAdvisors.length < 8) return 'dashboard';
     const saved = getStoredDashboardTab();
-    if (saved === 'coordinator') return 'coordinator';
-    return initialTab === 'coordinator' ? 'coordinator' : 'dashboard';
+    if (saved === 'coordinator' && completedAdvisors.length >= 8) return 'coordinator';
+    if (saved === 'comparison') return 'comparison';
+    if (initialTab === 'comparison') return 'comparison';
+    if (initialTab === 'coordinator' && completedAdvisors.length >= 8) return 'coordinator';
+    return 'dashboard';
   });
   const rawTab = activeTab !== undefined ? activeTab : internalTab;
-  const currentTab: DashboardTab = isAssessmentComplete && rawTab === 'coordinator' ? 'coordinator' : 'dashboard';
+  const currentTab: DashboardTab =
+    rawTab === 'coordinator'
+      ? isAssessmentComplete
+        ? 'coordinator'
+        : 'dashboard'
+      : rawTab === 'comparison'
+      ? 'comparison'
+      : 'dashboard';
 
   const [selectedAreaId, setSelectedAreaId] = useState<LifeAreaId | null>('spiritual');
   const [newGoalInput, setNewGoalInput] = useState<{ [key: string]: string }>({});
@@ -389,10 +400,10 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
       <div className="print:hidden">
         <div
           role="tablist"
-          aria-label="أقسام لوحة التحكم ورؤية المنسق العام"
-          className="flex w-full sm:w-auto sm:inline-flex items-center gap-1.5 p-1.5 rounded-2xl bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 shadow-xs transition-colors"
+          aria-label="أقسام لوحة التحكم وعجلة الحياة"
+          className="flex flex-wrap sm:inline-flex w-full sm:w-auto items-center gap-1.5 p-1.5 rounded-2xl bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 shadow-xs transition-colors"
         >
-          {/* Tab 1: لوحة التحكم (Default active) */}
+          {/* Tab 1: عجلة الحياة والملخص (Default active) */}
           <button
             type="button"
             role="tab"
@@ -406,10 +417,27 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             }`}
           >
             <LayoutDashboard className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
-            <span className="truncate">لوحة التحكم</span>
+            <span className="truncate">عجلة الحياة والملخص</span>
           </button>
 
-          {/* Tab 2: رؤية المنسق العام (Locked when incomplete, Unlocked when complete) */}
+          {/* Tab 2: المقارنة والتحليلات */}
+          <button
+            type="button"
+            role="tab"
+            id="dashboard-tab-comparison"
+            aria-selected={currentTab === 'comparison'}
+            onClick={() => handleTabChange('comparison')}
+            className={`flex-1 sm:flex-initial flex items-center justify-center gap-2 px-4 sm:px-5 py-2.5 min-h-[44px] rounded-xl text-xs sm:text-sm transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0F6E6E] dark:focus-visible:ring-cyan-400 ${
+              currentTab === 'comparison'
+                ? 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white font-black shadow-xs'
+                : 'text-[#334155] dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 hover:bg-slate-100/80 dark:hover:bg-[#112028] font-bold'
+            }`}
+          >
+            <GitCompare className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+            <span className="truncate">المقارنة والتحليلات</span>
+          </button>
+
+          {/* Tab 3: رؤية المنسق العام (Locked when incomplete, Unlocked when complete) */}
           <button
             type="button"
             role="tab"
@@ -1239,7 +1267,23 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
         </div>
       )}
 
-      {/* Tab 2 Content: رؤية المنسق العام (Unlocked) */}
+      {/* Tab 2 Content: المقارنة والتحليلات */}
+      {currentTab === 'comparison' && (
+        <div
+          role="tabpanel"
+          aria-labelledby="dashboard-tab-comparison"
+          className="animate-in fade-in duration-200"
+        >
+          <ComparisonScreen
+            userProfile={userProfile}
+            onNavigateToDashboard={() => handleTabChange('dashboard')}
+            theme={theme}
+            embedded
+          />
+        </div>
+      )}
+
+      {/* Tab 3 Content: رؤية المنسق العام (Unlocked) */}
       {currentTab === 'coordinator' && isAssessmentComplete && (
         <div
           role="tabpanel"
