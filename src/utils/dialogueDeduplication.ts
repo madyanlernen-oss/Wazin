@@ -319,6 +319,18 @@ export function isQuestionContradictingHistory(
     return true;
   }
 
+  // 3b. User explicitly stated they have NO friends -> reject questions assuming active friend circle
+  const affirmedNoFriends =
+    /(?:لا\s*(?:يوجد|توجد)\s*(?:لدي|عندي)\s*أصدقاء|ما\s*(?:عندي|لدي)\s*أصدقاء|ليس\s*(?:لدي|عندي)\s*أصدقاء|بدون\s*أصدقاء|أفتقد\s*(?:ال)?أصدقاء|لا\s*أملك\s*أصدقاء|عدم\s*وجود\s*أصدقاء)/i.test(
+      userText
+    );
+  if (
+    affirmedNoFriends &&
+    /(?:دائرة\s*(?:أصدقائك|علاقاتك)\s*الحالية|لقاءات\s*الأصدقاء|مع\s*أصدقائك\s*المقربين)/i.test(qLower)
+  ) {
+    return true;
+  }
+
   // 4. User affirmed good regular sleep -> reject questions assuming insomnia/deprivation
   const affirmedGoodSleep =
     /(?:نوم\s*(?:منتظم|كافٍ|عميق|مريح|ممتاز)|أنام\s*(?:7|8)\s*ساعات\s*بانتظام)/i.test(userText);
@@ -684,12 +696,97 @@ export function extractExpenseCategoryFromAnswer(text: string): string | null {
 }
 
 export const MEANINGLESS_INPUT_PROMPT_AR =
-  'أود أن أفهم وضعك بدقة حتى أتمكن من مساعدتك؛ يبدو أن رسالتك غير واضحة أو غير مكتملة. هل يمكنك كتابة بضع كلمات تصف بها حالك أو ما يدور في بالك الآن؟';
+  'أود أن أفهم وضعك بدقة حتى أتمكن من مساعدتك؛ يبدو أن رسالتك غير واضحة أو غير مكتملة. هل يمكنك كتابة بضع كلمات واضحة عما يدور في بالك الآن لنبدأ الحوار معاً؟';
 
 /**
- * Detects empty, whitespace-only, punctuation-only ("...", "؟!"), repeated-char,
- * or keyboard-mash/gibberish messages without falsely rejecting brief valid Arabic replies
- * (e.g., "نعم", "لا", "تمام", "متعب", "8/10", "تقييمي 8 من 10").
+ * Corrects common Arabic morphological and spelling slips in advisor replies
+ * (e.g., «بكل هادئ» -> «بكل هدوء») while preserving warm tone.
+ */
+export function sanitizeArabicGrammarAndMorphology(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/بكل\s+هادئ(?:ة|ٍ)?/g, 'بكل هدوء')
+    .replace(/بكل\s+دافئ(?:ة|ٍ)?/g, 'بكل دفء')
+    .replace(/بكل\s+صادق(?:ة|ٍ)?/g, 'بكل صدق')
+    .replace(/بكل\s+واضح(?:ة|ٍ)?/g, 'بكل وضوح')
+    .replace(/بكل\s+مريح(?:ة|ٍ)?/g, 'بكل راحة')
+    .replace(/بكل\s+لطيف(?:ة|ٍ)?/g, 'بكل لطف')
+    .replace(/بكل\s+عميق(?:ة|ٍ)?/g, 'بكل عمق')
+    .replace(/بكل\s+صبور(?:ة|ٍ)?/g, 'بكل صبر')
+    .replace(/بكل\s+متزن(?:ة|ٍ)?/g, 'بكل اتزان')
+    .replace(/بكل\s+متوازن(?:ة|ٍ)?/g, 'بكل توازن');
+}
+
+function isSingleTokenMeaninglessNoise(rawToken: string): boolean {
+  const token = rawToken.replace(/[^\p{L}\p{N}]/gu, '').toLowerCase();
+  if (!token) return true; // pure punctuation or emoji token
+
+  // Valid short Arabic responses that might be paired or standalone
+  const validShortWords =
+    /^(?:نعم|لا|ايه|أيوة|ايوه|تمام|جيد|عادي|متعب|تعبان|ممتاز|سيء|صعب|سهل|قليل|كثير|أكيد|ممكن|أبداً|ابدا|شكراً|شكرا|أهلاً|اهلا|مرحبا|مرحباً|سلام|هلا|حسناً|حسنا|تعب|قلق|نوم|مال|دين|عمل|شغل|صفر|أريد|اريد|مدري|أدري|ادري)$/i;
+  if (validShortWords.test(token)) return false;
+
+  // Single character (other than 1..9 handled separately)
+  if (token.length < 2) return true;
+
+  // Repeated identical character (e.g. "ههههه", "اااا", "xxxx", "1111")
+  if (/^(.)\1+$/u.test(token)) return true;
+
+  // Repeated 2-3 char syllable noise (e.g. "شسيشسي", "ههاهاها", "abcabc")
+  if (token.length >= 4 && /^(.{2,3})\1+$/iu.test(token)) return true;
+
+  // Arabic & Latin laughter / nonsense filler tokens (e.g. "ههه", "هعع", "ككك", "haha", "hehe", "lol", "hhhh")
+  if (
+    /^(?:ه+[عاخ]*ه*|ه+ع+|ك{2,}|خ{2,}|ا+ه+ا+|(?:ha)+h?|(?:he)+h?|lo+l+|lma+o+|h{2,})$/iu.test(
+      token
+    )
+  ) {
+    return true;
+  }
+
+  // Keyboard mash sequences (exact 3-char mash tokens or any 4+ char keyboard row sequence)
+  const exact3CharMash = /^(?:ضصث|صثق|ثقف|قفغ|شسي|ئءؤ|asd|qwe|zxc)$/i;
+  const keyboardMashPattern =
+    /(ضصثق|ثقفغ|فغعه|غعهخ|شسيب|سيبل|يبلات|بلاتن|ئءؤر|ءؤرلا|رلاى|asdf|qwer|zxcv|hjkl|fghj|tyui|uiop|asdfgh|qwerty)/i;
+  if (exact3CharMash.test(token) || keyboardMashPattern.test(token)) return true;
+
+  // Pure digit noise (e.g. "123456", "654321", sequential or long numeric strings)
+  if (/^\d+$/.test(token)) {
+    const numVal = Number(token);
+    if (
+      token.length >= 4 &&
+      ('01234567890'.includes(token) ||
+        '9876543210'.includes(token) ||
+        /^(.)\1+$/.test(token) ||
+        numVal > 10)
+    ) {
+      return true;
+    }
+  }
+
+  // Non-Arabic Latin gibberish token
+  const hasArabicChar = /[\u0600-\u06FF]/.test(token);
+  if (!hasArabicChar && !/^\d+$/.test(token)) {
+    const knownShortLatin =
+      /^(?:ok|okay|hi|hello|hey|yes|no|good|bad|fine|test|help|thanks|thx|done|skip|next|work|sleep|money|family|friends)$/i;
+    if (!knownShortLatin.test(token)) {
+      if (
+        /[bcdfghjklmnpqrstvwxz]{4,}/i.test(token) ||
+        !/[aeiouy]/i.test(token) ||
+        /(.)\1{2,}/i.test(token)
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Detects empty, whitespace-only, punctuation/emoji-only ("...", "😂😂"), repeated-char/laughter,
+ * mixed random laughter+numbers ("ههههه 123456"), or keyboard-mash/gibberish messages
+ * without falsely rejecting brief valid Arabic replies (e.g., "نعم", "لا", "تمام", "متعب", "8/10", "5 ساعات").
  */
 export function isEmptyOrMeaninglessInput(text: string): boolean {
   if (typeof text !== 'string') return true;
@@ -704,20 +801,30 @@ export function isEmptyOrMeaninglessInput(text: string): boolean {
     return false;
   }
 
-  // Strip punctuation, symbols, and whitespace (keep Unicode letters & numbers)
+  // Strip punctuation, emojis, symbols, and whitespace (keep Unicode letters & numbers)
   const stripped = trimmed.replace(/[^\p{L}\p{N}]/gu, '');
   if (stripped.length < 2) {
     return true;
   }
 
-  // Single character repeated identically across the entire message (e.g. "ااااا", "هههه", "xxxx", "1111")
+  // Check whole-string repeats or sequential numbers
   if (/^(.)\1+$/u.test(stripped)) {
     return true;
   }
-
-  // Repeated 2-3 char meaningless syllables filling the entire string (e.g. "شسيشسي", "اباباب", "abcabc")
   if (stripped.length >= 4 && /^(.{2,3})\1+$/iu.test(stripped)) {
     return true;
+  }
+  if (/^\d+$/.test(stripped) && Number(stripped) > 10) {
+    return true;
+  }
+
+  // Token-level evaluation: if every token is gibberish/noise/emoji/meaningless digits (e.g. "ههههه 123456")
+  const rawTokens = trimmed.split(/\s+/).filter(Boolean);
+  if (rawTokens.length > 0) {
+    const tokenResults = rawTokens.map((tok) => isSingleTokenMeaninglessNoise(tok));
+    if (tokenResults.every(Boolean)) {
+      return true;
+    }
   }
 
   const lower = stripped.toLowerCase();
@@ -726,7 +833,7 @@ export function isEmptyOrMeaninglessInput(text: string): boolean {
   // Keyboard mash sequences (Arabic or Latin keyboard rows)
   const keyboardMashPattern =
     /(ضصثق|ثقفغ|فغعه|غعهخ|شسيب|سيبل|يبلات|بلاتن|ئءؤر|ءؤرلا|رلاى|asdf|qwer|zxcv|hjkl|fghj|tyui|uiop|asdfgh|qwerty)/i;
-  if (keyboardMashPattern.test(lower) && trimmed.split(/\s+/).length <= 3) {
+  if (keyboardMashPattern.test(lower) && rawTokens.length <= 3) {
     return true;
   }
 
@@ -740,7 +847,6 @@ export function isEmptyOrMeaninglessInput(text: string): boolean {
     const knownShortLatin = /^(?:ok|okay|hi|hello|hey|yes|no|good|bad|fine|test|help|thanks|thx|done|skip|next)$/i;
     const words = trimmed.toLowerCase().split(/\s+/).filter(Boolean);
     if (words.every((w) => !knownShortLatin.test(w)) && words.length <= 2 && stripped.length <= 12) {
-      // Check if vowels are missing or repeated noise
       if (!/[aeiouy]/i.test(lower) || /(.)\1{2,}/i.test(lower)) {
         return true;
       }
@@ -748,4 +854,93 @@ export function isEmptyOrMeaninglessInput(text: string): boolean {
   }
 
   return false;
+}
+
+export interface ComplaintAnchoredFollowUp {
+  complaintType: 'no_friends' | 'no_hobbies_or_emptiness' | 'long_work_hours';
+  reflection: string;
+  followUpQuestion: string;
+  summary: string;
+  advice: string;
+  actionSteps: string[];
+}
+
+/**
+ * Anchors follow-up questions directly to the user's explicitly stated complaint
+ * in their latest message without premature pivoting to unmentioned life domains
+ * (e.g., never linking work burnout to "compensatory spending" unless mentioned).
+ */
+export function buildComplaintAnchoredReply(
+  agentKey: string,
+  latestMessage: string,
+  historyTexts: string[] = []
+): ComplaintAnchoredFollowUp | null {
+  const msg = (latestMessage || '').trim();
+  if (!msg) return null;
+
+  const isNoFriends =
+    /(?:لا\s*(?:يوجد|توجد)\s*(?:لدي|عندي)\s*أصدقاء|ما\s*(?:عندي|لدي)\s*أصدقاء|ليس\s*(?:لدي|عندي)\s*أصدقاء|بدون\s*أصدقاء|أفتقد\s*(?:ال)?أصدقاء|لا\s*أملك\s*أصدقاء|عدم\s*وجود\s*أصدقاء|قلة\s*الأصدقاء)/i.test(
+      msg
+    );
+  const isNoHobbiesOrEmptiness =
+    /(?:لا\s*(?:توجد|يوجد)\s*(?:لدي|عندي)\s*هوايات|ما\s*(?:عندي|لدي)\s*هوايات|ليس\s*(?:لدي|عندي)\s*هوايات|بدون\s*هوايات|أشعر\s*ب(?:ال)?فراغ|عندي\s*فراغ|فراغ\s*(?:شخصي|كبير|داخلي|في\s*حياتي)|حياتي\s*فارغة|روتين\s*فارغ|أشعر\s*بملل\s*وفراغ)/i.test(
+      msg
+    );
+  const isLongWorkHours =
+    /(?:ساعات\s*(?:عمل|دوام)\s*طويلة|أعمل\s*(?:ل)?ساعات\s*طويلة|ساعات\s*طويلة\s*(?:في|بال)?(?:العمل|الدوام)?|دوام\s*طويل|دوامي\s*طويل|أشتغل\s*ساعات\s*طويلة|ساعات\s*العمل\s*الطويلة|احتراق\s*وظيفي|إنهاك\s*(?:من\s*)?العمل)/i.test(
+      msg
+    );
+
+  if (isNoFriends && (agentKey === 'social' || agentKey === 'personal')) {
+    const q = 'من خلال تجربتك، هل يعود عدم وجود أصدقاء حالياً إلى صعوبة إيجاد أشخاص يشاركونك اهتماماتك، أم إلى قلة الفرص والانشغال عن بناء علاقات جديدة؟';
+    if (!isQuestionAlreadyAsked(q, historyTexts)) {
+      return {
+        complaintType: 'no_friends',
+        reflection: 'أقدّر صراحتك في مشاركة شعورك بعدم وجود أصدقاء في هذه المرحلة، ومن الطبيعي أن يؤثر ذلك على إحساسك بالونس والدعم.',
+        followUpQuestion: q,
+        summary: 'الاستماع الصادق لشكوى غياب الأصدقاء واستكشاف سببها المباشر دون افتراضات.',
+        advice: 'ابدأ بخطوة اجتماعية خفيفة وغير مرهقة في بيئة تشاركك نفس الاهتمام أو القيم.',
+        actionSteps: [
+          'تحديد مساحة أو نشاط واحد يجمعك بأشخاص يشاركونك اهتمامات مشابهة',
+          'البدء بتبادل حديث بسيط ومريح دون الضغط على نفسك لتكوين صداقة فورية',
+        ],
+      };
+    }
+  }
+
+  if (isNoHobbiesOrEmptiness && (agentKey === 'personal' || agentKey === 'learning' || agentKey === 'social')) {
+    const q = 'بعيداً عن أي ضغوط، ما النشاط أو الاهتمام البسيط الذي كان يجذب انتباهك سابقاً، أو في أي أوقات من يومك يشتد عليك هذا الشعور بالفراغ؟';
+    if (!isQuestionAlreadyAsked(q, historyTexts)) {
+      return {
+        complaintType: 'no_hobbies_or_emptiness',
+        reflection: 'أسمعك بكل هدوء؛ الشعور بالفراغ أو غياب الهوايات إشارة واضحة إلى أن وقتك الحالي يحتاج مساحة تشعر فيها بالمتعة والتجدد الشخصي.',
+        followUpQuestion: q,
+        summary: 'معالجة شكوى الفراغ الشخصي وغياب الهوايات بالارتباط المباشر بتفاصيل اليوم.',
+        advice: 'خصص 15 دقيقة لتجربة نشاط شخصي خفيف تستكشف فيه فضولك دون اشتراط الاحتراف.',
+        actionSteps: [
+          'تخصيص 15 دقيقة في وقت الفراغ لتجربة نشاط جديد أو هواية قديمة هادئة',
+          'تقليل التصفح العشوائي في أوقات الملل واستبداله بنشاط عملي ملموس',
+        ],
+      };
+    }
+  }
+
+  if (isLongWorkHours && (agentKey === 'career' || agentKey === 'personal' || agentKey === 'health')) {
+    const q = 'عندما تمتد ساعات عملك لهذه المدة الطويلة، ما السبب الأبرز وراءها: حجم المهام اليومية نفسها أم صعوبة التوقف ووضع حد واضح بعد انتهاء وقت الدوام؟';
+    if (!isQuestionAlreadyAsked(q, historyTexts)) {
+      return {
+        complaintType: 'long_work_hours',
+        reflection: 'أفهم تماماً حجم الضغط الناتج عن العمل لساعات طويلة متواصلة؛ استمرار هذا الإيقاع يستنزف طاقتك وتركيزك المهني والبدني.',
+        followUpQuestion: q,
+        summary: 'التركيز المباشر على أسباب طول ساعات العمل وحماية الطاقة الوظيفية دون استنتاجات خارجية.',
+        advice: 'ابدأ بتحديد ساعة إغلاق واضحة ليوم العمل وحصر المهام التي تسبب امتداد الدوام.',
+        actionSteps: [
+          'تحديد وقت واضح لإنهاء مهام العمل اليومية وحماية وقت الراحة',
+          'فرز المهام المتراكمة وتحديد ما يمكن تأجيله أو تفويضه',
+        ],
+      };
+    }
+  }
+
+  return null;
 }

@@ -24,6 +24,7 @@ import { Menu, Sun, Moon } from 'lucide-react';
 import { ADVISORS_LIST } from './data/advisorsData';
 import {
   DirectorSummaryReport,
+  EisenhowerQuadrant,
   LifeAreaId,
   Screen,
   UserProfile,
@@ -517,8 +518,13 @@ export default function App() {
     });
   };
 
-  // Handler: Automatically add advisor action to Eisenhower Matrix (Quadrant 2)
-  const handleAddEisenhowerGoal = (title: string, advisorName: string, areaId: LifeAreaId) => {
+  // Handler: Automatically add advisor or orchestrator action to Eisenhower Matrix
+  const handleAddEisenhowerGoal = (
+    title: string,
+    advisorName: string,
+    areaId: LifeAreaId,
+    quadrant: EisenhowerQuadrant = 'q2_important_not_urgent'
+  ) => {
     const cleanTitle = title.trim();
     if (!cleanTitle) return;
 
@@ -544,7 +550,7 @@ export default function App() {
       const newGoal = {
         id: `eisen_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
         title: cleanTitle,
-        quadrant: 'q2_important_not_urgent' as const,
+        quadrant,
         timeframe: 'weekly' as const,
         areaId,
         completed: false,
@@ -787,6 +793,7 @@ export default function App() {
               onNavigateToThirtyDayPlan={() => setActiveScreen('thirty_day_plan')}
               onAddGoal={handleAddGoal}
               onAddEisenhowerGoal={handleAddEisenhowerGoal}
+              onAddThirtyDayPlanGoal={handleAddThirtyDayPlanGoal}
               onStartEvaluation={handleStartNewWeeklyAssessment}
               onStartNewWeeklyAssessment={handleStartNewWeeklyAssessment}
               lockedDirectorNoticeSeq={lockedDirectorNoticeSeq}

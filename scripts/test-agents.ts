@@ -32,6 +32,7 @@ import { activateDemoMode, isDemoModeActive, exitDemoMode, DEMO_STORAGE_FLAG_KEY
 import { generateAgent11Suggestions, mapDomainNameToAreaId } from '../src/utils/eisenhowerAgent';
 import { INITIAL_EISENHOWER_GOALS } from '../src/components/eisenhower/initialGoals';
 import { generateFallbackDirectorReport } from '../server/routes/directorSummary';
+import { generateEvidenceGroundedDirectorReport } from '../src/utils/directorEvidenceSynthesizer';
 import { getAdaptiveStationConfig } from '../src/data/assessmentQuestions';
 import {
   parseUserContext,
@@ -79,6 +80,8 @@ import {
   isDiagnosticTopicAlreadyAnswered,
   pickNextUnaskedQuestion,
   stripRepeatedOpeningGreeting,
+  sanitizeArabicGrammarAndMorphology,
+  MEANINGLESS_INPUT_PROMPT_AR,
 } from '../src/utils/dialogueDeduplication';
 
 // In-memory localStorage polyfill for non-browser runtimes (Node / Bun CLI)
@@ -3548,9 +3551,153 @@ async function testLatestUpgradesIntegrity() {
     const targetDayGoals = reloadedPlan?.days.find((d) => d.dayNumber === addedRes.dayNumber);
     assert(
       addedRes.added === true &&
-        Boolean(targetDayGoals) &&
-        resolveDayGoals(targetDayGoals).some((g) => g.text.includes('للمشي الهادئ')),
+      Boolean(targetDayGoals) &&
+      resolveDayGoals(targetDayGoals).some((g) => g.text.includes('للمشي الهادئ')),
       `Plan inject failed: added=${addedRes.added}, day=${addedRes.dayNumber}, first=${targetDayGoals ? resolveDayGoals(targetDayGoals)[0]?.text : 'none'}`
+    );
+
+    // 4. Mandatory Conversational Quality & Precision Rules (All Advisors)
+    assert(isEmptyOrMeaninglessInput('ههههه 123456') === true, 'Mixed laugh+digits gibberish must be caught');
+    assert(isEmptyOrMeaninglessInput('😂😂🔥') === true, 'Emoji-only gibberish must be caught');
+    assert(isEmptyOrMeaninglessInput('123456') === true, 'Sequential numeric gibberish must be caught');
+    assert(isEmptyOrMeaninglessInput('ضصث 999') === true, 'Arabic keyboard mash + digits must be caught');
+    assert(isEmptyOrMeaninglessInput('أعمل 10 ساعات في اليوم') === false, 'Real sentence with number kept');
+
+    const gibberishLocal = generateLocalAgentResponse(
+      'career',
+      'ههههه 123456',
+      'فهد العتيبي',
+      getAdvisor('career'),
+      0,
+      true,
+      4,
+      undefined,
+      'initial_assessment',
+      0,
+      employeeProfile
+    );
+    const gibberishClient = getClientAdvisorResponse(
+      getAdvisor('career'),
+      'ههههه 123456',
+      4,
+      0,
+      0,
+      [],
+      employeeProfile
+    );
+    assert(
+      gibberishLocal.skipTurnIncrement === true &&
+      gibberishLocal.score === 0 &&
+      gibberishLocal.reply === MEANINGLESS_INPUT_PROMPT_AR &&
+      !/(تقني|برمج|يمزح|تخفي|تشتت)/i.test(gibberishLocal.reply) &&
+      gibberishClient.ignoredForTurnCount === true &&
+      gibberishClient.score === 0 &&
+      gibberishClient.reply === MEANINGLESS_INPUT_PROMPT_AR,
+      'Gibberish input must stay strictly neutral with zero score and zero hallucinated details'
+    );
+
+    const longHoursCareer = generateLocalAgentResponse(
+      'career',
+      'أعمل لساعات طويلة وأشعر بإنهاك من العمل',
+      'فهد العتيبي',
+      getAdvisor('career'),
+      0,
+      true,
+      4,
+      undefined,
+      'initial_assessment',
+      0,
+      employeeProfile
+    );
+    assert(
+      /ساعات|العمل|الدوام|المهام/.test(longHoursCareer.reply) &&
+      !/(إنفاق|تعويضي|شراء|مصاريف|مال)/.test(longHoursCareer.reply),
+      'Career long-work-hours complaint must anchor directly to work hours without financial pivoting'
+    );
+
+    const noFriendsSocial = getClientAdvisorResponse(
+      getAdvisor('social'),
+      'لا يوجد لدي أصدقاء حالياً',
+      7,
+      0,
+      0,
+      [],
+      employeeProfile
+    );
+    assert(
+      /أصدقاء/.test(noFriendsSocial.reply) &&
+      !/(دائرة أصدقائك الحالية|إنفاق|العمل)/.test(noFriendsSocial.reply),
+      'Social lack-of-friends complaint must align directly without contradicting or pivoting'
+    );
+
+    const noHobbiesPersonal = getClientAdvisorResponse(
+      getAdvisor('personal'),
+      'ما عندي هوايات وأشعر بفراغ شخصي',
+      5,
+      0,
+      0,
+      [],
+      employeeProfile
+    );
+    assert(
+      /(هوايات|الفراغ|الاهتمام|النشاط)/.test(noHobbiesPersonal.reply) &&
+      !/(إنفاق|راتب|ديون)/.test(noHobbiesPersonal.reply),
+      'Personal lack-of-hobbies/emptiness complaint must align directly without cross-domain pivoting'
+    );
+
+    assert(
+      sanitizeArabicGrammarAndMorphology('سنتحدث بكل هادئ وبكل دافئ') === 'سنتحدث بكل هدوء وبكل دفء',
+      'Arabic morphology sanitizer must correct «بكل هادئ» -> «بكل هدوء»'
+    );
+
+    // 5. General Smart Balance Orchestrator: Evidence-Based Synthesis & Anti-Generic Verification
+    const orchestratorReport = generateEvidenceGroundedDirectorReport({
+      userProfile: studentProfile,
+      scores: {
+        spiritual: 8.0,
+        financial: 4.5,
+        career: 5.5,
+        personal: 5.0,
+        learning: 6.0,
+        family: 7.5,
+        social: 5.2,
+        health: 3.8,
+      },
+      conversationHistories: {
+        spiritual: [{ sender: 'user', text: 'أحافظ على قراءة صفحة قرآن يومياً وأشعر براحة' }],
+        financial: [{ sender: 'user', text: 'أعتمد على مصروف الأسرة وأصرف كثيراً على المقاهي' }],
+        career: [{ sender: 'user', text: 'أتأخر في مشاريع الهندسة المعمارية بسبب التشتت' }],
+        personal: [{ sender: 'user', text: 'أشعر بفراغ شخصي أحياناً عند العودة من الجامعة' }],
+        learning: [{ sender: 'user', text: 'أود تعلم برامج التصميم الثلاثي بجانب المحاضرات' }],
+        family: [{ sender: 'user', text: 'أجلس مع والديّ كل مساء على القهوة' }],
+        social: [{ sender: 'user', text: 'تواصلي مع زملاء الكلية محدود مؤخراً' }],
+        health: [{ sender: 'user', text: 'أسهر على الهاتف حتى الثالثة فجراً وأصحو مرهقاً' }],
+      },
+      goals: {
+        spiritual: ['الحفاظ على وردي الصباحي بانتظام'],
+        financial: ['تقليص زيارات المقاهي هذا الأسبوع'],
+        career: ['تقسيم مشروع الهندسة المعمارية إلى مهام صغيرة'],
+        personal: ['تخصيص وقت هواية بعيداً عن التصفح'],
+        learning: ['تطبيق درس واحد أسبوعياً في التصميم الثلاثي'],
+        family: ['الاستمرار في جلسة القهوة المسائية مع الوالدين'],
+        social: ['مكالمة زميل مقرب في الكلية هذا الأسبوع'],
+        health: ['ترك الهاتف خارج السرير قبل النوم'],
+      },
+    });
+    const orchSerialized = JSON.stringify(orchestratorReport);
+    assert(
+      Boolean(orchestratorReport.rootCauseChain) &&
+        Array.isArray(orchestratorReport.domainBreakdown) &&
+        orchestratorReport.domainBreakdown.length === 8 &&
+        orchestratorReport.keystoneHabits.length >= 3 &&
+        orchestratorReport.keystoneHabits.length <= 4 &&
+        Array.isArray(orchestratorReport.readyToPromoteQueue) &&
+        orchestratorReport.readyToPromoteQueue.length >= 6 &&
+        orchestratorReport.readyToPromoteQueue.length <= 8 &&
+        !/(45\s*دقيقة|40%|15\s*دقيقة)/.test(orchSerialized) &&
+        !/"(?:financial|learning|spiritual|health|career|personal|family|social)"/.test(orchSerialized) &&
+        (orchSerialized.includes('المقاهي') || orchSerialized.includes('الهندسة') || orchSerialized.includes('الهاتف')),
+      'Smart Balance Orchestrator must cover all 8 domains, cite actual user evidence, provide 3-4 keystone habits and 6-8 action items with zero generic boilerplate'
     );
 
     results.push({
@@ -3559,7 +3706,7 @@ async function testLatestUpgradesIntegrity() {
       name: 'Chat Persistence, Free Consult & Plan Cap',
       passed: true,
       durationMs: Date.now() - qaStart,
-      details: `Clean demo chats OK; Day ${addedRes.dayNumber} plan injection OK; Day 8 capped 4/4`,
+      details: `Clean demo chats OK; Day ${addedRes.dayNumber} plan injection OK; Day 8 capped 4/4; Orchestrator OK`,
     });
   } catch (err: any) {
     results.push({

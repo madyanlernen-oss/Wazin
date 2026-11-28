@@ -1,6 +1,7 @@
 import {
   extractAnchorSelfRatingFromHistory,
   hasAcuteIsolationOrRejection,
+  sanitizeArabicGrammarAndMorphology,
 } from '../../src/utils/dialogueDeduplication';
 
 /**
@@ -245,11 +246,11 @@ export function sanitizeStrengths(
 
       // إزالة المبالغات مثل "عالية" أو "كامل" وتعديلها لصيغة معتدلة
       s = s.replace(/(?:بدرجة\s+)?عالية\s+جداً/gi, 'ملحوظة')
-           .replace(/\bعالية\b/gi, 'طيبة')
-           .replace(/\bكاملة\b/gi, 'واضحة')
-           .replace(/\bكامل\b/gi, 'واضح')
-           .replace(/\bاستثنائية\b/gi, 'ملموسة')
-           .replace(/\bمثالية\b/gi, 'إيجابية');
+        .replace(/\bعالية\b/gi, 'طيبة')
+        .replace(/\bكاملة\b/gi, 'واضحة')
+        .replace(/\bكامل\b/gi, 'واضح')
+        .replace(/\bاستثنائية\b/gi, 'ملموسة')
+        .replace(/\bمثالية\b/gi, 'إيجابية');
 
       return s;
     })
@@ -284,7 +285,7 @@ export function sanitizeAdvisorReply(
     }
   }
 
-  return cleaned.trim();
+  return sanitizeArabicGrammarAndMorphology(cleaned).trim();
 }
 
 // Validates the advisor chat request payload

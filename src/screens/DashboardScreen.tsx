@@ -30,7 +30,12 @@ import {
   reconcileDirectorReportWithScores,
 } from '../utils/arabicDomainLabels';
 import { YearlyAndWeeklyAnalytics } from '../components/YearlyAndWeeklyAnalytics';
-import { DirectorSummaryReport, LifeAreaId, UserProfile } from '../types/lifeBalance';
+import {
+  DirectorSummaryReport,
+  EisenhowerQuadrant,
+  LifeAreaId,
+  UserProfile,
+} from '../types/lifeBalance';
 import {
   extractInsightsFromAnswers,
   getStoredDashboardTab,
@@ -64,7 +69,13 @@ interface DashboardScreenProps {
   onNavigateToDirectorSummary?: () => void;
   onNavigateToThirtyDayPlan?: () => void;
   onAddGoal: (advisorId: LifeAreaId, goal: string) => void;
-  onAddEisenhowerGoal?: (title: string, advisorName: string, areaId: LifeAreaId) => void;
+  onAddEisenhowerGoal?: (
+    title: string,
+    advisorName: string,
+    areaId: LifeAreaId,
+    quadrant?: EisenhowerQuadrant
+  ) => void;
+  onAddThirtyDayPlanGoal?: (title: string, areaId: LifeAreaId) => any;
   onStartEvaluation?: () => void;
   onStartNewWeeklyAssessment?: () => void;
   lockedDirectorNoticeSeq?: number;
@@ -88,6 +99,7 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
   onNavigateToThirtyDayPlan,
   onAddGoal,
   onAddEisenhowerGoal,
+  onAddThirtyDayPlanGoal,
   onStartEvaluation,
   onStartNewWeeklyAssessment,
   lockedDirectorNoticeSeq = 0,
@@ -1299,6 +1311,8 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             onSaveReport={onSaveDirectorReport || (() => {})}
             onBackToDashboard={() => handleTabChange('dashboard')}
             onNavigateToThirtyDayPlan={onNavigateToThirtyDayPlan}
+            onAddEisenhowerGoal={onAddEisenhowerGoal}
+            onAddThirtyDayPlanGoal={onAddThirtyDayPlanGoal}
             theme={theme}
             embedded
           />

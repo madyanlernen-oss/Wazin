@@ -613,6 +613,7 @@ ${openingQuestion}
         id: `guardrail_${Date.now()}`,
         sender: 'advisor',
         text: MEANINGLESS_INPUT_PROMPT_AR,
+        ignoredForTurnCount: true,
         suggestedReplies: generateDynamicQuickSuggestions({
           domainId: advisorKey,
           roundNumber: Math.max(1, currentTurns + 1),

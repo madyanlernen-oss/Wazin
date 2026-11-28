@@ -16,6 +16,10 @@ import {
   isRequestingAdvisorSuggestions,
   extractAnchorSelfRatingFromHistory,
   hasAcuteIsolationOrRejection,
+  isEmptyOrMeaninglessInput,
+  MEANINGLESS_INPUT_PROMPT_AR,
+  sanitizeArabicGrammarAndMorphology,
+  buildComplaintAnchoredReply,
 } from '../../utils/dialogueDeduplication';
 
 export interface EvaluationChatMessage {
@@ -295,7 +299,8 @@ export function answerUserInquiry(
     if (/(علاقات سامة|مستنزفة|استنزاف|حدود اجتماعية|أقطع علاقة|مجاملات)/i.test(t)) {
       return 'حماية طاقتك النفسية حق مشروع؛ قلل مساحات التواجد والمجاملات تدريجياً وبطريقة هادئة، وركز طاقتك ووقتك على الدائرة القريبة التي تمنحك الأمان والتقدير.';
     }
-    if (/(وحدة|وحيد|أصدقاء|اصدقاء|صحبة|عزلة|انطواء)/i.test(t)) {
+    const hasExplicitNoFriends = /(?:لا\s*(?:يوجد|توجد)\s*(?:لدي|عندي)\s*أصدقاء|ما\s*(?:عندي|لدي)\s*أصدقاء|ليس\s*(?:لدي|عندي)\s*أصدقاء|بدون\s*أصدقاء|لا\s*أملك\s*أصدقاء|عدم\s*وجود\s*أصدقاء)/i.test(t);
+    if (!hasExplicitNoFriends && /(وحدة|وحيد|أصدقاء|اصدقاء|صحبة|عزلة|انطواء)/i.test(t)) {
       return 'الاهتمام بجودة العلاقات يبدأ بخطوة هادئة تناسب طاقتك؛ ركّز على التواصل المريح والصادق مع شخص قريب تثق به بدلاً من إجهاد نفسك في كثرة اللقاءات.';
     }
   }
@@ -331,6 +336,7 @@ export function getClientAdvisorResponse(
   isEditedOrResent: boolean = false
 ): {
   isQuestionOrInquiry?: boolean;
+  ignoredForTurnCount?: boolean;
   station_completed: boolean;
   score: number;
   strengths: string[];
@@ -357,7 +363,7 @@ export function getClientAdvisorResponse(
     : generateDynamicQuickSuggestions({
         domainId: advisor.id,
         roundNumber: nextRoundNumber,
-        lastUserMessage: text,
+        lastUserMessage: core.ignoredForTurnCount ? '' : text,
         advisorReply: core.reply,
         userProfile,
         previousChips: previousSuggestions,
@@ -366,6 +372,8 @@ export function getClientAdvisorResponse(
 
   return {
     ...core,
+    reply: sanitizeArabicGrammarAndMorphology(core.reply),
+    advice: sanitizeArabicGrammarAndMorphology(core.advice),
     suggestedReplies,
   };
 }
@@ -381,6 +389,7 @@ function computeClientAdvisorCore(
   isEditedOrResent: boolean = false
 ): {
   isQuestionOrInquiry?: boolean;
+  ignoredForTurnCount?: boolean;
   station_completed: boolean;
   score: number;
   strengths: string[];
@@ -420,6 +429,23 @@ function computeClientAdvisorCore(
       summary: `تدخل إنساني طارئ واحتواء عاجل لأزمة نفسية حادة تتعلق بأمان المستفيد وحفظ حياته.`,
       advice: `حياتك غالية وألمك حقيقي ومسموع؛ أرجوك لا تبقَ وحدك في هذا الثقل وتواصل فوراً مع شخص تثق به أو مع جهة دعم نفسي ومختصين لمساندتك.`,
       reply: `أسمعك بكل جوارحي وبكل حنو واهتمام يا ${clientName}، وكلماتك هذه تهمّني أكثر من أي تقييم أو أي أمر آخر في هذه اللحظة. 🌿\n\nأريد أن أؤكد لك من كل قلبي: حياتك غالية جداً ومكانتك محفوظة، وما تشعر به الآن ليس رغبة حقيقية في الموت، بل صرخة لوقف هذا الألم والإنهاك الثقيل.\n\nأعلم كم أنت متعب الآن، وأعلم أن الوجع والضغط الهائل يجعلك تشعر بالعجز عن حمله بمفردك. لكن أرجوك أن تتوقف لحظة، وتلتقط أنفاسك بهدوء وعمق؛ أنت لست وحدك أبداً، وأنا هنا بجانبك لأسمعك وأساندك كإنسان وكمرشد يرى فيك قيمة عظيمة.\n\nالمشاعر المظلمة مهما بلغت شدتها هي سحابة عابرة، وحياتك أثمن بكثير من أن تنتهي في لحظة قاسية كهذه.\n\nأرجوك ألا تبقى وحدك مع هذا الثقل؛ تحدث الآن مع شخص مقرب تثق به، أو تواصل فوراً مع مختص نفسي أو خط مساندة طارئ ليقف بجانبك ويساعدك على تجاوز هذا الظرف الصعب.\n\nهل أنت في مكان آمن الآن وتستطيع التحدث مع شخص قريب تثق به، أو التواصل مع مختص يقف بجانبك؟ أنا هنا معك وأريد لك السلامة والأمان.`,
+    };
+  }
+
+  // 0.5. Strict Neutrality on Gibberish / Random Inputs
+  if (isEmptyOrMeaninglessInput(text)) {
+    return {
+      isQuestionOrInquiry: false,
+      ignoredForTurnCount: true,
+      station_completed: false,
+      score: 0,
+      strengths: [],
+      challenges: [],
+      reasoning:
+        'تم تفعيل حماية جودة المدخلات: الرسالة غير واضحة أو عشوائية؛ تم طلب التوضيح بلطف دون افتراض نية نفسية أو احتساب درجة أو اختلاق معلومات.',
+      summary: 'طلب توضيح لطيف ومحايد دون احتساب جولة أو درجة.',
+      advice: 'شاركنا جملة قصيرة وواضحة تصف واقعك الحالي في هذا الجانب.',
+      reply: MEANINGLESS_INPUT_PROMPT_AR,
     };
   }
 
@@ -582,14 +608,22 @@ function computeClientAdvisorCore(
   );
 
   if (shouldContinue) {
+    const anchoredComplaint = !hasAcuteIsolationCtx
+      ? buildComplaintAnchoredReply(advisor.id, text, historyTexts)
+      : null;
+
     const fallbackNextQ =
       hasAcuteIsolationCtx && advisor.id === 'personal'
         ? 'أحترم رغبتك في حماية مساحتك والابتعاد عمّا يستنزفك. كيف ينعكس هذا الانعزال المستمر على طاقتك النفسية وهدوئك اليومي، وما الذي يساعدك على الشعور ببعض الأمان والاتزان وأنت بمفردك؟'
-        : nextRawQuestion ||
-          `ما أصغر خطوة عملية واقعية تناسب جدولك اليوم في ${advTitle} وتستطيع البدء بها هذا الأسبوع؟`;
+        : anchoredComplaint
+          ? anchoredComplaint.followUpQuestion
+          : nextRawQuestion ||
+            `ما أصغر خطوة عملية واقعية تناسب جدولك اليوم في ${advTitle} وتستطيع البدء بها هذا الأسبوع؟`;
 
     let nextProbe = '';
-    if (directInquiryAnswer) {
+    if (anchoredComplaint) {
+      nextProbe = `${anchoredComplaint.reflection}\n\n${anchoredComplaint.followUpQuestion}`;
+    } else if (directInquiryAnswer) {
       nextProbe = `💡 **إجابة استشارية مباشرة عن تساؤلك:**\n${directInquiryAnswer}\n\n🌿 **وبناءً على ذلك في ${advTitle}:**\n${fallbackNextQ}`;
     } else if (hasAcuteIsolationCtx && advisor.id === 'personal') {
       nextProbe = `أسمعك بوضوح واحترام تام لحدودك؛ ولا أفترض أنك تشعر بتقصير أو أنك ملزم بالجلوس في أجواء لا تجد فيها راحة.\n\n${fallbackNextQ}`;
@@ -609,10 +643,15 @@ function computeClientAdvisorCore(
       score: semanticScore,
       strengths: ['الوعي الذاتي والرغبة الصادقة في الاستكشاف والتشخيص'],
       challenges: ['الحاجة لاستكمال المعطيات العملية لبناء التوازن'],
-      reasoning: `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1}): متابعة الحوار دون تكرار أسئلة أو تحيات سابقة.${isEditedOrResent ? ' (إعادة إرسال بعد تعديل).' : ''}`,
-      summary: `حوار استكشافي متدرج في ${advTitle} (المحاورة ${stationTurnCount + 1}).`,
-      advice:
-        advisor.id === 'spiritual'
+      reasoning: anchoredComplaint
+        ? `مواءمة مباشرة مع شكوى المستفيد الصريحة ("${text}") في ${advTitle} دون القفز لمجال غير مذكور.`
+        : `بروتوكول سقراطي تكيفي (المحطة ${stationNumber} من 8: ${advTitle} - التبادل ${stationTurnCount + 1}): متابعة الحوار دون تكرار أسئلة أو تحيات سابقة.${isEditedOrResent ? ' (إعادة إرسال بعد تعديل).' : ''}`,
+      summary: anchoredComplaint
+        ? anchoredComplaint.summary
+        : `حوار استكشافي متدرج في ${advTitle} (المحاورة ${stationTurnCount + 1}).`,
+      advice: anchoredComplaint
+        ? anchoredComplaint.advice
+        : advisor.id === 'spiritual'
           ? 'احرص على تخصيص مساحة يومية هادئة بعيداً عن الشاشات لصفاء ذهنك وحضور قلبك.'
           : advisor.id === 'financial'
             ? (isStudent

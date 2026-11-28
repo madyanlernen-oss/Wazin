@@ -104,6 +104,7 @@ export interface UserProfile {
 export interface KeystoneHabit {
   name: string;
   triggerTime: string;
+  exactStep?: string;
   targetDomains: string[];
   expectedImpact: string;
 }
@@ -115,9 +116,33 @@ export interface ThirtyDayWeek {
   actions: string[];
 }
 
+export interface DomainDeepBreakdownItem {
+  domainTitle: string;
+  score: number;
+  groundedReality: string;
+  crossDomainImpact: string;
+  actionableTask: string;
+  eisenhowerQuadrant: 'Q1: عاجل ومهم' | 'Q2: مهم وغير عاجل' | 'Q3: تقليص أو تفويض';
+  planWeek: number;
+  planFrequency: 'يومي' | 'أسبوعي';
+}
+
+export interface PromotableActionItem {
+  id: string;
+  title: string;
+  domainTitle: string;
+  quadrant: 'Q1' | 'Q2';
+  weekNumber: number;
+  frequency: 'يومي' | 'أسبوعي';
+  milestone: string;
+}
+
 export interface DirectorSummaryReport {
+  overallBalanceScore?: number;
   overallDiagnosis: string;
   balanceIndexLabel: string;
+  rootCauseChain?: string;
+  domainBreakdown?: DomainDeepBreakdownItem[];
   strongestSynergy: {
     title: string;
     description: string;
@@ -131,6 +156,7 @@ export interface DirectorSummaryReport {
   };
   keystoneHabits: KeystoneHabit[];
   thirtyDayRoadmap: ThirtyDayWeek[];
+  readyToPromoteQueue?: PromotableActionItem[];
   directorGoldenRule: string;
   generatedAt: string;
 }

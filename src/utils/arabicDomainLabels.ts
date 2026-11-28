@@ -1,3 +1,5 @@
+import { sanitizeArabicGrammarAndMorphology } from './dialogueDeduplication';
+
 export const DOMAIN_ARABIC_NAMES: Record<string, string> = {
   spiritual: 'الجانب الروحي والسكينة',
   financial: 'الجانب المالي والاستقلال',
@@ -218,7 +220,7 @@ export function localizeDomainText(text: string): string {
     result = result.replace(aliasRegex, arabicName);
   }
 
-  return normalizeArabicText(result);
+  return sanitizeArabicGrammarAndMorphology(normalizeArabicText(result));
 }
 
 const SHORT_TO_CANONICAL_ID: Array<[RegExp, string]> = [
@@ -359,7 +361,7 @@ export function reconcileDirectorReportWithScores<T extends Record<string, any>>
         recommendation:
           next.criticalBottleneck.recommendation && reportBottleneckId === worstId
             ? next.criticalBottleneck.recommendation
-            : `خصّص عادة صغيرة يومية لمدة 15 دقيقة ${prefixLamArabic(worstLabel)} وأدرجها في المربع 2 بمصفوفة أيزنهاور.`,
+            : `خصّص خطوة عملية واقعية ومحددة ${prefixLamArabic(worstLabel)} وأدرجها في المربع 2 بمصفوفة أيزنهاور.`,
         domain: worstLabel,
       };
     } else {
@@ -390,6 +392,9 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
     ...(typeof report.balanceIndexLabel === 'string'
       ? { balanceIndexLabel: localizeDomainText(report.balanceIndexLabel) }
       : {}),
+    ...(typeof report.rootCauseChain === 'string'
+      ? { rootCauseChain: localizeDomainText(report.rootCauseChain) }
+      : {}),
     ...(typeof report.directorGoldenRule === 'string'
       ? { directorGoldenRule: localizeDomainText(report.directorGoldenRule) }
       : {}),
@@ -414,12 +419,28 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
           },
         }
       : {}),
+    ...(Array.isArray(report.domainBreakdown)
+      ? {
+          domainBreakdown: report.domainBreakdown.map((d: any) => ({
+            ...d,
+            domainTitle: getDomainArabicName(d?.domainTitle || ''),
+            groundedReality: localizeDomainText(d?.groundedReality || ''),
+            crossDomainImpact: localizeDomainText(d?.crossDomainImpact || ''),
+            actionableTask: localizeDomainText(d?.actionableTask || ''),
+            eisenhowerQuadrant: localizeDomainText(d?.eisenhowerQuadrant || ''),
+            planFrequency: d?.planFrequency === 'أسبوعي' ? 'أسبوعي' : 'يومي',
+          })),
+        }
+      : {}),
     ...(Array.isArray(report.keystoneHabits)
       ? {
           keystoneHabits: report.keystoneHabits.map((h: any) => ({
             ...h,
             name: localizeDomainText(h?.name || ''),
             triggerTime: localizeDomainText(h?.triggerTime || ''),
+            ...(typeof h?.exactStep === 'string'
+              ? { exactStep: localizeDomainText(h.exactStep) }
+              : {}),
             targetDomains: mapList(h?.targetDomains),
             expectedImpact: localizeDomainText(h?.expectedImpact || ''),
           })),
@@ -432,6 +453,18 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
             weekTitle: localizeDomainText(w?.weekTitle || ''),
             coreFocus: localizeDomainText(w?.coreFocus || ''),
             actions: mapList(w?.actions),
+          })),
+        }
+      : {}),
+    ...(Array.isArray(report.readyToPromoteQueue)
+      ? {
+          readyToPromoteQueue: report.readyToPromoteQueue.map((item: any) => ({
+            ...item,
+            title: localizeDomainText(item?.title || ''),
+            domainTitle: getDomainArabicName(item?.domainTitle || ''),
+            quadrant: item?.quadrant === 'Q1' ? 'Q1' : 'Q2',
+            frequency: item?.frequency === 'أسبوعي' ? 'أسبوعي' : 'يومي',
+            milestone: localizeDomainText(item?.milestone || ''),
           })),
         }
       : {}),

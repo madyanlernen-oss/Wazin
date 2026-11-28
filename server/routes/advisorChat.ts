@@ -21,6 +21,7 @@ import {
   stripRepeatedOpeningGreeting,
   isEmptyOrMeaninglessInput,
   MEANINGLESS_INPUT_PROMPT_AR,
+  sanitizeArabicGrammarAndMorphology,
 } from '../../src/utils/dialogueDeduplication';
 import {
   generateRealisticAreaGoals,
@@ -97,9 +98,19 @@ async function evaluateSessionMetricsWithTool(params: {
   source: 'gemini-eval' | 'groq-eval' | 'local-eval';
 }> {
   const { agentKey, stationTitle, sessionUserMessages, abortSignal } = params;
-  const fallbackMetrics = extractUnifiedMetricsFromSession(sessionUserMessages, agentKey);
+  const meaningfulMessages = sessionUserMessages.filter((m) => !isEmptyOrMeaninglessInput(m));
+  if (meaningfulMessages.length === 0) {
+    return {
+      score: null,
+      metrics: null,
+      needsClarification: true,
+      fallbackMessage: MEANINGLESS_INPUT_PROMPT_AR,
+      source: 'local-eval',
+    };
+  }
+  const fallbackMetrics = extractUnifiedMetricsFromSession(meaningfulMessages, agentKey);
 
-  if (sessionUserMessages.length === 0 || abortSignal.aborted) {
+  if (abortSignal.aborted) {
     return {
       score: calculateUnifiedScore(fallbackMetrics),
       metrics: fallbackMetrics,
@@ -737,7 +748,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
   }
 
   const pastStationsContextText = pastStationsSnippets.length > 0
-    ? `\n[سياق المحطات السابقة لربط الحوار وتجنب تكرار الأسئلة (دون كشف تفاصيل الوكلاء الآخرين)]:\n${pastStationsSnippets.join('\n')}\n`
+    ? `\n[سياق من محطات سابقة لمنع تكرار الأسئلة فقط — ⛔ ممنوع استخدامه للقفز إلى مجال آخر لم يذكره المستفيد في رسالته الحالية (كربط ضغط العمل بالإنفاق التعويضي أو المال)]:\n${pastStationsSnippets.join('\n')}\n`
     : '';
 
   // تحديد توجيهات النمط المختار من Gemini (سريع، متوازن، أو تفكير عميق استراتيجي)
@@ -1070,11 +1081,28 @@ ${hasPriorConversation ? `3. ⛔ محظور في هذا الرد البدء بت
   - في الجانب الاجتماعي (أ. سامي): إذا ذكر المستفيد ضغط العمل أو الأسرة أو الإرهاق، يُمنع تماماً افتراض "الوحدة أو الرهاب أو الارتباك في التجمعات أو صعوبة تكوين الصداقات".
 `;
 
+  const mandatoryQualityAndPrecisionRules = `
+[قواعد الجودة والدقة الحوارية الإلزامية لجميع المستشارين 🚨]:
+1. الارتباط المباشر بالشكوى (Direct Complaint Alignment — ممنوع القفز المبكر):
+   - اجعل ردك وسؤالك القادم مرتبطين ارتباطاً مباشراً وحرفياً بالمشكلة أو الشكوى التي صرّح بها المستفيد في رسالته الأخيرة (مثل: عدم وجود أصدقاء، غياب الهوايات، ساعات العمل الطويلة، أو الشعور بالفراغ الشخصي).
+   - ⛔ محظور منعاً باتاً القفز أو الربط بمجال حياتي آخر لم يذكره المستفيد صراحة في كلامه (مثلاً: يُمنع ربط الإرهاق الوظيفي أو ساعات العمل الطويلة بـ«الإنفاق التعويضي» أو الأمور المالية، ولا تفترض مشكلات غير مذكورة) ما لم يصرح المستفيد بذلك بنفسه.
+2. الحياد التام عند المدخلات العشوائية أو غير المفهومة (Strict Neutrality on Gibberish / Random Inputs):
+   - إذا أرسل المستفيد مدخلاً غير مفهوم أو عشوائياً أو ضحكاً وأرقاماً عشوائية أو رموزاً وإيموجي فقط (مثل: «ههههه 123456» أو حروف عشوائية):
+     * استجب بإيجاز ولطف لطلب التوضيح فقط (مثل دعوته لمشاركة ما يدور في باله بكلمات واضحة لبدء التقييم/الحوار).
+     * ⛔ محظور منعاً باتاً في هذه الحالة:
+       - لا تفترض أي نية نفسية (مثل: «أنت تمزح لإخفاء التوتر أو التشتت»).
+       - لا تذكر أو تمنح أي درجة رقمية إطلاقاً (اجعل score: null و needsClarification: true).
+       - لا تختلق أو تذكر أي تفاصيل غير مصرح بها عن المستفيد (مثل: لا تذكر «عملك التقني» أو أي مهنة محددة ما لم يصرح المستفيد بها بنفسه).
+3. سلامة اللغة العربية ودقتها الصرفية والنحوية (Arabic Linguistic Accuracy):
+   - التزم في جميع ردودك بصحة اللغة العربية نحواً وصرفاً وإملاءً وبصياغة طبيعية دافئة وموجزة (مثلاً استخدم الصيغ الصحيحة: «بكل هدوء» وليس «بكل هادئ»، «بكل دفء» وليس «بكل دافئ»، «بكل صدق» وليس «بكل صادق»).
+`;
+
   // إثراء التعليمات بسياق المستفيد وشخصية الوكيل المستقلة وأسلوب الرد المطلوب
   systemInstruction = `
 ${userContextBlock}
 ${domainSpecificContextGuideline}
 ${antiRepeatDialogueGuideline}
+${mandatoryQualityAndPrecisionRules}
 
 ${agentRoleDescription}
 
@@ -1586,10 +1614,16 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       }
     }
 
+    if (parsed.advice) parsed.advice = sanitizeArabicGrammarAndMorphology(parsed.advice);
+    if (parsed.summary) parsed.summary = sanitizeArabicGrammarAndMorphology(parsed.summary);
     if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
       if (parsed.advice) parsed.actionSteps = [parsed.advice];
       else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
       else parsed.actionSteps = [];
+    } else if (Array.isArray(parsed.actionSteps)) {
+      parsed.actionSteps = parsed.actionSteps.map((s: any) =>
+        typeof s === 'string' ? sanitizeArabicGrammarAndMorphology(s) : s
+      );
     }
     const nextRoundNumGemini = Math.max(1, (typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 2);
     parsed.suggestedReplies = generateDynamicQuickSuggestions({
@@ -1886,10 +1920,16 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
           }
         }
 
+        if (parsed.advice) parsed.advice = sanitizeArabicGrammarAndMorphology(parsed.advice);
+        if (parsed.summary) parsed.summary = sanitizeArabicGrammarAndMorphology(parsed.summary);
         if (!parsed.actionSteps || parsed.actionSteps.length === 0) {
           if (parsed.advice) parsed.actionSteps = [parsed.advice];
           else if (parsed.action_plan) parsed.actionSteps = parsed.action_plan;
           else parsed.actionSteps = [];
+        } else if (Array.isArray(parsed.actionSteps)) {
+          parsed.actionSteps = parsed.actionSteps.map((s: any) =>
+            typeof s === 'string' ? sanitizeArabicGrammarAndMorphology(s) : s
+          );
         }
 
         const nextRoundNumGroq = Math.max(1, (typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 2);

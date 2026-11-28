@@ -25,6 +25,8 @@ import {
   hasAcuteIsolationOrRejection,
   isEmptyOrMeaninglessInput,
   MEANINGLESS_INPUT_PROMPT_AR,
+  sanitizeArabicGrammarAndMorphology,
+  buildComplaintAnchoredReply,
 } from '../../src/utils/dialogueDeduplication';
 
 // مصفوفة من 4 ردود استكشافية محايدة ومختلفة لكل محطة من المحطات الثماني لمنع التكرار عند اللجوء للمحرك المحلي
@@ -337,7 +339,9 @@ export function generateLocalAgentResponse(
   }) => {
     const finalName = data.agent_name || advName;
     let finalReply = data.reply || data.advice || data.summary || 'أنا معك في كل خطوة نحو الاتزان والنمو.';
-    finalReply = stripRepeatedOpeningGreeting(finalReply, hasPriorHistory);
+    finalReply = sanitizeArabicGrammarAndMorphology(
+      stripRepeatedOpeningGreeting(finalReply, hasPriorHistory)
+    );
 
     let safeReflectionQ = data.reflectionQuestion || '';
     const isCompletedEval = Boolean(isEvaluationSession) && Boolean(data.station_completed);
@@ -404,15 +408,17 @@ export function generateLocalAgentResponse(
     const finalReasoning = data.reasoning || `محاكاة داخلية وتفكير ذاتي (Self-Reflection): رصد التحدي الحقيقي للمستفيد (${userName}) في مجال (${stationTitle})، تفكيك التداعيات النفسية والعملية على استقراره وبقية جوانب عجلة الحياة، واستخلاص أعمق استبصار توجيهي لتحقيق التوازن المستدام.`;
 
     const combinedUserTexts = [...(historyTexts || []), message].filter(Boolean);
-    const finalAdvice = isCompletedEval
-      ? synthesizeGoldenRecommendation({
-          areaId: agentKey,
-          userTexts: combinedUserTexts,
-          userProfile,
-          score: computedScore,
-          advisorCandidate: rawAdvice,
-        })
-      : rawAdvice;
+    const finalAdvice = sanitizeArabicGrammarAndMorphology(
+      isCompletedEval
+        ? synthesizeGoldenRecommendation({
+            areaId: agentKey,
+            userTexts: combinedUserTexts,
+            userProfile,
+            score: computedScore,
+            advisorCandidate: rawAdvice,
+          })
+        : rawAdvice
+    );
 
     // Dynamic round-aware, non-repeating quick suggestions reacting to user's last answer & round
     const nextRoundNumber = Math.max(1, (stationTurnCount || 0) + 2);
@@ -1868,6 +1874,20 @@ export function generateLocalAgentResponse(
       }
     }
 
+    const anchoredCareer = buildComplaintAnchoredReply('career', message, historyTexts || []);
+    if (anchoredCareer) {
+      return formatAgentOutput({
+        reasoning: `مواءمة مباشرة مع شكوى المستفيد الصريحة ("${message}") في ${stationTitle} دون القفز لمجال آخر غير مذكور.`,
+        summary: anchoredCareer.summary,
+        advice: anchoredCareer.advice,
+        reply: `${anchoredCareer.reflection}\n\n${anchoredCareer.followUpQuestion}`,
+        actionSteps: anchoredCareer.actionSteps,
+        score: currentSessionUnifiedScore,
+        station_completed: false,
+        reflectionQuestion: ''
+      });
+    }
+
     const sessionId = userProfile?.email || userName || 'default';
     const careerFallback = pickNonRepeatingFallbackReply('career', stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
     return formatAgentOutput({
@@ -2491,6 +2511,20 @@ export function generateLocalAgentResponse(
   };
 
   const advInfo = fallbackAdvisors[agentKey] || { role: advisor?.role || 'مستشار توازن الحياة', name: advName };
+  const anchoredGeneric = buildComplaintAnchoredReply(agentKey, message, historyTexts || []);
+  if (anchoredGeneric) {
+    return formatAgentOutput({
+      agent_name: advInfo.name,
+      reasoning: `مواءمة مباشرة مع شكوى المستفيد الصريحة ("${message}") في ${stationTitle} دون القفز لمجال آخر غير مذكور.`,
+      summary: anchoredGeneric.summary,
+      advice: anchoredGeneric.advice,
+      reply: `${anchoredGeneric.reflection}\n\n${anchoredGeneric.followUpQuestion}`,
+      actionSteps: anchoredGeneric.actionSteps,
+      station_completed: false,
+      reflectionQuestion: ''
+    });
+  }
+
   const sessionId = userProfile?.email || userName || 'default';
   const domainFallback = pickNonRepeatingFallbackReply(agentKey, stationTurnCount, sessionId, userProfile, userName, historyTexts || []);
 
