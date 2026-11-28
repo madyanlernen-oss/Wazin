@@ -21,8 +21,11 @@ import {
   Lock,
   LayoutDashboard,
   GitCompare,
+  BarChart3,
+  ArrowUpRight,
 } from 'lucide-react';
 import { ADVISORS_LIST } from '../data/advisorsData';
+import { ONE_YEAR_MONTHLY_HISTORY, RECENT_WEEKS_ANALYSIS } from '../data/demoAnalytics';
 import { RadarChart } from '../components/RadarChart';
 import {
   localizeDomainText,
@@ -1108,6 +1111,225 @@ export const DashboardScreen: React.FC<DashboardScreenProps> = ({
             </div>
           )}
       </div>
+
+      {/* Inline Analytics & Insights Preview + Prominent Navigation CTA (Directly Under Life Wheel & Summary) */}
+      {(() => {
+        const recentSixMonths = ONE_YEAR_MONTHLY_HISTORY.slice(-6);
+        const firstMonthAvg = recentSixMonths[0]?.averageScore || 5.0;
+        const latestMonth = recentSixMonths[recentSixMonths.length - 1];
+        const latestWeek = RECENT_WEEKS_ANALYSIS[RECENT_WEEKS_ANALYSIS.length - 1];
+        const liveOrHistoryCurrent = !isBrandNewUser
+          ? Number(averageBalanceScore)
+          : latestMonth?.averageScore || 0;
+        const deltaPercent =
+          firstMonthAvg > 0
+            ? (((liveOrHistoryCurrent - firstMonthAvg) / firstMonthAvg) * 100).toFixed(1)
+            : '0.0';
+        const isPositiveDelta = Number(deltaPercent) >= 0;
+        const totalRecentHabits = recentSixMonths.reduce(
+          (sum, m) => sum + (m.completedTasks || 0),
+          0
+        );
+
+        const openDetailedAnalytics = () => {
+          handleTabChange('comparison');
+          if (typeof window !== 'undefined' && typeof window.scrollTo === 'function') {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          }
+        };
+
+        return (
+          <div className="space-y-4">
+            <section
+              aria-label="معاينة التحليلات والمؤشرات"
+              className="bg-white dark:bg-[#112028] border border-slate-200/90 dark:border-slate-800/80 rounded-3xl p-6 sm:p-7 shadow-xs space-y-5 transition-colors text-right"
+              dir="rtl"
+            >
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 dark:border-slate-800/80">
+                <div className="space-y-1">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-[#0B6E72]/10 dark:bg-cyan-500/10 text-[#0B6E72] dark:text-cyan-300 text-[11px] font-bold">
+                    <BarChart3 className="w-3.5 h-3.5" aria-hidden="true" />
+                    <span>التحليلات والرؤى السريعة</span>
+                  </div>
+                  <h2 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
+                    مؤشر التطور والاتجاهات التراكمية
+                  </h2>
+                  <p className="text-xs text-[#64748B] dark:text-slate-400">
+                    نظرة مركّزة على نمو توازنك خلال آخر{' '}
+                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-bold">6</span>{' '}
+                    أشهر ومقارنة أبعادك الحالية
+                  </p>
+                </div>
+
+                {latestWeek && (
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 text-[11px] font-bold text-[#334155] dark:text-slate-300 self-start sm:self-center">
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                    <span>التزام الأسبوع الأخير:</span>
+                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-black text-emerald-700 dark:text-emerald-400">
+                      {latestWeek.weeklyHabitCompletion}%
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Compact Key Metrics Row */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400 block">
+                    المعدل الحالي للتوازن
+                  </span>
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-xl font-black text-[#0B6E72] dark:text-cyan-300 font-mono block">
+                    {liveOrHistoryCurrent.toFixed(1)} / 10
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400 block">
+                    نمو 6 أشهر
+                  </span>
+                  <span
+                    dir="ltr"
+                    style={{ unicodeBidi: 'isolate' }}
+                    className={`text-xl font-black font-mono inline-flex items-center gap-1 ${
+                      isPositiveDelta
+                        ? 'text-emerald-700 dark:text-emerald-400'
+                        : 'text-amber-700 dark:text-amber-400'
+                    }`}
+                  >
+                    <ArrowUpRight className="w-4 h-4" aria-hidden="true" />
+                    {isPositiveDelta ? '+' : ''}{deltaPercent}%
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400 block">
+                    {isBrandNewUser ? 'أقوى مسار مسجّل' : 'أعلى أبعادك توازناً'}
+                  </span>
+                  <span className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-white block truncate">
+                    {isBrandNewUser ? (latestMonth?.topArea || 'الجانب الروحي') : strongestAdvisor.title}
+                  </span>
+                </div>
+
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 space-y-1">
+                  <span className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400 block">
+                    مهام وعادات مكتملة (6 أشهر)
+                  </span>
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-xl font-black text-[#0F172A] dark:text-white font-mono block">
+                    {totalRecentHabits}
+                  </span>
+                </div>
+              </div>
+
+              {/* Compact Progress Chart + Top/Focus Domain Bars */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-stretch">
+                {/* 6-Month Mini Trend Chart */}
+                <div className="lg:col-span-7 p-4 rounded-2xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 flex flex-col justify-between space-y-3">
+                  <div className="flex items-center justify-between text-xs font-bold">
+                    <span className="text-[#0F172A] dark:text-white">منحنى تطور التوازن (آخر 6 أشهر)</span>
+                    <span className="text-[11px] text-[#64748B] dark:text-slate-400">من 10 درجات</span>
+                  </div>
+
+                  <div className="grid grid-cols-6 gap-2 items-end h-28 pt-2">
+                    {recentSixMonths.map((month, idx) => {
+                      const isLast = idx === recentSixMonths.length - 1;
+                      const barScore =
+                        isLast && !isBrandNewUser
+                          ? liveOrHistoryCurrent
+                          : month.averageScore;
+                      const barHeightPercent = Math.max(18, Math.min(100, Math.round((barScore / 10) * 100)));
+                      const shortMonth = (month.monthName || month.month).split(' ')[0];
+
+                      return (
+                        <div key={month.month} className="flex flex-col items-center gap-1 h-full justify-end">
+                          <span
+                            dir="ltr"
+                            style={{ unicodeBidi: 'isolate' }}
+                            className={`text-[10px] font-mono font-black ${
+                              isLast
+                                ? 'text-[#0B6E72] dark:text-cyan-300'
+                                : 'text-[#64748B] dark:text-slate-400'
+                            }`}
+                          >
+                            {barScore.toFixed(1)}
+                          </span>
+                          <div className="w-full max-w-[34px] h-16 bg-slate-200/70 dark:bg-slate-800 rounded-xl flex items-end overflow-hidden p-0.5">
+                            <div
+                              className={`w-full rounded-lg transition-all duration-500 ${
+                                isLast
+                                  ? 'bg-gradient-to-t from-[#0B6E72] to-emerald-500 dark:from-[#0891B2] dark:to-cyan-400'
+                                  : 'bg-[#0B6E72]/45 dark:bg-cyan-500/40'
+                              }`}
+                              style={{ height: `${barHeightPercent}%` }}
+                            />
+                          </div>
+                          <span className="text-[10px] font-bold text-[#475569] dark:text-slate-400 truncate max-w-full">
+                            {shortMonth}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Compact Snapshot of Highest & Priority Areas */}
+                <div className="lg:col-span-5 p-4 rounded-2xl bg-slate-50 dark:bg-[#0B161C] border border-slate-200/80 dark:border-slate-800 space-y-2.5 flex flex-col justify-center">
+                  <span className="text-xs font-bold text-[#0F172A] dark:text-white block">
+                    {isBrandNewUser ? 'لقطة الأداء المرجعية لأبرز المجالات' : 'توزيع أبعادك بين القوة والأولوية'}
+                  </span>
+                  <div className="space-y-2">
+                    {(sortedCompletedAreas.length >= 3
+                      ? [
+                          sortedCompletedAreas[sortedCompletedAreas.length - 1],
+                          sortedCompletedAreas[Math.floor(sortedCompletedAreas.length / 2)],
+                          sortedCompletedAreas[0],
+                        ]
+                      : sortedCompletedAreas.length > 0
+                        ? sortedCompletedAreas
+                        : ADVISORS_LIST.slice(0, 3)
+                    ).map((area) => {
+                      const val = !isBrandNewUser
+                        ? Number(scores[area.id] || 0)
+                        : Number(latestMonth?.scores?.[area.id] || 0);
+                      const pct = Math.max(4, Math.min(100, Math.round((val / 10) * 100)));
+
+                      return (
+                        <div key={area.id} className="space-y-1">
+                          <div className="flex items-center justify-between text-[11px] font-bold">
+                            <span className="text-[#334155] dark:text-slate-300 truncate">{area.title}</span>
+                            <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-[#0F172A] dark:text-white">
+                              {val.toFixed(1)} / 10
+                            </span>
+                          </div>
+                          <div className="w-full h-1.5 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-500"
+                              style={{ width: `${pct}%`, backgroundColor: area.themeColor }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            {/* Prominent High-Contrast Navigation CTA */}
+            <div className="flex justify-center sm:justify-start">
+              <button
+                type="button"
+                onClick={openDetailedAnalytics}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2.5 px-6 py-3.5 rounded-2xl bg-[#0B6E72] hover:bg-[#09575A] dark:bg-[#0891B2] dark:hover:bg-cyan-500 text-white font-black text-xs sm:text-sm shadow-md shadow-[#0B6E72]/20 dark:shadow-cyan-950/50 hover:shadow-lg transition-all hover:scale-[1.01] cursor-pointer group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400"
+              >
+                <BarChart3 className="w-4 h-4 flex-shrink-0" aria-hidden="true" />
+                <span>عرض التحليلات التفصيلية</span>
+                <ArrowLeft className="w-4 h-4 group-hover:-translate-x-1 transition-transform flex-shrink-0" aria-hidden="true" />
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* 8 Area Cards Grid (Score, Strengths, Challenges, Goals) */}
       <div className="space-y-4">

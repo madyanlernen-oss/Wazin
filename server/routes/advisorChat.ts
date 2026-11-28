@@ -22,6 +22,11 @@ import {
   isEmptyOrMeaninglessInput,
   MEANINGLESS_INPUT_PROMPT_AR,
   sanitizeArabicGrammarAndMorphology,
+  truncateArabicAtWordBoundary,
+  isConfirmationOrMetaUtterance,
+  stripAllScoreRatingsFromText,
+  syncReplyScoreWithCanonicalScore,
+  extractGroundedStrengthsAndChallenges,
 } from '../../src/utils/dialogueDeduplication';
 import {
   generateRealisticAreaGoals,
@@ -77,12 +82,7 @@ const EIGHT_EVALUATION_DOMAINS = new Set([
 ]);
 
 function stripAccidentalScoreMentions(text: string): string {
-  return (text || '')
-    .replace(/بعد\s*ما\s*شاركتني[\s\S]*?(?:أكثر\s*دقة\s*[؟?]|المحطة\s*التالية\s*[؟?]?)/gi, '')
-    .replace(/[^\n.]*(?:أقيّم|أقيم)\s*(?:وضعك|حالتك)[^\n.]*\d+(?:\.\d+)?\s*(?:\/|\s*من\s*)\s*10[^\n.]*[.!؟]?/gi, '')
-    .replace(/\(\s*\d+(?:\.\d+)?\s*(?:\/|\s*من\s*)\s*10\s*\)/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
+  return stripAllScoreRatingsFromText(text);
 }
 
 async function evaluateSessionMetricsWithTool(params: {
@@ -653,14 +653,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
 
   const sessionUserMessagesForEval = [...historyUserOnlyTexts, message]
     .map((t) => String(t || '').trim())
-    .filter(
-      (t) =>
-        t.length > 0 &&
-        !isEmptyOrMeaninglessInput(t) &&
-        !/^(?:اعتمد\s*التقييم(?:\s*بدرجة.*)?|نعم\s*اعتمد|اعتماد|نكتفي|خلاص|انتهينا|أرغب في الاستمرار|حسناً?\s*نكمل)/i.test(
-          t
-        )
-    )
+    .filter((t) => t.length > 0 && !isConfirmationOrMetaUtterance(t))
     .slice(-3);
 
   const evalToolPromise: Promise<{
@@ -740,7 +733,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
         }
       }
       if (userSnippet) {
-        const shortText = userSnippet.length > 65 ? userSnippet.slice(0, 62) + '...' : userSnippet;
+        const shortText = truncateArabicAtWordBoundary(userSnippet, 65);
         pastStationsSnippets.push(`- في ${label || key}: ذكر المستفيد أنه "${shortText}".`);
       }
       if (pastStationsSnippets.length >= 2) break; // سطر أو سطران فقط
@@ -869,7 +862,7 @@ advisorChatRouter.post('/advisor-chat', async (req: Request, res: Response) => {
      ج) إذا اختار المستخدم الاعتماد ("اعتمد التقييم" أو "أنهِ المحطة"): ضع station_completed = true واختم بملخص وخطوة عملية مستمدة من كلامه دون أي سؤال استكشافي.
      د) إذا اختار المواصلة: ضع station_completed = false واستكمل بأسئلة محددة وضرورية فقط دون تكرار.
 6. الاقتراحات السريعة التكيفية (suggestedReplies - إلزامي):
-   - أنت الآن تعد ردوداً سريعة تفاعلية للمستخدم للإجابة في الجولة رقم (${(typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 2}) بناءً مباشرة على آخر رسالة كتبها المستخدم ("${String(message || '').slice(0, 80).replace(/"/g, "'")}").
+   - أنت الآن تعد ردوداً سريعة تفاعلية للمستخدم للإجابة في الجولة رقم (${(typeof stationTurnCount === 'number' ? stationTurnCount : 0) + 2}) بناءً مباشرة على آخر رسالة كتبها المستخدم ("${truncateArabicAtWordBoundary(String(message || '').replace(/"/g, "'"), 80)}").
    - قدّم في حقل "suggestedReplies" مصفوفة من 3 إلى 4 ردود سريعة مقترحة وقصيرة (كل رد أقل من 65 حرفاً وبصيغة المتكلم من زاوية المستخدم مثل: "أكثر ما يضغط علي هو..." أو "سأجرب بدء...").
    - اجعل زاوية الاقتراحات تتطور مع رقم الجولة: (الجولة 2: تعميق السبب أو المصدر، الجولة 3: اختبار القابلية وكشف العوائق، الجولات 4+: خطوة عملية دقيقة أو متابعة الثبات).
    - ⛔ يُمنع تماماً تكرار أي عبارة مطابقة لإجابة المستخدم الأخيرة أو إعادة أي من الاقتراحات السابقة التالية: ${Array.isArray(req.body.previousSuggestions) && req.body.previousSuggestions.length > 0 ? req.body.previousSuggestions.slice(-8).join(' | ') : 'لا يوجد'}.
@@ -940,20 +933,20 @@ ${parsedCtx.currentFocus ? `- التركيز والتفاصيل الإضافية
         else if (typeof h.content === 'string') t = h.content;
         else if (typeof h.text === 'string') t = h.text;
         t = t.trim();
-        if (t && t.length > 3 && !t.startsWith('مرحباً') && !t.startsWith('اهلا')) {
+        if (t && t.length > 3 && !isConfirmationOrMetaUtterance(t)) {
           userUtterancesInStation.push(t);
         }
       }
     }
   }
-  if (message && message.trim().length > 3) {
+  if (message && message.trim().length > 3 && !isConfirmationOrMetaUtterance(message)) {
     userUtterancesInStation.push(message.trim());
   }
 
   let stationSummaryContextText = '';
   if (userUtterancesInStation.length > 0) {
     const summaryStatements = userUtterancesInStation.slice(-3).map((s) => {
-      const clean = s.length > 70 ? s.slice(0, 67) + '...' : s;
+      const clean = truncateArabicAtWordBoundary(s, 70);
       return `  * "${clean}"`;
     });
     stationSummaryContextText = `\n[ملخص سريع لما ذكره المستفيد في هذه المحطة لربط السياق]:\n${summaryStatements.slice(-2).join('\n')}\n`;
@@ -990,7 +983,7 @@ ${parsedCtx.currentFocus ? `- التركيز والتفاصيل الإضافية
 1. يُمنع منعاً باتاً إعادة طرح أي سؤال سبق طرحه أو أجاب عنه المستخدم في سجل المحادثة الحالية، وخاصة سؤال صندوق الطوارئ أو أي سؤال تشخيصي ثابت تم توضيحه مسبقاً.
 ${askedQuestionsFromHistory.length > 0 ? `- أسئلة طُرحت سابقاً في هذه المحادثة (ممنوع تكرارها أو إعادة صياغتها):\n${askedQuestionsFromHistory.slice(-6).map((q) => `  * "${q}"`).join('\n')}` : '- لا توجد أسئلة سابقة مطروحة بعد.'}
 ${answeredDiagnosticFacts.length > 0 ? `- حقائق تشخيصية أجاب عنها المستفيد بالفعل (ممنوع إعادة السؤال عنها):\n${answeredDiagnosticFacts.join('\n')}` : ''}
-2. تعامل مع آخر رسالة كتبها المستفيد ("${String(message || '').slice(0, 120).replace(/"/g, "'")}") كإجابة مؤكدة ومباشرة على السؤال السابق، حتى لو بدأها بصيغة ظنية مثل "ممكن..." (مثال: "ممكن الاكل في المطاعم" هي إجابة فعلية عن بند الصرف وليس سؤالاً عاماً). اعترف بما ذكره مباشرة في أول جملة وابنِ عليه للانتقال إلى الخطوة المنطقية التالية (مثل استكمال النمو أو اقتراح خطوة عملية أو عرض التقييم المرحلي).
+2. تعامل مع آخر رسالة كتبها المستفيد ("${truncateArabicAtWordBoundary(String(message || '').replace(/"/g, "'"), 120)}") كإجابة مؤكدة ومباشرة على السؤال السابق، حتى لو بدأها بصيغة ظنية مثل "ممكن..." (مثال: "ممكن الاكل في المطاعم" هي إجابة فعلية عن بند الصرف وليس سؤالاً عاماً). اعترف بما ذكره مباشرة في أول جملة وابنِ عليه للانتقال إلى الخطوة المنطقية التالية (مثل استكمال النمو أو اقتراح خطوة عملية أو عرض التقييم المرحلي).
 ${hasPriorConversation ? `3. ⛔ محظور في هذا الرد البدء بتحية افتتاحية متكررة (مثل: "أهلاً بك..." أو "مرحباً بك..." أو إعادة تقديم نفسك).${isEditedOrResent ? ' المستفيد أعاد إرسال/تعديل إجابته عبر "تراجع / تعديل"، فادخل مباشرة في الاعتراف بالإجابة والانتقال للخطوة التالية.' : ''}` : ''}
 4. ⛔ اتساق الدرجات والأسئلة مع البداية الإيجابية: إذا بدأ المستفيد بتقييم مرتفع (مثل 8/10) أو وصف إيجابي واضح (مثل منحه عائلته الكثير من الوقت)، لا تخفّض الدرجة إلى أقل من 5/10 لمجرد تحدٍّ فرعي (كتشتت الهاتف أو الخجل)، بل اجعلها متوازنة (6.5 إلى 7.5). ويُمنع طرح سؤال يناقض ما أثبته (كأن تسأله ما الذي يمنعه من قضاء وقت أطول مع عائلته بعد تأكيده منحه لهم الكثير من الوقت).
 5. إذا طلب المستفيد اقتراحات مباشرة (مثل "لا أدري أعطيني اقتراحاتك")، قدّم له 2-3 اقتراحات عملية قصيرة ومباشرة مبنية على حواره في نفس الرد قبل عرض درجة التقييم المبدئي.
@@ -1572,9 +1565,12 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       parsed.evaluationMetrics = evalOutcome.metrics;
       parsed.evaluationSource = evalOutcome.source;
       parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
-      parsed.reply = enforceAntiRepeatOnReply(
-        sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
-        Boolean(parsed.station_completed),
+      parsed.reply = syncReplyScoreWithCanonicalScore(
+        enforceAntiRepeatOnReply(
+          sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
+          Boolean(parsed.station_completed),
+          parsed.score
+        ),
         parsed.score
       );
       if (
@@ -1594,9 +1590,12 @@ ${forcedIncomplete ? `- ⛔ المحطة ما زالت في مرحلة التش�
       const rawModelScore = parsed.score !== undefined ? parsed.score : effectiveScore;
       parsed.score = processAndReconcileScore(rawModelScore, userSelfScore, message, historyUserOnlyTexts, effectiveScore);
       parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
-      parsed.reply = enforceAntiRepeatOnReply(
-        sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
-        Boolean(parsed.station_completed),
+      parsed.reply = syncReplyScoreWithCanonicalScore(
+        enforceAntiRepeatOnReply(
+          sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
+          Boolean(parsed.station_completed),
+          parsed.score
+        ),
         parsed.score
       );
       if (
@@ -1878,9 +1877,12 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
           parsed.evaluationMetrics = evalOutcome.metrics;
           parsed.evaluationSource = evalOutcome.source;
           parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
-          parsed.reply = enforceAntiRepeatOnReply(
-            sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
-            Boolean(parsed.station_completed),
+          parsed.reply = syncReplyScoreWithCanonicalScore(
+            enforceAntiRepeatOnReply(
+              sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
+              Boolean(parsed.station_completed),
+              parsed.score
+            ),
             parsed.score
           );
           if (
@@ -1900,9 +1902,12 @@ IMPORTANT: You must respond in valid JSON format with all text fields written st
           const rawGroqScore = parsed.score !== undefined ? parsed.score : effectiveScore;
           parsed.score = processAndReconcileScore(rawGroqScore, userSelfScore, message, historyUserOnlyTexts, effectiveScore);
           parsed.strengths = sanitizeStrengths(parsed.strengths, message, historyUserOnlyTexts);
-          parsed.reply = enforceAntiRepeatOnReply(
-            sanitizeAdvisorReply(parsed.reply || '', parsed.station_completed),
-            Boolean(parsed.station_completed),
+          parsed.reply = syncReplyScoreWithCanonicalScore(
+            enforceAntiRepeatOnReply(
+              sanitizeAdvisorReply(stripAccidentalScoreMentions(parsed.reply || ''), parsed.station_completed),
+              Boolean(parsed.station_completed),
+              parsed.score
+            ),
             parsed.score
           );
           if (
@@ -2023,80 +2028,41 @@ export function buildConversationAwareStationSummary(
       const role = h.role || h.sender;
       if (role !== 'user') continue;
       const text = String(h.content || h.text || '').trim();
-      if (!text) continue;
-      // استثناء رسائل الترحيب القصيرة جداً ورسائل زر الاعتماد الآلية
-      if (/^(?:اعتمد\s*التقييم(?:\s*بدرجة.*)?|نعم\s*اعتمد|أرغب في الاستمرار)/i.test(text)) continue;
+      if (!text || isConfirmationOrMetaUtterance(text)) continue;
       userUtterances.push(text);
     }
   }
 
   const allUserText = userUtterances.join(' ').trim();
-
-  // 1. صياغة التوصية العلاجية الذهبية بأسلوب المستشار دون نسخ كلام المستخدم حرفياً
-  const proposalPattern = /(?:^|\s)(?:سأخصص|ساخصص|سأبدأ|سابدا|سأجرب|ساجرب|سأحاول|ساحاول|سألتزم|سالتزم|سأنظم|سانظم|سأتواصل|ساتواصل|سأمشي|سامشي|سأقرأ|ساقرا|سأدخر|سادخر|سأوفر|ساوفر|سأغلق|ساغلق|أخطط|اخطط|أنوي|انوي|قررت|اتفقنا على|فكرت في|خطة|ممكن أبدأ|أفضل أن)(?:\s|$)/i;
-  let userProposedPlan = '';
-  for (let i = userUtterances.length - 1; i >= 0; i--) {
-    const u = userUtterances[i];
-    if (proposalPattern.test(u) && u.length >= 10) {
-      userProposedPlan = u.replace(/^(?:نعم،?|حسناً،?|تمام،?|أجل،?|طيب،?)\s*/i, '').trim();
-      break;
-    }
-  }
+  const numericScore = typeof userScore === 'number' && !isNaN(userScore) ? userScore : 6;
 
   const goldenRecommendation = synthesizeGoldenRecommendation({
     areaId: agentKey,
     userTexts: userUtterances,
     userProfile,
-    score: typeof userScore === 'number' && !isNaN(userScore) ? userScore : 6,
+    score: numericScore,
   });
 
-  // 2. نقاط القوة: متوافقة تماماً مع شكوى المستخدم دون أي تناقض
-  const isSocialStruggle = /(فتور|انعزال|عزلة|وحيد|وحدة|قطيعة|انقطاع|قلة\s*تواصل|مقص[ّ]?ر\s*مع\s*أصدق|انطواء|تراجع\s*(?:في\s*)?التواصل)/i.test(allUserText);
-  const rawStrengths: string[] = [];
+  const grounded = extractGroundedStrengthsAndChallenges(
+    agentKey,
+    stationTitle,
+    userUtterances,
+    numericScore
+  );
 
-  if (agentKey === 'social' && isSocialStruggle) {
-    rawStrengths.push(
-      'الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل',
-      'الوضوح في تحديد طبيعة الفتور الاجتماعي دون التهرب منه'
-    );
-  } else if (userProposedPlan) {
-    rawStrengths.push(
-      'المبادرة بوضع خطة عملية محددة تناسب واقعك الحالي',
-      `الوضوح والصدق في توصيف واقعك ضمن ${stationTitle}`
-    );
-  } else if (userScore !== undefined && userScore >= 7.5 && allUserText.length > 0 && !/(ضغط|تشتت|أرق|إرهاق|ديون|عجز|فتور|انعزال)/i.test(allUserText)) {
-    rawStrengths.push(
-      `الالتزام والانتظام فيما ذكرته خلال حوار ${stationTitle}`,
-      'الوضوح في تحديد أولوياتك الحالية'
-    );
-  } else {
-    rawStrengths.push(
-      `الوضوح والصراحة في تشخيص واقع ${stationTitle}`,
-      'الرغبة الصادقة في معالجة التحديات الحالية بخطوات واقعية'
-    );
-  }
+  // تعزيز نقاط القوة والاتساق التام مع الشكوى
+  const isSocialStruggle = /(فتور|انعزال|عزلة|وحيد|وحدة|قطيعة|انقطاع|قلة\s*تواصل|مقص[ّ]?ر\s*مع\s*أصدق|انطواء|تراجع\s*(?:في\s*)?التواصل)/i.test(allUserText);
+  const rawStrengths: string[] =
+    agentKey === 'social' && isSocialStruggle
+      ? ['الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل', ...grounded.strengths]
+      : grounded.strengths;
 
   const strengths = sanitizeStrengths(rawStrengths, allUserText, userUtterances);
-
-  // 3. فرص التحسين بناءً على ما ورد في الحوار
-  const challenges: string[] = [];
-  if (isSocialStruggle) {
-    challenges.push('تقليص الفتور والانعزال عبر جدول تواصل بسيط ومريح مع المقربين');
-  } else if (/(نوم|أرق|إرهاق|تعب|سهر)/i.test(allUserText)) {
-    challenges.push('ضبط إيقاع النوم والراحة لتقليل الإرهاق اليومي');
-  } else if (/(تشتت|شاشات|هاتف|تسويف)/i.test(allUserText)) {
-    challenges.push('تقليل المشتتات اليومية وحماية وقت التركيز');
-  } else if (/(عجز|لا أدخر|لا ادخر|ديون|قليل|مصروف)/i.test(allUserText)) {
-    challenges.push('تثبيت آلية ميسرة لضبط الأولويات والادخار التدريجي');
-  }
-
-  if (challenges.length === 0) {
-    challenges.push(`حماية وتثبيت خطوة التحسين المتفق عليها في ${stationTitle}`);
-  }
+  const challenges = grounded.challenges;
 
   return {
-    strengths: strengths.slice(0, 3),
-    challenges: challenges.slice(0, 3),
+    strengths: Array.from(new Set(strengths)).slice(0, 3),
+    challenges: Array.from(new Set(challenges)).slice(0, 3),
     goldenRecommendation,
     source: 'fallback',
   };
@@ -2147,7 +2113,7 @@ advisorChatRouter.post('/station-summary', async (req: Request, res: Response) =
     if (!content) continue;
     const label = role === 'model' || role === 'advisor' ? `المستشار (${advisorName})` : 'المستفيد';
     transcriptLines.push(`${label}: ${content}`);
-    if (role === 'user') {
+    if (role === 'user' && !isConfirmationOrMetaUtterance(content)) {
       historyTexts.push(content);
     }
   }
@@ -2191,10 +2157,10 @@ ${summaryCtx.incomeSource ? `- مصدر الدخل: ${summaryCtx.incomeSource}` 
    - يُمنع تماماً نسخ رسالة المستخدم حرفياً أو اقتباسها أو استخدام عبارة عامة مثل "البدء بخطوة عملية واحدة صغيرة ومحددة تعالج التحدي" أو "تطبيق الخطة التي اقترحتها في الحوار".
    - يجب أن تناسب الدرجة المعتمدة (${score ?? 'غير محددة'}/10) وسياق المستفيد (${summaryCtx.workStatus}).
 2. نقاط القوة (strengths - من 2 إلى 3 نقاط):
-   - يجب أن تستند حصراً لما ذكره المستخدم بلسانه في الحوار.
-   - ⛔ يُمنع منعاً باتاً كتابة نقاط قوة تتعارض مع شكوى المستخدم (مثلاً: لا تكتب "حضور اجتماعي متوازن" إذا اشتكى من الفتور والانعزال، بل اكتب "الوعي بأهمية الأصدقاء المقربين والرغبة في تنظيم وقت التواصل").
-3. فرص التحسين (challenges - من 2 إلى 3 نقاط):
-   - اذكر التحديات الفعلية وفرص التحسين المرتبطة مباشرة بشكوى المستخدم في الحوار.
+   - استخرج نقاط قوة حقيقية ومحددة من كلام المستخدم وعاداته الفعلية (⛔ ممنوع القوالب المعلبة المكررة مثل: "الوضوح والصراحة في تشخيص واقع...").
+   - ⛔ يُمنع منعاً باتاً كتابة نقاط قوة تتعارض مع شكوى المستخدم.
+3. التحدي الجوهري (challenges - من 2 إلى 3 نقاط):
+   - صف المشكلة أو العائق الفعلي الذي يعاني منه المستخدم بدقة ووضوح فقط (⛔ ممنوع وضع الحل أو التوصية العلاجية داخل حقل التحديات!).
 4. الأهداف العملية للجانب (suggestedGoals - من 2 إلى 3 أهداف قصيرة):
    - ⛔ يُمنع التناقض المباشر مع ظروف المستخدم (مثلاً: إذا ذكر العمل 12 ساعة والنوم 4 ساعات، يُمنع اقتراح النوم 7 ساعات عند 11 مساءً؛ اقترح خطوة تدريجية واقعية تناسب دوامه).
    - ⛔ يُمنع اختلاق ديون أو بطاقات ائتمان أو مبالغ مالية أو زيارات أو أشخاص (أبناء/زوج) لم يردوا في السياق أو الحوار.

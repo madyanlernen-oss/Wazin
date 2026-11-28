@@ -8,6 +8,7 @@ import {
 import {
   buildDirectorGroundingPromptText,
   generateEvidenceGroundedDirectorReport,
+  reconcileSectionQuadrantsAndHabits,
 } from '../../src/utils/directorEvidenceSynthesizer';
 
 export const directorSummaryRouter = Router();
@@ -157,11 +158,13 @@ ${directorUserContext}
 1. ممنوع القوالب المعلبة: يُمنع منعاً باتاً استخدام نصائح عامة مكررة مثل ("ادرس 45 دقيقة"، "ارفع التركيز بنسبة 40%"، "خصص 15 دقيقة لهذا الجانب"، "نظم وقتك") ما لم تكن مشتقة حرفياً من كلمات المستفيد نفسه!
 2. التخصيص المبني على الأدلة (Evidence-Based Personalization): يجب أن يشير كل تحليل جانب وكل عادة محورية وكل مهمة صراحةً إلى التفاصيل الحقيقية التي ذكرها المستفيد في المحطات الثماني (مثل تخصصه، عمله أو مشروعه، عملته أو هدفه الادخاري، مشتتاته الفعلية، ديناميكيات أسرته، أو عاداته الجسدية).
 3. ممنوع الافتراضات غير المذكورة: لا تخترع أبداً تفاصيل أو أدوات أو عملات أو مهن لم يذكرها المستفيد صراحة. وإن كانت محطة ما بلا حوار نصي مفصل بعد، اذكر ذلك بوضوح ولا تختلق لها أحداثاً.
-4. لغة التقرير ودقة الدرجات:
-   - اكتب التقرير كاملاً بلغة عربية دافئة، بليغة، منظمة، وسليمة نحواً وصرفاً وإملاءً (مثلاً: «بكل هدوء» لا «بكل هادئ»، «للجانب» لا «لـ الجانب»، «الأسري» لا «الأسرى»).
-   - يُمنع تماماً إدراج مفاتيح إنجليزية لأسماء المجالات مثل (career, health, financial, learning, spiritual, personal, family, social, Keystone Habits, Bottleneck).
-   - التزم حرفياً بالدرجات الفعلية: المعدل العام (${promptAvg}/10)${promptStrongest ? `، وأعلى جانب هو "${getDomainArabicName(promptStrongest[0])}" (${promptStrongest[1]}/10)` : ''}${promptBottleneck ? `، وأدنى جانب (عنق الزجاجة) هو "${getDomainArabicName(promptBottleneck[0])}" (${promptBottleneck[1]}/10)` : ''}.
-   - إذا كانت أعلى درجة أقل من 7.8، صفه بواقعية ("استقرار نسبي" أو "الأعلى نسبياً") ولا تصفه بأنه "استثنائي" أو "قوة خارقة".
+4. جودة الحوار والتنسيق الإلزامية في التقرير (Global Quality Rules):
+   - الخطاب المباشر بضمير المخاطب (أنت): خاطب المستخدم مباشرة وبأسلوب دافئ متسق في جميع الأقسام ("ذكرتَ في هذه المحطة"، "تحديك الأساسي"، "نقطة قوتك")؛ ⛔ يُمنع منعاً باتاً التحول لضمير الغائب ("صرّح المستفيد"، "أوضح المستفيد"، "المستفيد").
+   - فصل المشكلة عن الحل: حقل التحدي الجوهري في كل جانب وفي عنق الزجاجة يصف المشكلة أو العائق الفعلي فقط (لا تضع التوصية أو الحل داخل التحدي!). ونقاط القوة تستند لعادات وأقوال حقيقية بدون عبارات مكررة ("الوضوح والصراحة في تشخيص واقع...").
+   - منع التكرار وتطابق الأوقات: يجب أن تكون العادات المحورية (3–4 عادات) في مجالات رئيسية مختلفة وبخطوات غير مكررة، وأن يناسب التوقيت المحدد طبيعة العادة منطقياً (مثلاً: عادات الادخار والميزانية توضع عند استلام الدخل أو المراجعة الأسبوعية، وليس قبل النوم!).
+   - توحيد مربعات أيزنهاور بين القسم 2 والقسم 5: يُمنع تصنيف أي مهمة بناء مهارة أو تعلّم أو تكوين عادة على أنها Q3؛ استخدم Q2 (مهم وغير عاجل) أو Q1 (عاجل ومهم) عند الحالات الحرجة فقط، وطابق التصنيف بين القسمين بدقة.
+   - سلامة اللغة العربية وتمام الكلمات: اكتب بلغة عربية فصيحة وسليمة صرفياً ("بكل هدوء" لا "بكل هادئ"، "للجانب" لا "لـ الجانب"، "الأسري" لا "الأسرى")، واكتب جملاً كاملة دون بتر الكلمات، وامنع تماماً إدراج مفاتيح إنجليزية مثل (career, health, financial, learning, spiritual, personal, family, social, Keystone Habits, Bottleneck).
+   - مصدر الحقيقة الوحيد للدرجات: التزم حرفياً بالدرجات الفعلية: المعدل العام (${promptAvg}/10)${promptStrongest ? `، وأعلى جانب هو "${getDomainArabicName(promptStrongest[0])}" (${promptStrongest[1]}/10)` : ''}${promptBottleneck ? `، وأدنى جانب (عنق الزجاجة) هو "${getDomainArabicName(promptBottleneck[0])}" (${promptBottleneck[1]}/10)` : ''}. وإذا كانت أعلى درجة أقل من 7.8، صفه بواقعية ("استقرار نسبي") لا "استثنائي".
 
 هيكل المخرجات المطلوب تغطيته بالكامل داخل كائن JSON:
 1. التشخيص الاستراتيجي الشامل: overallBalanceScore، وbalanceIndexLabel (اسم المرحلة)، وoverallDiagnosis، وrootCauseChain (سرد دقيق يشرح سلسلة السبب والنتيجة التي تربط الجوانب الثمانية من واقع كلامه).
@@ -346,18 +349,21 @@ ${groundedEvidenceText}
 
     const rawParsed = JSON.parse(response.text || '{}');
     const groundedDefaults = generateEvidenceGroundedDirectorReport(groundingInput);
-    const mergedRaw = {
-      ...groundedDefaults,
-      ...rawParsed,
-      domainBreakdown:
-        Array.isArray(rawParsed.domainBreakdown) && rawParsed.domainBreakdown.length >= 8
-          ? rawParsed.domainBreakdown
-          : groundedDefaults.domainBreakdown,
-      readyToPromoteQueue:
-        Array.isArray(rawParsed.readyToPromoteQueue) && rawParsed.readyToPromoteQueue.length >= 4
-          ? rawParsed.readyToPromoteQueue
-          : groundedDefaults.readyToPromoteQueue,
-    };
+    const mergedRaw = reconcileSectionQuadrantsAndHabits(
+      {
+        ...groundedDefaults,
+        ...rawParsed,
+        domainBreakdown:
+          Array.isArray(rawParsed.domainBreakdown) && rawParsed.domainBreakdown.length >= 8
+            ? rawParsed.domainBreakdown
+            : groundedDefaults.domainBreakdown,
+        readyToPromoteQueue:
+          Array.isArray(rawParsed.readyToPromoteQueue) && rawParsed.readyToPromoteQueue.length >= 4
+            ? rawParsed.readyToPromoteQueue
+            : groundedDefaults.readyToPromoteQueue,
+      },
+      workStatus.includes('طالب')
+    );
 
     const parsed = reconcileDirectorReportWithScores(mergedRaw, scores);
     if (!parsed.reply && (parsed.overallDiagnosis || parsed.directorGoldenRule)) {

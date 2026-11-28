@@ -1,6 +1,9 @@
 import { LifeAreaId, UserProfile } from '../types/lifeBalance';
 import { parseUserContext, ParsedUserContext } from './contextPersonalization';
-import { extractEmergencyFundStatus } from './dialogueDeduplication';
+import {
+  extractEmergencyFundStatus,
+  isConfirmationOrMetaUtterance,
+} from './dialogueDeduplication';
 
 export interface DialogueConstraints {
   workHours: number | null;
@@ -33,7 +36,7 @@ export function extractUserDialogueTextsForArea(
     if (typeof raw !== 'string') return;
     const clean = raw.trim();
     if (!clean || clean.length < 3) return;
-    if (/^(?:اعتمد\s*التقييم|نعم\s*اعتمد|تقييمي:\s*\d+(?:\.\d+)?\s*(?:من|\/)\s*10)$/i.test(clean)) return;
+    if (isConfirmationOrMetaUtterance(clean)) return;
     if (!seen.has(clean)) {
       seen.add(clean);
       texts.push(clean);

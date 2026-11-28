@@ -30,7 +30,11 @@ import {
   getDomainArabicName,
 } from '../utils/arabicDomainLabels';
 import { loadChatHistoryFromStorage, WAZAN_CHAT_HISTORY_KEY } from '../utils/storage';
-import { generateEvidenceGroundedDirectorReport } from '../utils/directorEvidenceSynthesizer';
+import {
+  generateEvidenceGroundedDirectorReport,
+  reconcileSectionQuadrantsAndHabits,
+} from '../utils/directorEvidenceSynthesizer';
+import { isConfirmationOrMetaUtterance } from '../utils/dialogueDeduplication';
 import { mapDomainNameToAreaId } from '../utils/eisenhowerAgent';
 import { addGoalToThirtyDayPlanStorage } from '../utils/thirtyDayPlanGenerator';
 
@@ -114,14 +118,23 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
 
     const { conversationHistories, stationInsights } = readLocalStationContext();
 
-    // Build rich per-domain advisor summaries including actual goals, insights, and user statements
+    const isStudentProfile = String(
+      userProfile?.employmentStatus || userProfile?.workStatus || ''
+    ).includes('طالب');
+
+    // Build rich per-domain advisor summaries filtering out short confirmation/approval turns
     const advisorSummaries: Record<string, any> = {};
     ADVISORS_LIST.forEach((adv) => {
       const sc = Number(scores[adv.id] || 0);
       const msgs = (conversationHistories[adv.id] || [])
-        .filter((m: any) => (m?.sender || m?.role) === 'user' && !m?.ignoredForTurnCount)
+        .filter(
+          (m: any) =>
+            (m?.sender || m?.role) === 'user' &&
+            !m?.ignoredForTurnCount &&
+            !String(m?.id || '').startsWith('user_confirm_')
+        )
         .map((m: any) => String(m?.text || m?.content || '').trim())
-        .filter(Boolean);
+        .filter((txt: string) => txt && !isConfirmationOrMetaUtterance(txt));
       const ins = stationInsights[adv.id] || {};
       if (sc > 0 || (goals[adv.id] && goals[adv.id].length > 0) || msgs.length > 0) {
         advisorSummaries[adv.title] = {
@@ -169,19 +182,22 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
       });
 
       const generatedReport: DirectorSummaryReport = reconcileDirectorReportWithScores(
-        {
-          ...groundedBaseline,
-          ...data,
-          domainBreakdown:
-            Array.isArray(data.domainBreakdown) && data.domainBreakdown.length >= 8
-              ? data.domainBreakdown
-              : groundedBaseline.domainBreakdown,
-          readyToPromoteQueue:
-            Array.isArray(data.readyToPromoteQueue) && data.readyToPromoteQueue.length >= 4
-              ? data.readyToPromoteQueue
-              : groundedBaseline.readyToPromoteQueue,
-          generatedAt: new Date().toISOString(),
-        },
+        reconcileSectionQuadrantsAndHabits(
+          {
+            ...groundedBaseline,
+            ...data,
+            domainBreakdown:
+              Array.isArray(data.domainBreakdown) && data.domainBreakdown.length >= 8
+                ? data.domainBreakdown
+                : groundedBaseline.domainBreakdown,
+            readyToPromoteQueue:
+              Array.isArray(data.readyToPromoteQueue) && data.readyToPromoteQueue.length >= 4
+                ? data.readyToPromoteQueue
+                : groundedBaseline.readyToPromoteQueue,
+            generatedAt: new Date().toISOString(),
+          },
+          isStudentProfile
+        ),
         scores
       );
 
@@ -207,18 +223,12 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
     }
   };
 
-  // Enrich older saved reports seamlessly with new grounded sections if missing
+  // Enrich and reconcile cached/saved reports cleanly across all 6 global audit rules
   const enrichedReport = useMemo(() => {
     if (!report) return null;
-    if (
-      Array.isArray(report.domainBreakdown) &&
-      report.domainBreakdown.length >= 8 &&
-      Array.isArray(report.readyToPromoteQueue) &&
-      report.readyToPromoteQueue.length > 0 &&
-      report.rootCauseChain
-    ) {
-      return report;
-    }
+    const isStudentProfile = String(
+      userProfile?.employmentStatus || userProfile?.workStatus || ''
+    ).includes('طالب');
     const { conversationHistories, stationInsights } = readLocalStationContext();
     const grounded = generateEvidenceGroundedDirectorReport({
       userProfile,
@@ -230,20 +240,23 @@ export const DirectorSummaryScreen: React.FC<DirectorSummaryScreenProps> = ({
       focusArea: userProfile?.currentFocus,
     });
     return reconcileDirectorReportWithScores(
-      {
-        ...grounded,
-        ...report,
-        overallBalanceScore: report.overallBalanceScore ?? grounded.overallBalanceScore,
-        rootCauseChain: report.rootCauseChain || grounded.rootCauseChain,
-        domainBreakdown:
-          Array.isArray(report.domainBreakdown) && report.domainBreakdown.length >= 8
-            ? report.domainBreakdown
-            : grounded.domainBreakdown,
-        readyToPromoteQueue:
-          Array.isArray(report.readyToPromoteQueue) && report.readyToPromoteQueue.length > 0
-            ? report.readyToPromoteQueue
-            : grounded.readyToPromoteQueue,
-      },
+      reconcileSectionQuadrantsAndHabits(
+        {
+          ...grounded,
+          ...report,
+          overallBalanceScore: report.overallBalanceScore ?? grounded.overallBalanceScore,
+          rootCauseChain: report.rootCauseChain || grounded.rootCauseChain,
+          domainBreakdown:
+            Array.isArray(report.domainBreakdown) && report.domainBreakdown.length >= 8
+              ? report.domainBreakdown
+              : grounded.domainBreakdown,
+          readyToPromoteQueue:
+            Array.isArray(report.readyToPromoteQueue) && report.readyToPromoteQueue.length > 0
+              ? report.readyToPromoteQueue
+              : grounded.readyToPromoteQueue,
+        },
+        isStudentProfile
+      ),
       scores
     );
   }, [report, userProfile, scores, answers, goals]);

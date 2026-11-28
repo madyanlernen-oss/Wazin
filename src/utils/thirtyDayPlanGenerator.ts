@@ -1,4 +1,4 @@
-import { LifeAreaId, DayPlanTask, DailyGoalItem, ThirtyDayPlanState } from '../types/lifeBalance';
+import { LifeAreaId, DayPlanTask, DailyGoalItem, DailyGoalStatus, ThirtyDayPlanState } from '../types/lifeBalance';
 import {
   DOMAIN_ARABIC_NAMES,
   getDomainArabicName,
@@ -10,6 +10,162 @@ const CUSTOM_FOCUS_STORAGE_KEY = 'wazan_30day_custom_focus_v1';
 export const MAX_DAILY_GOALS = 4;
 
 /**
+ * Resolves the canonical 3-state status ('pending' | 'completed' | 'missed') of a daily goal item,
+ * maintaining backwards compatibility with legacy boolean-only `isCompleted` entries.
+ */
+export function resolveDailyGoalStatus(goal?: Partial<DailyGoalItem> | null): DailyGoalStatus {
+  if (goal?.status === 'completed' || goal?.status === 'missed' || goal?.status === 'pending') {
+    return goal.status;
+  }
+  return goal?.isCompleted ? 'completed' : 'pending';
+}
+
+/**
+ * Returns a new DailyGoalItem with explicit 3-state status and synchronized `isCompleted` boolean.
+ */
+export function toggleDailyGoalStatus(
+  goal: DailyGoalItem,
+  action: 'completed' | 'missed'
+): DailyGoalItem {
+  const current = resolveDailyGoalStatus(goal);
+  const nextStatus: DailyGoalStatus = current === action ? 'pending' : action;
+  return {
+    ...goal,
+    status: nextStatus,
+    isCompleted: nextStatus === 'completed',
+    completedAt: nextStatus === 'completed' ? (goal.completedAt || Date.now()) : undefined,
+  };
+}
+
+export interface TaskCompletionStats {
+  completed: number;
+  missed: number;
+  pending: number;
+  total: number;
+  percent: number;
+}
+
+/**
+ * Computes completed/missed/pending task counts and completion percentage for a single day.
+ */
+export function computeDayTaskCompletionStats(day?: DayPlanTask | null): TaskCompletionStats {
+  const goals = resolveDayGoals(day);
+  const total = goals.length;
+  let completed = 0;
+  let missed = 0;
+  for (const g of goals) {
+    const st = resolveDailyGoalStatus(g);
+    if (st === 'completed') completed += 1;
+    else if (st === 'missed') missed += 1;
+  }
+  const pending = Math.max(0, total - completed - missed);
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { completed, missed, pending, total, percent };
+}
+
+/**
+ * Computes aggregated task-level and day-level completion counts and percentage across a week's days.
+ */
+export function computeWeekTaskCompletionStats(
+  days: DayPlanTask[]
+): TaskCompletionStats & { completedDays: number; totalDays: number } {
+  let completed = 0;
+  let missed = 0;
+  let total = 0;
+  let completedDays = 0;
+  for (const day of days) {
+    const dayStats = computeDayTaskCompletionStats(day);
+    completed += dayStats.completed;
+    missed += dayStats.missed;
+    total += dayStats.total;
+    if (day.isCompleted) completedDays += 1;
+  }
+  const pending = Math.max(0, total - completed - missed);
+  const percent = total > 0 ? Math.round((completed / total) * 100) : 0;
+  return { completed, missed, pending, total, percent, completedDays, totalDays: days.length };
+}
+
+export interface PlanGamificationStats {
+  xpPoints: number;
+  currentStreak: number;
+  bestStreak: number;
+  completedTasks: number;
+  totalTasks: number;
+  missedTasks: number;
+  completedDays: number;
+  overallPercent: number;
+}
+
+export const XP_PER_TASK = 15;
+export const XP_DAY_BONUS = 25;
+
+/**
+ * Computes lightweight motivational gamification metrics (Daily Streak, XP points, and overall completion)
+ * directly from persisted plan task states so progress survives reloads without extra storage keys.
+ */
+export function computePlanGamificationStats(
+  plan: ThirtyDayPlanState | null | undefined
+): PlanGamificationStats {
+  if (!plan || !Array.isArray(plan.days) || plan.days.length === 0) {
+    return {
+      xpPoints: 0,
+      currentStreak: 0,
+      bestStreak: 0,
+      completedTasks: 0,
+      totalTasks: 0,
+      missedTasks: 0,
+      completedDays: 0,
+      overallPercent: 0,
+    };
+  }
+
+  const orderedDays = [...plan.days].sort((a, b) => a.dayNumber - b.dayNumber);
+  let completedTasks = 0;
+  let totalTasks = 0;
+  let missedTasks = 0;
+  let completedDays = 0;
+  let xpPoints = 0;
+  let runningStreak = 0;
+  let bestStreak = 0;
+  let latestActiveStreak = 0;
+
+  for (const day of orderedDays) {
+    const stats = computeDayTaskCompletionStats(day);
+    completedTasks += stats.completed;
+    totalTasks += stats.total;
+    missedTasks += stats.missed;
+    xpPoints += stats.completed * XP_PER_TASK;
+    if (day.isCompleted) {
+      completedDays += 1;
+      xpPoints += XP_DAY_BONUS;
+    }
+
+    if (stats.completed > 0) {
+      runningStreak += 1;
+      latestActiveStreak = runningStreak;
+      if (runningStreak > bestStreak) {
+        bestStreak = runningStreak;
+      }
+    } else {
+      runningStreak = 0;
+    }
+  }
+
+  const overallPercent = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+
+  return {
+    xpPoints,
+    currentStreak: latestActiveStreak,
+    bestStreak,
+    completedTasks,
+    totalTasks,
+    missedTasks,
+    completedDays,
+    overallPercent,
+  };
+}
+
+/**
  * Resolve 1 to MAX_DAILY_GOALS (4) active goals/tasks for a plan day,
  * with backwards compatibility for legacy single-selectedTask plans.
  */
@@ -19,27 +175,33 @@ export function resolveDayGoals(day?: DayPlanTask | null): DailyGoalItem[] {
     return day.dailyGoals
       .filter((g) => g && typeof g.text === 'string' && g.text.trim().length > 0)
       .slice(0, MAX_DAILY_GOALS)
-      .map((g, idx) => ({
-        id: g.id || `goal_${day.dayNumber}_${idx + 1}`,
-        text: g.text.trim(),
-        isCompleted: Boolean(g.isCompleted),
-        isCustom: Boolean(g.isCustom),
-        completedAt: g.completedAt,
-      }));
+      .map((g, idx) => {
+        const status = resolveDailyGoalStatus(g);
+        return {
+          id: g.id || `goal_${day.dayNumber}_${idx + 1}`,
+          text: g.text.trim(),
+          status,
+          isCompleted: status === 'completed',
+          isCustom: Boolean(g.isCustom),
+          completedAt: status === 'completed' ? g.completedAt : undefined,
+        };
+      });
   }
 
   const fallbackText =
     (day.selectedTask && day.selectedTask.trim()) ||
     (Array.isArray(day.defaultSuggestions) && day.defaultSuggestions[0]) ||
     'خطوة يومية متوازنة';
+  const fallbackStatus: DailyGoalStatus = day.isCompleted ? 'completed' : 'pending';
 
   return [
     {
       id: `goal_${day.dayNumber}_1`,
       text: fallbackText.trim(),
-      isCompleted: Boolean(day.isCompleted),
+      status: fallbackStatus,
+      isCompleted: fallbackStatus === 'completed',
       isCustom: Boolean(day.isCustomSelected),
-      completedAt: day.completedAt,
+      completedAt: fallbackStatus === 'completed' ? day.completedAt : undefined,
     },
   ];
 }
@@ -408,11 +570,17 @@ function buildDaysForFocusDomains(
 
     const preservedMultiGoals =
       sameDomain && Array.isArray(prevDay.dailyGoals) && prevDay.dailyGoals.length > 1
-        ? prevDay.dailyGoals.slice(0, MAX_DAILY_GOALS).map((g, idx) => ({
-            ...g,
-            id: g.id || `goal_${dayNum}_${idx + 1}`,
-            text: localizeDomainText(g.text),
-          }))
+        ? prevDay.dailyGoals.slice(0, MAX_DAILY_GOALS).map((g, idx) => {
+            const gStatus = resolveDailyGoalStatus(g);
+            return {
+              ...g,
+              id: g.id || `goal_${dayNum}_${idx + 1}`,
+              text: localizeDomainText(g.text),
+              status: gStatus,
+              isCompleted: gStatus === 'completed',
+              completedAt: gStatus === 'completed' ? g.completedAt : undefined,
+            };
+          })
         : undefined;
 
     const syncedSelectedTask = sameDomain
@@ -420,18 +588,25 @@ function buildDaysForFocusDomains(
       : suggestionsPool[0];
     const syncedCustomSelected = sameDomain ? Boolean(prevDay.isCustomSelected) : false;
     const syncedCompleted = preservedMultiGoals
-      ? preservedMultiGoals.every((g) => g.isCompleted)
+      ? preservedMultiGoals.every((g) => resolveDailyGoalStatus(g) === 'completed')
       : sameDomain
         ? Boolean(prevDay.isCompleted)
         : false;
+    const prevSingleStatus = sameDomain ? resolveDailyGoalStatus(prevDay.dailyGoals?.[0]) : 'pending';
+    const singleGoalStatus: DailyGoalStatus = syncedCompleted
+      ? 'completed'
+      : prevSingleStatus === 'missed'
+        ? 'missed'
+        : 'pending';
 
     const dailyGoals: DailyGoalItem[] = preservedMultiGoals || [
       {
         id: (sameDomain && prevDay.dailyGoals?.[0]?.id) || `goal_${dayNum}_1`,
         text: syncedSelectedTask,
-        isCompleted: syncedCompleted,
+        status: singleGoalStatus,
+        isCompleted: singleGoalStatus === 'completed',
         isCustom: syncedCustomSelected,
-        completedAt: sameDomain ? prevDay.completedAt : undefined,
+        completedAt: sameDomain && singleGoalStatus === 'completed' ? prevDay.completedAt : undefined,
       },
     ];
 
@@ -721,6 +896,7 @@ export function addGoalToThirtyDayPlanStorage(
   const newGoal: DailyGoalItem = {
     id: `consult_${targetDay.dayNumber}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
     text: trimmed,
+    status: 'pending',
     isCompleted: false,
     isCustom: true,
   };
@@ -780,13 +956,16 @@ export function exportPlanAsText(plan: ThirtyDayPlanState): string {
       );
     text += `[اليوم \u2066${day.dayNumber} / 30\u2069] (${domainArabicTitle}) - ${status}\n`;
     if (goals.length <= 1) {
+      const singleStatus = resolveDailyGoalStatus(goals[0]);
+      const singlePrefix = singleStatus === 'missed' ? '✕ (فائت) ' : '';
       const cleanTask = localizeDomainText(goals[0]?.text || day.selectedTask);
-      text += `📌 المهمة: ${isolateNums(cleanTask)}\n\n`;
+      text += `📌 المهمة: ${singlePrefix}${isolateNums(cleanTask)}\n\n`;
     } else {
-      const doneGoals = goals.filter((g) => g.isCompleted).length;
-      text += `📌 أهداف اليوم (\u2066${doneGoals} / ${goals.length}\u2069):\n`;
+      const stats = computeDayTaskCompletionStats(day);
+      text += `📌 أهداف اليوم (\u2066${stats.completed} / ${stats.total}\u2069 | \u2066${stats.percent}%\u2069):\n`;
       goals.forEach((g, idx) => {
-        const gMark = g.isCompleted ? '✅' : '⏳';
+        const gStatus = resolveDailyGoalStatus(g);
+        const gMark = gStatus === 'completed' ? '✅' : gStatus === 'missed' ? '✕' : '⏳';
         text += `   ${idx + 1}. ${gMark} ${isolateNums(localizeDomainText(g.text))}\n`;
       });
       text += `\n`;

@@ -12,6 +12,9 @@ import { generateDynamicQuickSuggestions } from '../utils/dynamicSuggestions';
 import {
   isEmptyOrMeaninglessInput,
   MEANINGLESS_INPUT_PROMPT_AR,
+  isConfirmationOrMetaUtterance,
+  stripAllScoreRatingsFromText,
+  syncReplyScoreWithCanonicalScore,
 } from '../utils/dialogueDeduplication';
 import {
   generateRealisticAreaGoals,
@@ -700,10 +703,10 @@ ${openingQuestion}
       }
     }
 
-    // حفظ الإجابة النصية، ولا نعتمد درجة التقييم الرسمية في المحطة إلا عند الاعتماد الفعلي بعد بلوغ الحد الأدنى من الجولات (3 رسائل)
+    // حفظ الإجابة النصية الجوهرية فقط (تُستبعد رسائل التأكيد والاعتماد والاستمرار المقتضبة)
     if (detectedScore !== null && currentTurns >= 2) {
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_self_rating`, detectedScore);
-    } else {
+    } else if (!isExplicitAdoption && !isExplicitContinue && !isConfirmationOrMetaUtterance(text)) {
       onSaveAnswer(currentAdvisor.id, `${currentAdvisor.id}_response_${currentTurns}`, text);
     }
 
@@ -949,14 +952,24 @@ ${openingQuestion}
           .replace(/تم اعتماد تقييمك[^\n.]*[.!؟]?/gi, '')
           .replace(/تم تحديث عجلة حياتك بنجاح!?/gi, '')
           .trim();
-      } else {
-        // تم تحديث الحالة وحفظ الدرجة وتحديث شريط التقدم بنجاح — الآن فقط نصدر رسالة الاعتماد
-        if (!replyContent.includes('تم اعتماد تقييم المحطة')) {
-          const isSpiritual = currentAdvisor.id === 'spiritual';
-          const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
-          const spiritualNote = isSpiritual ? '\n(تقدير لشعورك الحالي وليس حكماً على التزامك)' : '';
-          replyContent += `\n\n✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\n${scoreLabel}: (${earnedScore.toFixed(1)} من 10).${spiritualNote}\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`;
+        if (currentTurns >= 2 && earnedScore > 0) {
+          replyContent = syncReplyScoreWithCanonicalScore(replyContent, earnedScore);
+        } else if (currentTurns < 2) {
+          replyContent = stripAllScoreRatingsFromText(replyContent);
         }
+      } else {
+        // مصدر الحقيقة الوحيد للدرجة (Single Source of Truth): توحيد الرقم داخل نص الرد والبطاقة وحفظ الحالة
+        const canonicalScore = Number(earnedScore.toFixed(1));
+        earnedScore = canonicalScore;
+        replyContent = syncReplyScoreWithCanonicalScore(
+          stripAllScoreRatingsFromText(replyContent),
+          canonicalScore
+        );
+        const isSpiritual = currentAdvisor.id === 'spiritual';
+        const scoreLabel = isSpiritual ? 'درجة السكينة التقديرية' : 'الدرجة المسجلة';
+        const spiritualNote = isSpiritual ? '\n(تقدير لشعورك الحالي وليس حكماً على التزامك)' : '';
+        replyContent = `${replyContent ? `${replyContent}\n\n` : ''}✨ **تم اعتماد تقييم المحطة (${stationNumber} من 8 - ${currentAdvisor.title}):**\n${scoreLabel}: (${canonicalScore.toFixed(1)} من 10).${spiritualNote}\n\n💡 **التوصية العلاجية الذهبية:**\n${goldenHabit}.\n\nتم تحديث عجلة حياتك بنجاح!`.trim();
+
         if (onAddEisenhowerGoal) {
           onAddEisenhowerGoal(goldenHabit, currentAdvisor.name, currentAdvisor.id);
         }
@@ -969,7 +982,7 @@ ${openingQuestion}
           areaId: currentAdvisor.id,
           userTexts: stationUserTexts,
           userProfile,
-          score: earnedScore,
+          score: canonicalScore,
           goldenRecommendation: goldenHabit,
           challenges: dynamicChallenges,
           strengths: dynamicStrengths,
@@ -979,17 +992,26 @@ ${openingQuestion}
         }
         const fallbackInsights = extractInsightsFromAnswers(
           currentAdvisor,
-          earnedScore,
+          canonicalScore,
           answers,
-          stationMsgsWithLatest.map((m) => m.text),
+          stationMsgsWithLatest
+            .filter((m) => m.sender === 'user' && !isConfirmationOrMetaUtterance(m.text))
+            .map((m) => m.text),
           userProfile
         );
+        const separatedChallenges =
+          dynamicChallenges.length > 0
+            ? dynamicChallenges
+            : (fallbackInsights?.challenges || [`تحدي استدامة التوازن في ${currentAdvisor.title}`]);
         setStationInsights((prev) => ({
           ...prev,
           [currentAdvisor.id]: {
-            score: earnedScore,
-            strengths: dynamicStrengths.length > 0 ? dynamicStrengths : (fallbackInsights?.strengths || ['الصراحة والوضوح في توصيف واقع هذا الجانب']),
-            challenges: dynamicChallenges.length > 0 ? dynamicChallenges : [goldenHabit],
+            score: canonicalScore,
+            strengths:
+              dynamicStrengths.length > 0
+                ? dynamicStrengths
+                : (fallbackInsights?.strengths || [`مبادرتك بمراجعة واقعك في ${currentAdvisor.title}`]),
+            challenges: separatedChallenges,
             goldenRecommendation: goldenHabit,
           },
         }));
@@ -1215,16 +1237,19 @@ ${openingQuestion}
     }
 
     const currentAdvisorMsgs = chatMessages[currentAdvisor.id] || [];
+    const substantiveMsgs = currentAdvisorMsgs.filter(
+      (m) => m.sender === 'user' && !isConfirmationOrMetaUtterance(m.text)
+    );
     const fallbackInsights = extractInsightsFromAnswers(
       currentAdvisor,
       finalScore,
       answers,
-      currentAdvisorMsgs.map((m) => m.text),
+      substantiveMsgs.map((m) => m.text),
       userProfile
     );
     let goldenHabit = getDynamicGoldenHabit(currentAdvisor, currentAdvisorMsgs, undefined, userProfile, finalScore);
-    let finalStrengths = fallbackInsights?.strengths || ['الصراحة في توصيف واقع هذا الجانب'];
-    let finalChallenges = [goldenHabit, ...(fallbackInsights?.challenges?.slice(1) || [])];
+    let finalStrengths = fallbackInsights?.strengths || [`مبادرتك بمراجعة واقعك في ${currentAdvisor.title}`];
+    let finalChallenges = fallbackInsights?.challenges || [`تذبذب الاستقرار في ${currentAdvisor.title}`];
     let apiSuggestedGoals: string[] = [];
 
     // 2. تمرير سجل محادثة المستخدم الكامل في هذه المحطة إلى Gemini API لتخصيص نقاط القوة وفرص التحسين والتوصية العلاجية الذهبية
@@ -1318,7 +1343,8 @@ ${openingQuestion}
     const userConfirmationMsg: EvaluationChatMessage = {
       id: `user_confirm_${Date.now()}`,
       sender: 'user',
-      text: `اعتمد التقييم بدرجة ${finalScore} من 10`,
+      text: `اعتمد التقييم بدرجة ${finalScore.toFixed(1)} من 10`,
+      ignoredForTurnCount: true,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     };
 
@@ -1342,11 +1368,17 @@ ${openingQuestion}
     setShowCelebration(true);
   };
 
-  const currentActiveInsights = stationInsights[currentAdvisor.id] || {
-    score: currentAdvisorScore > 0 ? currentAdvisorScore : 7.5,
-    strengths: (staticFallbackInsights?.strengths || []).slice(0, 2),
-    challenges: (staticFallbackInsights?.challenges || []).slice(0, 2),
-  };
+  const storedStationInsights = stationInsights[currentAdvisor.id];
+  const currentActiveInsights = storedStationInsights
+    ? {
+        ...storedStationInsights,
+        score: currentAdvisorScore > 0 ? currentAdvisorScore : storedStationInsights.score,
+      }
+    : {
+        score: currentAdvisorScore > 0 ? currentAdvisorScore : 5.0,
+        strengths: (staticFallbackInsights?.strengths || []).slice(0, 2),
+        challenges: (staticFallbackInsights?.challenges || []).slice(0, 2),
+      };
 
   return (
     <div className="min-h-[calc(100vh-4.5rem)] max-w-5xl mx-auto px-4 sm:px-6 py-6 pb-24 space-y-5 bg-[#F7F6F2] dark:bg-[#071318] text-[#0F172A] dark:text-[#F1F5F9] transition-colors duration-300">

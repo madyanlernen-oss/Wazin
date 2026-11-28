@@ -18,22 +18,34 @@ import {
   SlidersHorizontal,
   Plus,
   X,
+  Trash2,
   AlertCircle,
+  Flame,
+  Zap,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
-import { LifeAreaId, ThirtyDayPlanState, DayPlanTask, DailyGoalItem, Screen } from '../types/lifeBalance';
+import { LifeAreaId, ThirtyDayPlanState, DayPlanTask, DailyGoalItem, DailyGoalStatus, Screen } from '../types/lifeBalance';
 import { isolateNumbersInText } from '../components/FormattedChatMessage';
 import {
   ALL_CANONICAL_DOMAINS,
   MAX_DAILY_GOALS,
+  XP_DAY_BONUS,
+  XP_PER_TASK,
   applyFocusDomainsToPlan,
+  computeDayTaskCompletionStats,
+  computePlanGamificationStats,
+  computeWeekTaskCompletionStats,
   extractPriorityDomains,
   generateThirtyDayPlan,
   getStoredCustomFocusDomains,
   getStoredThirtyDayPlan,
+  resolveDailyGoalStatus,
   resolveDayGoals,
   saveCustomFocusDomainsToStorage,
   saveThirtyDayPlanToStorage,
   syncThirtyDayPlanWithScores,
+  toggleDailyGoalStatus,
   resolveActivePlanDayAndWeek,
   getPrioritizedScoredDomains,
   exportPlanAsText,
@@ -68,13 +80,22 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   const initialActiveFocus = resolveActivePlanDayAndWeek(plan);
   const [selectedDayNum, setSelectedDayNum] = useState<number>(initialActiveFocus.dayNumber);
   const [activeWeekTab, setActiveWeekTab] = useState<number>(initialActiveFocus.weekNumber);
+  const [expandedWeekTab, setExpandedWeekTab] = useState<number | null>(initialActiveFocus.weekNumber);
+  const [showSuggestionsDrawer, setShowSuggestionsDrawer] = useState(false);
+  const [showWhyDomains, setShowWhyDomains] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [copiedToast, setCopiedToast] = useState(false);
-  const [showCelebrationToast, setShowCelebrationToast] = useState(false);
+  const [xpPulse, setXpPulse] = useState(false);
+  const [motivationToast, setMotivationToast] = useState<{
+    message: string;
+    xpDelta: string;
+    kind: 'task' | 'day';
+  } | null>(null);
   const [customInputText, setCustomInputText] = useState('');
   const [goalLimitWarning, setGoalLimitWarning] = useState<string | null>(null);
   const limitWarningTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const celebrationTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const xpPulseTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const copiedTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [customFocusDomains, setCustomFocusDomains] = useState<LifeAreaId[] | null>(() => {
     const storedCustom = getStoredCustomFocusDomains();
@@ -87,8 +108,13 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   // Active incomplete day pointer derived from actual completion progress
   const activeFocusDay = resolveActivePlanDayAndWeek(plan);
 
-  const handleSelectWeek = (wNum: number) => {
+  const handleToggleWeekAccordion = (wNum: number) => {
+    if (expandedWeekTab === wNum) {
+      setExpandedWeekTab(null);
+      return;
+    }
     setActiveWeekTab(wNum);
+    setExpandedWeekTab(wNum);
     if (!plan) return;
     const weekTasks = plan.days.filter((d) => d.weekNumber === wNum);
     const targetDay = weekTasks.find((d) => !d.isCompleted) || weekTasks[0];
@@ -135,6 +161,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     setPlan(newPlan);
     setSelectedDayNum(1);
     setActiveWeekTab(1);
+    setExpandedWeekTab(1);
     saveThirtyDayPlanToStorage(newPlan);
   };
 
@@ -146,6 +173,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     setPlan(freshPlan);
     setSelectedDayNum(1);
     setActiveWeekTab(1);
+    setExpandedWeekTab(1);
     setShowResetConfirm(false);
     saveThirtyDayPlanToStorage(freshPlan);
   };
@@ -212,9 +240,17 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     return () => {
       if (limitWarningTimeoutRef.current) clearTimeout(limitWarningTimeoutRef.current);
       if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
+      if (xpPulseTimeoutRef.current) clearTimeout(xpPulseTimeoutRef.current);
       if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
     };
   }, []);
+
+  const TASK_MICRO_PRAISE = [
+    'أحسنت! خطوة ثابتة نحو توازنك.',
+    'رائع! الاستمرارية تصنع الفرق الكبير.',
+    'إنجاز يُحسب لك اليوم — واصل التقدم!',
+    'خطوة واعية تقرّبك من هدفك.',
+  ];
 
   // Unified commit helper keeping dailyGoals (1..4), selectedTask, customTasks, and day completion in sync
   const commitDayGoalsUpdate = (
@@ -227,25 +263,63 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     const prevDay = plan.days.find((d) => d.dayNumber === targetDayNum);
     if (!prevDay) return;
 
-    const nextGoals = nextGoalsRaw.slice(0, MAX_DAILY_GOALS);
-    const allGoalsDone = nextGoals.length > 0 && nextGoals.every((g) => g.isCompleted);
+    const prevCompletedCount = resolveDayGoals(prevDay).filter(
+      (g) => resolveDailyGoalStatus(g) === 'completed'
+    ).length;
+
+    const nextGoals = nextGoalsRaw.slice(0, MAX_DAILY_GOALS).map((g) => {
+      const st = resolveDailyGoalStatus(g);
+      return {
+        ...g,
+        status: st,
+        isCompleted: st === 'completed',
+        completedAt: st === 'completed' ? (g.completedAt || Date.now()) : undefined,
+      };
+    });
+    const nextCompletedCount = nextGoals.filter(
+      (g) => resolveDailyGoalStatus(g) === 'completed'
+    ).length;
+    const addedTasksDone = Math.max(0, nextCompletedCount - prevCompletedCount);
+    const allGoalsDone =
+      nextGoals.length > 0 && nextGoals.every((g) => resolveDailyGoalStatus(g) === 'completed');
     const newlyCompletedDay = !prevDay.isCompleted && allGoalsDone;
     const customList = nextGoals.filter((g) => g.isCustom).map((g) => g.text);
     const primaryGoal = nextGoals[0];
 
+    if (addedTasksDone > 0 || (newlyCompletedDay && triggerCelebrationOnComplete)) {
+      setXpPulse(true);
+      if (xpPulseTimeoutRef.current) clearTimeout(xpPulseTimeoutRef.current);
+      xpPulseTimeoutRef.current = setTimeout(() => setXpPulse(false), 500);
+    }
+
     if (newlyCompletedDay && triggerCelebrationOnComplete) {
       try {
         confetti({
-          particleCount: 50,
-          spread: 60,
-          origin: { y: 0.7 },
+          particleCount: 45,
+          spread: 55,
+          origin: { y: 0.75 },
         });
       } catch {
         // ignore
       }
-      setShowCelebrationToast(true);
+      const gainedXp = addedTasksDone * XP_PER_TASK + XP_DAY_BONUS;
+      setMotivationToast({
+        message: '🎉 رائع جداً! أتممت هدف اليوم بالكامل.',
+        xpDelta: `+${gainedXp} XP`,
+        kind: 'day',
+      });
       if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
-      celebrationTimeoutRef.current = setTimeout(() => setShowCelebrationToast(false), 3200);
+      celebrationTimeoutRef.current = setTimeout(() => setMotivationToast(null), 2800);
+    } else if (addedTasksDone > 0 && triggerCelebrationOnComplete) {
+      const praise =
+        TASK_MICRO_PRAISE[(targetDayNum + nextCompletedCount) % TASK_MICRO_PRAISE.length];
+      setMotivationToast({
+        message: praise,
+        xpDelta: `+${addedTasksDone * XP_PER_TASK} XP`,
+        kind: 'task',
+      });
+      if (celebrationTimeoutRef.current) clearTimeout(celebrationTimeoutRef.current);
+      celebrationTimeoutRef.current = setTimeout(() => setMotivationToast(null), 2100);
     }
 
     const updatedDays = plan.days.map((d) => {
@@ -311,6 +385,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     const addedGoal: DailyGoalItem = {
       id: `sug_${selectedDayNum}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
       text: suggestion,
+      status: 'pending',
       isCompleted: false,
       isCustom: false,
     };
@@ -339,6 +414,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     const newCustomGoal: DailyGoalItem = {
       id: `custom_${selectedDayNum}_${Date.now()}`,
       text: trimmed,
+      status: 'pending',
       isCompleted: false,
       isCustom: true,
     };
@@ -347,20 +423,20 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     setCustomInputText('');
   };
 
-  // Handler: Toggle completion of an individual daily goal independently
-  const handleToggleSingleGoalCompletion = (goalId: string) => {
-    if (!plan || !currentTask) return;
-    const goals = resolveDayGoals(currentTask);
-    const nextGoals = goals.map((g) => {
-      if (g.id !== goalId) return g;
-      const nextDone = !g.isCompleted;
-      return {
-        ...g,
-        isCompleted: nextDone,
-        completedAt: nextDone ? Date.now() : undefined,
-      };
-    });
-    commitDayGoalsUpdate(selectedDayNum, nextGoals, true, false);
+  // Handler: Toggle an individual task status ('completed' ✓ or 'missed' ✕, toggling back to 'pending' on repeat click)
+  const handleToggleGoalStatus = (
+    targetDayNum: number,
+    goalId: string,
+    action: 'completed' | 'missed'
+  ) => {
+    if (!plan) return;
+    const targetDay = plan.days.find((d) => d.dayNumber === targetDayNum);
+    if (!targetDay) return;
+    const goals = resolveDayGoals(targetDay);
+    const nextGoals = goals.map((g) =>
+      g.id === goalId ? toggleDailyGoalStatus(g, action) : g
+    );
+    commitDayGoalsUpdate(targetDayNum, nextGoals, action === 'completed', false);
   };
 
   // Handler: Remove a goal/task from the selected day (keeping at least 1 goal per day)
@@ -385,9 +461,11 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     if (!targetDay) return;
 
     const nextCompleted = !targetDay.isCompleted;
+    const nextStatus: DailyGoalStatus = nextCompleted ? 'completed' : 'pending';
     const goals = resolveDayGoals(targetDay);
     const nextGoals = goals.map((g) => ({
       ...g,
+      status: nextStatus,
       isCompleted: nextCompleted,
       completedAt: nextCompleted ? (g.completedAt || Date.now()) : undefined,
     }));
@@ -399,7 +477,7 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
   const handleExportText = () => {
     if (!plan) return;
     const text = exportPlanAsText(plan);
-    navigator.clipboard?.writeText(text).catch(() => {});
+    navigator.clipboard?.writeText(text).catch(() => { });
     setCopiedToast(true);
     if (copiedTimeoutRef.current) clearTimeout(copiedTimeoutRef.current);
     copiedTimeoutRef.current = setTimeout(() => setCopiedToast(false), 2500);
@@ -417,67 +495,79 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
     : customFocusDomains && customFocusDomains.length === 3
       ? customFocusDomains
       : lowestDomains.map((d) => d.id);
-  const activeWeekDays = plan ? plan.days.filter((d) => d.weekNumber === activeWeekTab) : [];
+  const selectDayAndSyncWeek = (dayNum: number) => {
+    setSelectedDayNum(dayNum);
+    const targetDay = plan?.days.find((d) => d.dayNumber === dayNum);
+    if (targetDay) {
+      setActiveWeekTab(targetDay.weekNumber);
+      setExpandedWeekTab(targetDay.weekNumber);
+    }
+  };
+
   const currentDayGoals = resolveDayGoals(currentTask);
-  const dayCompletedGoalsCount = currentDayGoals.filter((g) => g.isCompleted).length;
+  const dayStats = computeDayTaskCompletionStats(currentTask);
+  const gamification = computePlanGamificationStats(plan);
+  const dayCompletedGoalsCount = dayStats.completed;
   const isDayAtMaxGoals = currentDayGoals.length >= MAX_DAILY_GOALS;
   const pdfPlanPayload = plan ? formatThirtyDayPlanForArabicPdf(plan, scores) : null;
 
   return (
-    <div className="min-h-screen bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 p-4 sm:p-6 lg:p-8 space-y-6 sm:space-y-8 transition-colors duration-300">
-      {/* 1. Hero Banner (مطابق تماماً لصورة 1) */}
-      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#06383A] via-[#0A4B4B] to-[#052A2C] text-white p-6 sm:p-8 lg:p-10 shadow-xl border border-teal-600/30">
-        {/* Ambient Halos */}
-        <div className="absolute top-0 right-0 w-80 h-80 bg-teal-400/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute bottom-0 left-0 w-80 h-80 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
+    <div dir="rtl" className="min-h-screen bg-[#F4F8F7] dark:bg-[#071318] text-[#0F172A] dark:text-slate-100 p-4 sm:p-6 lg:p-8 space-y-5 sm:space-y-6 transition-colors duration-300">
+      {/* 1. Hero Banner (Setup View Only — keeps active plan clutter-free above the fold) */}
+      {!plan && (
+        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-[#06383A] via-[#0A4B4B] to-[#052A2C] text-white p-6 sm:p-8 lg:p-10 shadow-xl border border-teal-600/30">
+          {/* Ambient Halos */}
+          <div className="absolute top-0 right-0 w-80 h-80 bg-teal-400/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute bottom-0 left-0 w-80 h-80 bg-cyan-400/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8">
-          {/* Right Text Column (RTL start) */}
-          <div className="space-y-4 max-w-2xl text-right">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-200 text-xs font-bold">
-              <Sparkles className="w-3.5 h-3.5 text-amber-300" />
-              <span>وزان · تجربة شخصية قابلة للتنفيذ</span>
+          <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8">
+            {/* Right Text Column (RTL start) */}
+            <div className="space-y-4 max-w-2xl text-right">
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/20 border border-teal-400/30 text-teal-200 text-xs font-bold">
+                <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                <span>وزان · تجربة شخصية قابلة للتنفيذ</span>
+              </div>
+
+              <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white leading-tight">
+                من معرفة التوازن إلى صناعة التغيير.
+              </h1>
+
+              <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed font-medium">
+                30 يومًا، خطوة بسيطة كل يوم. يحوّل وزان نتائج تقييمك إلى خطة عملية تركز على الجوانب الأكثر حاجةً للاهتمام.
+              </p>
+
+              {/* Quick Action Badges */}
+              <div className="flex items-center gap-3 pt-2 flex-wrap">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-900/60 border border-teal-500/40 text-teal-200 text-xs font-bold">
+                  <ShieldCheck className="w-3.5 h-3.5 text-teal-300" />
+                  <span>يعمل دون اتصال بخدمة الذكاء الاصطناعي</span>
+                </span>
+
+                <button
+                  type="button"
+                  onClick={() => onNavigate('dashboard')}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/20 cursor-pointer"
+                >
+                  <span>لوحة التحكم</span>
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                </button>
+              </div>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black text-white leading-tight">
-              من معرفة التوازن إلى صناعة التغيير.
-            </h1>
-
-            <p className="text-xs sm:text-sm text-teal-100/90 leading-relaxed font-medium">
-              30 يومًا، خطوة بسيطة كل يوم. يحوّل وزان نتائج تقييمك إلى خطة عملية تركز على الجوانب الأكثر حاجةً للاهتمام.
-            </p>
-
-            {/* Quick Action Badges */}
-            <div className="flex items-center gap-3 pt-2 flex-wrap">
-              <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-teal-900/60 border border-teal-500/40 text-teal-200 text-xs font-bold">
-                <ShieldCheck className="w-3.5 h-3.5 text-teal-300" />
-                <span>يعمل دون اتصال بخدمة الذكاء الاصطناعي</span>
-              </span>
-
-              <button
-                type="button"
-                onClick={() => onNavigate('dashboard')}
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white text-xs font-bold transition-all border border-white/20 cursor-pointer"
-              >
-                <span>لوحة التحكم</span>
-                <ArrowLeft className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Left Large 30-Day Circle Indicator (مطابق لصورة 1) */}
-          <div className="flex-shrink-0 flex items-center justify-center">
-            <div className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full border-4 border-teal-400/30 bg-[#073D3F]/80 flex flex-col items-center justify-center p-4 text-center shadow-2xl backdrop-blur-xs">
-              <div className="absolute inset-1 rounded-full border border-teal-300/20 pointer-events-none" />
-              <CalendarDays className="w-6 h-6 text-amber-300 mb-1" />
-              <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">30</span>
-              <span className="text-[11px] sm:text-xs text-teal-200 font-bold mt-0.5">يومًا لتوازن أفضل</span>
+            {/* Left Large 30-Day Circle Indicator */}
+            <div className="flex-shrink-0 flex items-center justify-center">
+              <div className="relative w-36 h-36 sm:w-44 sm:h-44 rounded-full border-4 border-teal-400/30 bg-[#073D3F]/80 flex flex-col items-center justify-center p-4 text-center shadow-2xl backdrop-blur-xs">
+                <div className="absolute inset-1 rounded-full border border-teal-300/20 pointer-events-none" />
+                <CalendarDays className="w-6 h-6 text-amber-300 mb-1" />
+                <span className="text-4xl sm:text-5xl font-black text-white tracking-tight">30</span>
+                <span className="text-[11px] sm:text-xs text-teal-200 font-bold mt-0.5">يومًا لتوازن أفضل</span>
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* 2. Setup Cards (إذا لم تكن الخطة منشأة بعد - مطابق لصورة 2) */}
+      {/* 2. Setup Cards (إذا لم تكن الخطة منشأة بعد) */}
       {!plan ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-stretch">
           {/* Card: How It Works */}
@@ -602,196 +692,175 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
           </div>
         </div>
       ) : (
-        /* 3. Active Plan Workspace (مطابق لصورة 3 و4 و5 مع الميزة المطلوبة) */
-        <div className="space-y-6 sm:space-y-8">
-          {/* Top 3 Metric Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Card 1: Start Date */}
-            <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 text-right space-y-2 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 dark:text-slate-400 text-xs font-bold">
-                <span>موعد البداية</span>
-                <CalendarDays className="w-4 h-4 text-teal-600 dark:text-cyan-400" />
-              </div>
-              <div className="text-lg sm:text-xl font-black text-[#0F172A] dark:text-white">
-                {plan.startDateStr}
-              </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2 flex-wrap">
-                <span>
-                  المهمة المعروضة: اليوم{' '}
-                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-bold text-[#0F172A] dark:text-slate-200">
-                    {selectedDayNum} / 30
+        /* 3. Active Plan Workspace — Clean Hierarchy + Gamification */
+        <div className="space-y-5">
+          {/* Unified Command Header: Progress Bar + Daily Streak + XP + Focus Domains */}
+          <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-4 sm:p-6 shadow-xs space-y-4">
+            {/* Row 1: Title, Focus Pills, Streak/XP Badges & Quick Utility Actions */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+              <div className="space-y-2 text-right">
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h1 className="text-lg sm:text-xl font-black text-[#0F172A] dark:text-white flex items-center gap-2">
+                    <CalendarDays className="w-5 h-5 text-[#0F6E6E] dark:text-cyan-400" />
+                    <span>خطة التوازن لـ 30 يوماً</span>
+                  </h1>
+                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400">
+                    بدأت: {plan.startDateStr}
                   </span>
-                </span>
-                {selectedDayNum !== activeFocusDay.dayNumber && completedCount < 30 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedDayNum(activeFocusDay.dayNumber);
-                      setActiveWeekTab(activeFocusDay.weekNumber);
-                    }}
-                    className="text-[11px] font-bold text-[#0F6E6E] dark:text-cyan-400 hover:underline cursor-pointer"
-                  >
-                    الانتقال لليوم النشط (<span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{activeFocusDay.dayNumber}</span>)
-                  </button>
-                )}
-              </div>
-            </div>
+                </div>
 
-            {/* Card 2: Focus Domains */}
-            <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 text-right space-y-2.5 shadow-xs">
-              <div className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 text-slate-500 dark:text-slate-400 text-xs font-bold">
-                  <Target className="w-4 h-4 text-teal-600 dark:text-cyan-400" />
-                  <span>مجالات التركيز</span>
-                </span>
-                <button
-                  type="button"
-                  onClick={handleOpenFocusModal}
-                  className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 dark:hover:bg-teal-900/60 border border-teal-200/80 dark:border-teal-800/60 text-[#0F6E6E] dark:text-cyan-300 text-[11px] font-bold transition-all cursor-pointer"
-                >
-                  <SlidersHorizontal className="w-3 h-3" />
-                  <span>تخصيص المجالات</span>
-                </button>
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {sortedFocusDomains.map((id) => {
-                  const scoreVal = Number(scores?.[id]) || 0;
-                  return (
+                {/* Inline Focus Domains + Customize */}
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {sortedFocusDomains.map((id) => (
                     <span
                       key={id}
-                      className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-[#0F6E6E] dark:text-cyan-300 border border-teal-200/80 dark:border-teal-800/40 text-xs font-bold"
+                      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-teal-50/80 dark:bg-teal-950/40 text-[#0F6E6E] dark:text-cyan-300 border border-teal-200/70 dark:border-teal-800/40 text-[11px] font-bold"
                     >
                       <span>{DOMAIN_META[id]?.icon || '🎯'}</span>
                       <span>{getDomainArabicName(id)}</span>
-                      {scoreVal > 0 && (
-                        <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-[11px] opacity-85">
-                          ({scoreVal.toFixed(1)} / 10)
-                        </span>
-                      )}
                     </span>
-                  );
-                })}
-              </div>
-              <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2 flex-wrap">
-                <span>
-                  {isUsingCustomFocus
-                    ? 'مجالات مخصصة حسب اختيارك'
-                    : 'اختيرت تلقائياً من أدنى درجات عجلة حياتك'}
-                </span>
-                {isUsingCustomFocus && (
+                  ))}
                   <button
                     type="button"
-                    onClick={handleResetToWeakestDomains}
-                    className="text-[#0F6E6E] dark:text-cyan-400 font-bold hover:underline cursor-pointer"
+                    onClick={handleOpenFocusModal}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-teal-50 dark:hover:bg-cyan-950/50 text-slate-600 dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 text-[11px] font-bold transition-colors cursor-pointer"
                   >
-                    استعادة أضعف 3
+                    <SlidersHorizontal className="w-3 h-3" />
+                    <span>تخصيص</span>
                   </button>
-                )}
-              </div>
-            </div>
-
-            {/* Card 3: Plan Progress */}
-            <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 text-right space-y-2 shadow-xs flex items-center justify-between">
-              <div className="space-y-1">
-                <span className="text-xs font-bold text-slate-500 dark:text-slate-400 block">
-                  تقدم الخطة
-                </span>
-                <span className="text-lg sm:text-xl font-black text-[#0F172A] dark:text-white block">
-                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{completedCount} / 30</span> يوماً
-                </span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
-                  كل إنجاز صغير له أثر تراكمي
-                </span>
+                </div>
               </div>
 
-              {/* Progress Percentage Badge */}
-              <div className="w-14 h-14 rounded-full border-4 border-teal-500/20 bg-teal-50 dark:bg-teal-950/40 flex items-center justify-center flex-shrink-0">
-                <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-xs font-black text-[#0F6E6E] dark:text-cyan-300 font-mono">
-                  {progressPercent}%
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* 30-Day Interactive Visual Progress Bar with Weekly Milestones */}
-          <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 sm:p-6 shadow-xs space-y-3.5">
-            <div className="flex items-center justify-between text-xs sm:text-sm">
-              <span className="font-extrabold text-[#0F172A] dark:text-white flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
-                <span>مسار الإنجاز التراكمي لـ 30 يوماً</span>
-              </span>
-              <span className="font-bold text-[#0F6E6E] dark:text-cyan-400">
-                <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{completedCount} / 30</span> يوماً مُنجز (<span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{progressPercent}%</span>)
-              </span>
-            </div>
-
-            {/* Progress track */}
-            <div className="relative w-full h-3.5 bg-slate-100 dark:bg-slate-800/80 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-gradient-to-r from-teal-500 via-cyan-500 to-[#0F6E6E] dark:from-cyan-400 dark:via-teal-400 dark:to-emerald-400 transition-all duration-500 rounded-full shadow-xs"
-                style={{ width: `${progressPercent}%` }}
-              />
-            </div>
-
-            {/* 4 Weekly Milestones */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center pt-1 text-[11px]">
-              {[
-                { week: 1, label: 'الأسبوع 1', days: 'يوم 1 - 7', target: 7 },
-                { week: 2, label: 'الأسبوع 2', days: 'يوم 8 - 14', target: 14 },
-                { week: 3, label: 'الأسبوع 3', days: 'يوم 15 - 21', target: 21 },
-                { week: 4, label: 'الأسبوع 4', days: 'يوم 22 - 30', target: 30 },
-              ].map((m) => {
-                const isPassed = completedCount >= m.target;
-                const isCurrent =
-                  completedCount < m.target &&
-                  (m.week === 1 || completedCount >= [0, 7, 14, 21][m.week - 1]);
-                return (
-                  <button
-                    key={m.week}
-                    type="button"
-                    onClick={() => handleSelectWeek(m.week)}
-                    className={`p-2.5 rounded-xl border cursor-pointer transition-all ${isPassed
-                      ? 'bg-emerald-50/80 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 font-bold'
-                      : isCurrent
-                        ? 'bg-teal-50/80 dark:bg-teal-950/40 border-teal-400 dark:border-cyan-500 text-teal-800 dark:text-cyan-300 font-extrabold ring-1 ring-teal-400/50'
-                        : 'bg-slate-50 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400'
+              {/* Gamification Strip (Streak + XP) + Compact Utility Controls */}
+              <div className="flex items-center gap-2 flex-wrap justify-start lg:justify-end">
+                {/* Daily Streak Badge */}
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-xs font-black transition-all ${gamification.currentStreak > 0
+                      ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-300/80 dark:border-amber-700/60 text-amber-800 dark:text-amber-300'
+                      : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
+                    }`}
+                  title={`أطول سلسلة: ${gamification.bestStreak} يوم`}
+                >
+                  <Flame
+                    className={`w-4 h-4 ${gamification.currentStreak > 0 ? 'text-amber-500 fill-amber-500/30' : 'text-slate-400'
                       }`}
+                  />
+                  <span>السلسلة:</span>
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">
+                    {gamification.currentStreak}
+                  </span>
+                  <span>{gamification.currentStreak === 1 ? 'يوم' : 'أيام'}</span>
+                </div>
+
+                {/* Points / XP Badge */}
+                <div
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-2xl border text-xs font-black transition-transform duration-300 ${xpPulse ? 'scale-110 ring-2 ring-teal-400/50' : 'scale-100'
+                    } ${gamification.xpPoints > 0
+                      ? 'bg-teal-50 dark:bg-cyan-950/50 border-teal-300/80 dark:border-cyan-700/60 text-[#0F6E6E] dark:text-cyan-300'
+                      : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400'
+                    }`}
+                  title={`+${XP_PER_TASK} XP لكل مهمة • +${XP_DAY_BONUS} XP لإتمام اليوم`}
+                >
+                  <Zap
+                    className={`w-4 h-4 ${gamification.xpPoints > 0 ? 'text-teal-600 dark:text-cyan-400 fill-current/20' : 'text-slate-400'
+                      }`}
+                  />
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">
+                    {gamification.xpPoints} XP
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1.5 print:hidden">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    title="طباعة أو تصدير PDF"
+                    aria-label="طباعة أو تصدير PDF"
+                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                   >
-                    <div className="flex items-center justify-center gap-1">
-                      {isPassed ? (
-                        <Check className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                      ) : (
-                        <span className="w-1.5 h-1.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-                      )}
-                      <span>{m.label}</span>
-                    </div>
-                    <span className="text-[10px] opacity-75 block mt-0.5">{isolateNumbersInText(m.days)}</span>
+                    <Printer className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
                   </button>
-                );
-              })}
+                  <button
+                    type="button"
+                    onClick={handleExportText}
+                    title={copiedToast ? 'تم النسخ!' : 'نسخ الخطة نصياً'}
+                    aria-label="نسخ الخطة نصياً"
+                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
+                  >
+                    {copiedToast ? (
+                      <Check className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                    ) : (
+                      <Download className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowResetConfirm(true)}
+                    title="إنشاء خطة جديدة"
+                    aria-label="إنشاء خطة جديدة"
+                    className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 hover:bg-amber-50 dark:hover:bg-amber-950/30 text-slate-500 hover:text-amber-600 dark:text-slate-400 transition-colors cursor-pointer"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Row 2: Clean Overall Top Progress Bar */}
+            <div className="pt-1 space-y-1.5">
+              <div className="flex items-center justify-between gap-2 text-xs font-bold flex-wrap">
+                <span className="text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
+                  <span>تقدم الخطة الكلي:</span>
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-black text-[#0F172A] dark:text-white">
+                    {gamification.completedTasks} / {gamification.totalTasks}
+                  </span>
+                  <span>مهمة</span>
+                  <span className="text-slate-300 dark:text-slate-700">•</span>
+                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-slate-500 dark:text-slate-400">
+                    {completedCount} / 30
+                  </span>
+                  <span className="text-slate-500 dark:text-slate-400">يوماً</span>
+                </span>
+                <span
+                  dir="ltr"
+                  style={{ unicodeBidi: 'isolate' }}
+                  className="font-mono font-black text-xs px-2 py-0.5 rounded-lg bg-[#0F6E6E]/10 dark:bg-cyan-500/15 text-[#0F6E6E] dark:text-cyan-300"
+                >
+                  {gamification.overallPercent}%
+                </span>
+              </div>
+              <div className="relative w-full h-2.5 bg-slate-100 dark:bg-slate-800/90 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-[#0F6E6E] via-teal-500 to-emerald-500 dark:from-cyan-400 dark:via-teal-400 dark:to-emerald-400 transition-all duration-500 rounded-full"
+                  style={{ width: `${gamification.overallPercent}%` }}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Main Plan Area: Two Columns (Interactive on screen; full 30-day Arabic table rendered cleanly in PDF print) */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start print:hidden">
-            {/* Left Card: أهداف اليوم المختارة (1 إلى 4 أهداف) + الاقتراحات */}
-            <div className="lg:col-span-5 bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 space-y-5 shadow-sm sticky top-6">
+          {/* Main Plan Area: Focused Two-Column Hierarchy (Today's Focus + Collapsible Weeks) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start print:hidden">
+            {/* Column 1: تركيز اليوم (Today's Focus Card) */}
+            <div className="lg:col-span-6 bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-5 sm:p-6 space-y-4 shadow-sm lg:sticky lg:top-6">
               {/* Day & Domain Header */}
               <div className="flex items-center justify-between gap-2 pb-3 border-b border-slate-100 dark:border-slate-800 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs font-extrabold text-slate-500 dark:text-slate-400">
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full bg-[#0F6E6E] dark:bg-[#0891B2] text-white text-[11px] font-black">
+                    <span>تركيز اليوم</span>
+                  </span>
+                  <span className="text-xs font-extrabold text-[#0F172A] dark:text-slate-200">
                     اليوم <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{selectedDayNum} / 30</span>
                   </span>
-                  {currentTask?.isCompleted ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 text-[10px] font-black border border-emerald-200 dark:border-emerald-800/60">
-                      <Check className="w-3 h-3 stroke-[3]" />
-                      <span>مُنجز</span>
-                    </span>
-                  ) : selectedDayNum === activeFocusDay.dayNumber ? (
-                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-teal-50 dark:bg-cyan-950/60 text-[#0F6E6E] dark:text-cyan-300 text-[10px] font-black border border-teal-200 dark:border-cyan-800/60">
-                      <span>اليوم النشط</span>
-                    </span>
-                  ) : null}
+                  {selectedDayNum !== activeFocusDay.dayNumber && completedCount < 30 && (
+                    <button
+                      type="button"
+                      onClick={() => selectDayAndSyncWeek(activeFocusDay.dayNumber)}
+                      className="text-[11px] font-bold text-[#0F6E6E] dark:text-cyan-400 hover:underline cursor-pointer"
+                    >
+                      العودة لليوم النشط (<span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{activeFocusDay.dayNumber}</span>)
+                    </button>
+                  )}
                 </div>
                 <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 text-xs font-bold">
                   <span>{currentTask?.domainIcon || '🎯'}</span>
@@ -799,60 +868,105 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                 </span>
               </div>
 
-              {/* Daily Goals Progress Counter Badge (1 to 4 goals per day) */}
-              <div className="flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-[#071318] border border-slate-200/80 dark:border-slate-800 flex-wrap">
-                <span className="text-xs font-black text-[#0F172A] dark:text-white flex items-center gap-1.5">
-                  <Target className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-cyan-400" />
-                  <span>
-                    الأهداف المنجزة اليوم:{' '}
+              {/* Live Daily Completion Counter (✓ / ✕ partial tracking) */}
+              <div className="px-3.5 py-2.5 rounded-2xl bg-slate-50 dark:bg-[#071318] border border-slate-200/80 dark:border-slate-800 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="text-xs font-black text-[#0F172A] dark:text-white flex items-center gap-1.5 flex-wrap">
+                    <Target className="w-3.5 h-3.5 text-[#0F6E6E] dark:text-cyan-400 flex-shrink-0" />
+                    <span>إنجاز اليوم:</span>
                     <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-[#0F6E6E] dark:text-cyan-300">
-                      {dayCompletedGoalsCount} / {currentDayGoals.length}
+                      {dayStats.completed} / {dayStats.total}
+                    </span>
+                    <span className="text-slate-600 dark:text-slate-300 font-bold">مكتمل</span>
+                    <span className="text-slate-300 dark:text-slate-700">|</span>
+                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-emerald-700 dark:text-emerald-400">
+                      {dayStats.percent}%
+                    </span>
+                    {dayStats.missed > 0 && (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/70 dark:border-rose-900/60 text-[10px] font-bold">
+                        <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{dayStats.missed}</span>
+                        <span>فائت</span>
+                      </span>
+                    )}
+                  </span>
+                  <span
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${isDayAtMaxGoals
+                        ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
+                        : 'bg-white dark:bg-[#0B161C] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                      }`}
+                  >
+                    المجدولة:{' '}
+                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-black">
+                      {dayStats.total} / {MAX_DAILY_GOALS}
                     </span>
                   </span>
-                </span>
-                <span
-                  className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                    isDayAtMaxGoals
-                      ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800/60'
-                      : 'bg-white dark:bg-[#0B161C] text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
-                  }`}
-                >
-                  المجدولة اليوم:{' '}
-                  <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-black">
-                    {currentDayGoals.length} / {MAX_DAILY_GOALS}
-                  </span>
-                </span>
+                </div>
+                <div className="w-full h-1.5 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden flex">
+                  <div
+                    className="h-full bg-emerald-500 dark:bg-emerald-400 transition-all duration-300"
+                    style={{ width: `${dayStats.percent}%` }}
+                  />
+                  {dayStats.missed > 0 && dayStats.total > 0 && (
+                    <div
+                      className="h-full bg-rose-400/70 dark:bg-rose-500/60 transition-all duration-300"
+                      style={{ width: `${Math.round((dayStats.missed / dayStats.total) * 100)}%` }}
+                    />
+                  )}
+                </div>
               </div>
 
-              {/* Active Daily Goals Checklist (1 to 4 independent toggleable goals) */}
+              {/* Active Daily Goals Checklist (1 to 4 tasks with ✓ Done & ✕ Missed toggle buttons) */}
               <div className="space-y-2">
                 {currentDayGoals.map((goal, gIdx) => {
                   const cleanGoalText = localizeDomainText(goal.text);
+                  const goalStatus = resolveDailyGoalStatus(goal);
+                  const isDone = goalStatus === 'completed';
+                  const isMissed = goalStatus === 'missed';
+
                   return (
                     <div
                       key={goal.id}
-                      className={`w-full text-right p-3.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-start gap-3 border group ${
-                        goal.isCompleted
-                          ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-300/80 dark:border-emerald-800/70 text-emerald-900 dark:text-emerald-200'
-                          : 'bg-[#0F6E6E]/8 dark:bg-cyan-950/40 border-[#0F6E6E]/40 dark:border-cyan-500/40 text-[#0F172A] dark:text-white shadow-2xs'
-                      }`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleToggleSingleGoalCompletion(goal.id)}
-                        aria-label={goal.isCompleted ? `إلغاء إنجاز الهدف ${gIdx + 1}` : `تحديد الهدف ${gIdx + 1} كمُنجز`}
-                        className={`w-6 h-6 rounded-lg border flex items-center justify-center flex-shrink-0 mt-0.5 transition-all cursor-pointer ${
-                          goal.isCompleted
-                            ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white'
-                            : 'bg-white dark:bg-[#0B161C] border-[#0F6E6E]/50 dark:border-cyan-400/60 text-transparent hover:border-[#0F6E6E] dark:hover:border-cyan-300'
+                      className={`w-full text-right p-3.5 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-start gap-2.5 border group ${isDone
+                          ? 'bg-emerald-50/75 dark:bg-emerald-950/30 border-emerald-300/80 dark:border-emerald-800/70 text-emerald-950 dark:text-emerald-100'
+                          : isMissed
+                            ? 'bg-rose-50/45 dark:bg-rose-950/15 border-rose-200/70 dark:border-rose-900/50 text-slate-500 dark:text-slate-400'
+                            : 'bg-[#0F6E6E]/8 dark:bg-cyan-950/40 border-[#0F6E6E]/40 dark:border-cyan-500/40 text-[#0F172A] dark:text-white shadow-2xs'
                         }`}
-                      >
-                        <Check className="w-3.5 h-3.5 stroke-[3]" />
-                      </button>
+                    >
+                      {/* Explicit ✓ Done & ✕ Missed Action Buttons */}
+                      <div role="group" aria-label={`حالة الهدف ${gIdx + 1}`} className="flex items-center gap-1 flex-shrink-0 mt-0.5">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleGoalStatus(selectedDayNum, goal.id, 'completed')}
+                          aria-pressed={isDone}
+                          aria-label={isDone ? `إلغاء إنجاز الهدف ${gIdx + 1}` : `تحديد الهدف ${gIdx + 1} كمُنجز`}
+                          title="تم الإنجاز (✓)"
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${isDone
+                              ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-2xs'
+                              : 'bg-white dark:bg-[#0B161C] border-slate-300 dark:border-slate-600 text-slate-400 hover:border-emerald-500 hover:text-emerald-600 dark:hover:text-emerald-400'
+                            }`}
+                        >
+                          <Check className="w-3.5 h-3.5 stroke-[3]" />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleToggleGoalStatus(selectedDayNum, goal.id, 'missed')}
+                          aria-pressed={isMissed}
+                          aria-label={isMissed ? `إلغاء تحديد الهدف ${gIdx + 1} كفائت` : `تحديد الهدف ${gIdx + 1} كفائت`}
+                          title="فائت / لم يُنجز (✕)"
+                          className={`w-7 h-7 rounded-lg border flex items-center justify-center transition-all cursor-pointer ${isMissed
+                              ? 'bg-rose-600/85 hover:bg-rose-700 border-rose-600 text-white shadow-2xs'
+                              : 'bg-white dark:bg-[#0B161C] border-slate-300 dark:border-slate-600 text-slate-400 hover:border-rose-400 hover:text-rose-500 dark:hover:text-rose-400'
+                            }`}
+                        >
+                          <X className="w-3.5 h-3.5 stroke-[2.75]" />
+                        </button>
+                      </div>
 
                       <button
                         type="button"
-                        onClick={() => handleToggleSingleGoalCompletion(goal.id)}
+                        onClick={() => handleToggleGoalStatus(selectedDayNum, goal.id, 'completed')}
                         className="flex-1 min-w-0 text-right cursor-pointer"
                       >
                         <div className="flex items-center gap-1.5 mb-0.5 flex-wrap">
@@ -864,11 +978,24 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                               مخصص
                             </span>
                           )}
+                          {isDone && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-black">
+                              منجز ✓
+                            </span>
+                          )}
+                          {isMissed && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-rose-500/10 text-rose-700 dark:text-rose-300 font-black">
+                              فائت ✕
+                            </span>
+                          )}
                         </div>
                         <span
-                          className={`leading-relaxed block break-words ${
-                            goal.isCompleted ? 'line-through opacity-75' : ''
-                          }`}
+                          className={`leading-relaxed block break-words ${isDone
+                              ? 'line-through text-emerald-800/75 dark:text-emerald-300/75'
+                              : isMissed
+                                ? 'line-through text-slate-400 dark:text-slate-500 decoration-rose-400/70'
+                                : ''
+                            }`}
                         >
                           {isolateNumbersInText(cleanGoalText)}
                         </span>
@@ -878,11 +1005,11 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => handleRemoveDailyGoal(goal.id)}
-                          aria-label="إزالة الهدف من اليوم"
-                          title="إزالة الهدف"
-                          className="p-1 rounded-lg text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer flex-shrink-0"
+                          aria-label="حذف الهدف من اليوم"
+                          title="حذف الهدف"
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-500 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer flex-shrink-0"
                         >
-                          <X className="w-3.5 h-3.5" />
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       )}
                     </div>
@@ -908,11 +1035,10 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                   <button
                     type="submit"
                     disabled={!customInputText.trim()}
-                    className={`inline-flex items-center gap-1 px-3.5 py-2.5 rounded-xl disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-black transition-all shadow-xs cursor-pointer flex-shrink-0 ${
-                      isDayAtMaxGoals
+                    className={`inline-flex items-center gap-1 px-3.5 py-2.5 rounded-xl disabled:opacity-40 disabled:pointer-events-none text-white text-xs font-black transition-all shadow-xs cursor-pointer flex-shrink-0 ${isDayAtMaxGoals
                         ? 'bg-amber-600 hover:bg-amber-700'
                         : 'bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-cyan-500'
-                    }`}
+                      }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>إضافة</span>
@@ -930,492 +1056,442 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                 )}
               </div>
 
-              {/* Selectable Smart Suggestions (Click to add up to 4 goals/day or remove) */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                  <span>أضف من الاقتراحات الذكية (حتى 4 أهداف):</span>
-                </div>
-                <div className="space-y-2">
-                  {currentTask?.defaultSuggestions.map((suggestion, idx) => {
-                    const isIncluded = currentDayGoals.some((g) => g.text === suggestion);
+              {/* Collapsible Smart Suggestions Drawer (keeps Today's Focus clutter-free) */}
+              <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/60 dark:bg-[#071318]/60 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowSuggestionsDrawer((prev) => !prev)}
+                  aria-expanded={showSuggestionsDrawer}
+                  className="w-full px-3.5 py-2.5 flex items-center justify-between text-xs font-bold text-slate-600 dark:text-slate-300 hover:text-[#0F6E6E] dark:hover:text-cyan-300 transition-colors cursor-pointer"
+                >
+                  <span className="inline-flex items-center gap-1.5">
+                    <Lightbulb className="w-3.5 h-3.5 text-amber-500" />
+                    <span>اقتراحات ذكية إضافية لهذا اليوم ({currentTask?.defaultSuggestions.length || 0})</span>
+                  </span>
+                  {showSuggestionsDrawer ? (
+                    <ChevronUp className="w-4 h-4 flex-shrink-0" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                  )}
+                </button>
 
-                    return (
-                      <button
-                        key={idx}
-                        type="button"
-                        onClick={() => handleToggleSuggestionInDay(suggestion)}
-                        className={`w-full text-right p-3 rounded-2xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between gap-2.5 border ${
-                          isIncluded
-                            ? 'bg-teal-50/70 dark:bg-cyan-950/35 border-[#0F6E6E]/50 dark:border-cyan-500/50 text-[#0F6E6E] dark:text-cyan-300'
-                            : 'bg-slate-50/80 dark:bg-slate-800/60 border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-teal-400 dark:hover:border-cyan-500'
-                        }`}
-                      >
-                        <span className="leading-relaxed flex-1">{isolateNumbersInText(suggestion)}</span>
-                        <span
-                          className={`text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 flex-shrink-0 ${
-                            isIncluded
-                              ? 'bg-[#0F6E6E] dark:bg-cyan-600 text-white'
-                              : 'bg-white dark:bg-[#0B161C] text-[#0F6E6E] dark:text-cyan-300 border border-slate-200 dark:border-slate-700'
-                          }`}
+                {showSuggestionsDrawer && (
+                  <div className="px-3.5 pb-3.5 pt-1 space-y-2 border-t border-slate-200/70 dark:border-slate-800">
+                    {currentTask?.defaultSuggestions.map((suggestion, idx) => {
+                      const isIncluded = currentDayGoals.some((g) => g.text === suggestion);
+
+                      return (
+                        <button
+                          key={idx}
+                          type="button"
+                          onClick={() => handleToggleSuggestionInDay(suggestion)}
+                          className={`w-full text-right p-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer flex items-center justify-between gap-2.5 border ${isIncluded
+                              ? 'bg-teal-50/70 dark:bg-cyan-950/35 border-[#0F6E6E]/50 dark:border-cyan-500/50 text-[#0F6E6E] dark:text-cyan-300'
+                              : 'bg-white dark:bg-[#0B161C] border-slate-200/80 dark:border-slate-700/60 text-slate-700 dark:text-slate-300 hover:border-teal-400 dark:hover:border-cyan-500'
+                            }`}
                         >
-                          {isIncluded ? (
-                            <>
-                              <Check className="w-3 h-3 stroke-[3]" />
-                              <span>مضاف</span>
-                            </>
-                          ) : (
-                            <>
-                              <Plus className="w-3 h-3" />
-                              <span>إضافة</span>
-                            </>
-                          )}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Time Estimate */}
-              <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
-                <Clock className="w-4 h-4 text-slate-400" />
-                <span>اقتراح: 10 دقائق تقريباً لكل هدف</span>
+                          <span className="leading-relaxed flex-1">{isolateNumbersInText(suggestion)}</span>
+                          <span
+                            className={`text-[10px] font-black px-2 py-0.5 rounded-lg flex items-center gap-1 flex-shrink-0 ${isIncluded
+                                ? 'bg-[#0F6E6E] dark:bg-cyan-600 text-white'
+                                : 'bg-slate-50 dark:bg-slate-800 text-[#0F6E6E] dark:text-cyan-300 border border-slate-200 dark:border-slate-700'
+                              }`}
+                          >
+                            {isIncluded ? (
+                              <>
+                                <Check className="w-3 h-3 stroke-[3]" />
+                                <span>مضاف</span>
+                              </>
+                            ) : (
+                              <>
+                                <Plus className="w-3 h-3" />
+                                <span>إضافة</span>
+                              </>
+                            )}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Primary Complete Action Button (Marks all active daily goals complete/incomplete) */}
-              <button
-                type="button"
-                onClick={() => handleToggleDayCompletion(selectedDayNum, true)}
-                className={`w-full py-3.5 px-5 rounded-2xl font-black text-xs sm:text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer ${currentTask?.isCompleted
-                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
-                  : 'bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-cyan-500 text-white hover:scale-[1.01] active:scale-98'
-                  }`}
-              >
-                <Check className="w-4 h-4 stroke-[3]" />
-                <span>
-                  {currentTask?.isCompleted
-                    ? `تم إنجاز أهداف اليوم (${dayCompletedGoalsCount} / ${currentDayGoals.length}) — انقر للإلغاء`
-                    : currentDayGoals.length > 1
-                      ? `أنجزت جميع أهداف اليوم (${currentDayGoals.length})`
-                      : 'أنجزت مهمة اليوم'}
-                </span>
-              </button>
-
-              {/* Bottom Day Navigation */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-bold text-slate-500 dark:text-slate-400">
+              <div className="space-y-2">
                 <button
                   type="button"
-                  disabled={selectedDayNum <= 1}
-                  onClick={() => setSelectedDayNum((prev) => Math.max(1, prev - 1))}
-                  className="inline-flex items-center gap-1.5 hover:text-[#0F6E6E] dark:hover:text-cyan-400 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                  onClick={() => handleToggleDayCompletion(selectedDayNum, true)}
+                  className={`w-full py-3 px-5 rounded-2xl font-black text-xs sm:text-sm shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer ${currentTask?.isCompleted
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                    : 'bg-[#0F6E6E] hover:bg-[#0A4B4B] dark:bg-[#0891B2] dark:hover:bg-cyan-500 text-white hover:scale-[1.01] active:scale-98'
+                    }`}
                 >
-                  <ArrowRight className="w-3.5 h-3.5" />
-                  <span>السابق</span>
+                  <Check className="w-4 h-4 stroke-[3]" />
+                  <span>
+                    {currentTask?.isCompleted
+                      ? `تم إنجاز اليوم (${dayCompletedGoalsCount} / ${currentDayGoals.length}) — انقر للإلغاء`
+                      : currentDayGoals.length > 1
+                        ? `أنجزت جميع أهداف اليوم (${currentDayGoals.length})`
+                        : 'أنجزت مهمة اليوم'}
+                  </span>
                 </button>
 
-                <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono font-bold">
-                  {selectedDayNum} / 30
-                </span>
+                <div className="flex items-center justify-between text-[11px] font-bold text-slate-500 dark:text-slate-400 pt-1">
+                  <button
+                    type="button"
+                    disabled={selectedDayNum <= 1}
+                    onClick={() => selectDayAndSyncWeek(Math.max(1, selectedDayNum - 1))}
+                    className="inline-flex items-center gap-1 hover:text-[#0F6E6E] dark:hover:text-cyan-400 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                  >
+                    <ArrowRight className="w-3.5 h-3.5" />
+                    <span>السابق</span>
+                  </button>
 
-                <button
-                  type="button"
-                  disabled={selectedDayNum >= 30}
-                  onClick={() => setSelectedDayNum((prev) => Math.min(30, prev + 1))}
-                  className="inline-flex items-center gap-1.5 hover:text-[#0F6E6E] dark:hover:text-cyan-400 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
-                >
-                  <span>اليوم التالي</span>
-                  <ArrowLeft className="w-3.5 h-3.5" />
-                </button>
+                  <span className="inline-flex items-center gap-1">
+                    <Clock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>~10 دقائق لكل مهمة</span>
+                  </span>
+
+                  <button
+                    type="button"
+                    disabled={selectedDayNum >= 30}
+                    onClick={() => selectDayAndSyncWeek(Math.min(30, selectedDayNum + 1))}
+                    className="inline-flex items-center gap-1 hover:text-[#0F6E6E] dark:hover:text-cyan-400 disabled:opacity-30 disabled:pointer-events-none cursor-pointer"
+                  >
+                    <span>اليوم التالي</span>
+                    <ArrowLeft className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Right Area: Weeks & Days Selector (7 Columns on Desktop) */}
-            <div className="lg:col-span-7 bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-7 space-y-6 shadow-sm">
-              {/* Header with Title and Export Button */}
-              <div className="flex items-center justify-between flex-wrap gap-3 pb-3 border-b border-slate-100 dark:border-slate-800">
-                <div className="text-right">
-                  <h3 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
-                    رحلتك خلال 30 يومًا
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                    اختر أي يوم للاطلاع على مهمته واختيار اقتراحك أو تسجيل إنجازه
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-2">
+            {/* Column 2: Collapsible Weekly Roadmap (Week 1–4 + الختام) */}
+            <div className="lg:col-span-6 space-y-3">
+              <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-4 sm:p-5 space-y-3 shadow-sm">
+                <div className="flex items-center justify-between gap-2 pb-2 border-b border-slate-100 dark:border-slate-800 flex-wrap">
+                  <div className="text-right">
+                    <h3 className="text-sm sm:text-base font-black text-[#0F172A] dark:text-white flex items-center gap-2">
+                      <CalendarDays className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
+                      <span>خريطة الأسابيع الـ 4</span>
+                    </h3>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                      افتح أسبوعاً واحداً في كل مرة لتصفح أيامه دون تشتت
+                    </p>
+                  </div>
                   <button
                     type="button"
-                    onClick={() => window.print()}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-100 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                    title="طباعة أو تصدير الخطة بصيغة PDF"
+                    onClick={() => onNavigate('dashboard')}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 transition-colors cursor-pointer"
                   >
-                    <Printer className="w-3.5 h-3.5 text-teal-600 dark:text-cyan-400" />
-                    <span>تصدير PDF / طباعة</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleExportText}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                  >
-                    <Download className="w-3.5 h-3.5 text-teal-600 dark:text-cyan-400" />
-                    <span>{copiedToast ? 'تم النسخ إلى الحافظة! ✓' : 'حفظ الخطة نصياً'}</span>
+                    <span>لوحة التحكم</span>
+                    <ArrowLeft className="w-3.5 h-3.5" />
                   </button>
                 </div>
-              </div>
 
-              {/* Week Tabs Selector (الأسبوع 1، 2، 3، 4، الختام) */}
-              <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
-                {[1, 2, 3, 4, 5].map((wNum) => {
-                  const weekTasks = plan.days.filter((d) => d.weekNumber === wNum);
-                  const weekCompleted = weekTasks.filter((d) => d.isCompleted).length;
-                  const isWeekFullyCompleted = weekTasks.length > 0 && weekCompleted === weekTasks.length;
-                  const isWeekActive = activeWeekTab === wNum;
-
-                  return (
-                    <button
-                      key={wNum}
-                      type="button"
-                      onClick={() => handleSelectWeek(wNum)}
-                      className={`px-4 py-2.5 rounded-2xl text-xs font-bold transition-all flex-shrink-0 cursor-pointer border ${isWeekActive
-                          ? isWeekFullyCompleted
-                            ? 'bg-emerald-700 dark:bg-emerald-600 text-white border-emerald-700 shadow-sm font-black'
-                            : 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-[#0F6E6E] shadow-sm font-black'
-                          : isWeekFullyCompleted
-                            ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800 hover:bg-emerald-100/70'
-                            : 'bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
-                        }`}
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        {isWeekFullyCompleted && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                        <span>{wNum === 5 ? 'الختام' : `الأسبوع ${wNum}`}</span>
-                      </span>
-                      <span className="block text-[10px] opacity-85 mt-0.5">
-                        <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{weekCompleted} / {weekTasks.length}</span> مكتمل
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Active Week Theme Banner */}
-              <div className="p-4 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200/80 dark:border-teal-800/40 text-right space-y-1">
-                <span className="text-xs sm:text-sm font-black text-[#0F6E6E] dark:text-cyan-300 block">
-                  {WEEK_INFO[activeWeekTab]?.title}
-                </span>
-                <span className="text-xs text-slate-600 dark:text-slate-300 block">
-                  {WEEK_INFO[activeWeekTab]?.subtitle}
-                </span>
-              </div>
-
-              {/* Day Buttons Row for Active Week */}
-              <div className="grid grid-cols-4 sm:grid-cols-7 gap-2.5">
-                {activeWeekDays.map((day) => {
-                  const isSelected = selectedDayNum === day.dayNumber;
-                  const isCompleted = day.isCompleted;
-                  const isActiveTarget = !isCompleted && day.dayNumber === activeFocusDay.dayNumber;
-                  const dayGoalsList = resolveDayGoals(day);
-                  const dayDoneGoals = dayGoalsList.filter((g) => g.isCompleted).length;
-
-                  return (
-                    <button
-                      key={day.dayNumber}
-                      type="button"
-                      onClick={() => setSelectedDayNum(day.dayNumber)}
-                      className={`relative p-3 rounded-2xl border text-center transition-all cursor-pointer flex flex-col items-center justify-between min-h-[84px] ${isSelected
-                        ? isCompleted
-                          ? 'bg-emerald-700 dark:bg-emerald-600 text-white border-emerald-600 dark:border-emerald-400 shadow-md ring-2 ring-emerald-400/40'
-                          : 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-[#0F6E6E] dark:border-cyan-400 shadow-md ring-2 ring-teal-500/35'
-                        : isCompleted
-                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-800 hover:border-emerald-400'
-                          : isActiveTarget
-                            ? 'bg-teal-50/80 dark:bg-cyan-950/30 text-[#0F6E6E] dark:text-cyan-300 border-teal-400 dark:border-cyan-500 ring-1 ring-teal-400/40'
-                            : 'bg-slate-50 dark:bg-slate-800/70 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-400'
-                        }`}
-                    >
-                      {isCompleted && (
-                        <span
-                          className={`absolute top-1.5 start-1.5 w-4 h-4 rounded-full flex items-center justify-center ${isSelected
-                            ? 'bg-white/25 text-white'
-                            : 'bg-emerald-600 text-white dark:bg-emerald-500'
-                            }`}
-                          title="مُنجز"
-                        >
-                          <Check className="w-2.5 h-2.5 stroke-[3]" />
-                        </span>
-                      )}
-                      {!isCompleted && dayGoalsList.length > 1 ? (
-                        <span
-                          dir="ltr"
-                          style={{ unicodeBidi: 'isolate' }}
-                          className={`absolute top-1.5 start-1.5 px-1 py-0.2 rounded text-[9px] font-mono font-black ${
-                            isSelected
-                              ? 'bg-white/20 text-white'
-                              : 'bg-teal-500/15 text-[#0F6E6E] dark:text-cyan-300'
-                          }`}
-                          title={`${dayDoneGoals} من ${dayGoalsList.length} أهداف منجزة`}
-                        >
-                          {dayDoneGoals}/{dayGoalsList.length}
-                        </span>
-                      ) : !isCompleted && isActiveTarget ? (
-                        <span
-                          className={`absolute top-1.5 start-1.5 w-2 h-2 rounded-full ${isSelected ? 'bg-amber-300' : 'bg-[#0F6E6E] dark:bg-cyan-400 animate-pulse'
-                            }`}
-                          title="اليوم النشط"
-                        />
-                      ) : null}
-                      <span className="text-[11px] font-bold opacity-80">يوم</span>
-                      <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-base font-black font-mono">
-                        {day.dayNumber}
-                      </span>
-                      <span className="text-sm mt-1">{day.domainIcon}</span>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Interactive Weekly Schedule Table / Checklist */}
-              <div className="space-y-3 pt-2">
-                <div className="flex items-center justify-between gap-2">
-                  <h4 className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-white flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
-                    <span>جدول مهام الأسبوع التفاعلي</span>
-                  </h4>
-                  <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                    {activeWeekTab === 5 ? 'الأسبوع الختامي' : `الأسبوع ${activeWeekTab}`}
-                  </span>
-                </div>
-
-                {/* Desktop Interactive Table */}
-                <div className="hidden md:block overflow-hidden rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/40 dark:bg-[#071318]/60">
-                  <table className="w-full text-right border-collapse">
-                    <thead>
-                      <tr className="bg-slate-100/80 dark:bg-[#112028] border-b border-slate-200/90 dark:border-slate-800 text-[11px] font-black text-slate-600 dark:text-slate-300">
-                        <th className="py-3 px-4 w-44">اليوم والمجال</th>
-                        <th className="py-3 px-4">أهداف اليوم المختارة</th>
-                        <th className="py-3 px-4 w-28 text-center">الإنجاز</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-200/70 dark:divide-slate-800/70 text-xs">
-                      {activeWeekDays.map((day) => {
-                        const isFocused = day.dayNumber === selectedDayNum;
-                        const domainLabel = getDomainArabicName(day.domainId || day.domainTitle);
-                        const dayGoals = resolveDayGoals(day);
-                        const doneCount = dayGoals.filter((g) => g.isCompleted).length;
-
-                        return (
-                          <tr
-                            key={day.dayNumber}
-                            onClick={() => setSelectedDayNum(day.dayNumber)}
-                            className={`transition-colors cursor-pointer ${isFocused
-                                ? 'bg-teal-50/75 dark:bg-cyan-950/35'
-                                : 'hover:bg-white dark:hover:bg-[#0E1D24]'
-                              }`}
-                          >
-                            <td className="py-3 px-4 align-middle">
-                              <div className="flex flex-col gap-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="font-black text-[#0F172A] dark:text-white">
-                                    يوم <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{day.dayNumber}</span>
-                                  </span>
-                                  {dayGoals.length > 1 && (
-                                    <span
-                                      dir="ltr"
-                                      style={{ unicodeBidi: 'isolate' }}
-                                      className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded bg-teal-500/10 dark:bg-cyan-500/15 text-[#0F6E6E] dark:text-cyan-300"
-                                    >
-                                      {doneCount}/{dayGoals.length}
-                                    </span>
-                                  )}
-                                </div>
-                                <span className="inline-flex items-center gap-1 w-fit px-2 py-0.5 rounded-md bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700/80 text-[10px] font-bold text-[#0F6E6E] dark:text-cyan-300">
-                                  <span>{day.domainIcon || '🎯'}</span>
-                                  <span className="truncate max-w-[120px]">{domainLabel}</span>
-                                </span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-4 align-middle">
-                              <div className="space-y-1">
-                                {dayGoals.map((goal) => (
-                                  <div key={goal.id} className="flex items-start gap-2">
-                                    <span
-                                      className={`mt-1 w-2 h-2 rounded-full flex-shrink-0 ${
-                                        goal.isCompleted
-                                          ? 'bg-emerald-500'
-                                          : 'bg-slate-300 dark:bg-slate-600'
-                                      }`}
-                                    />
-                                    <span
-                                      className={`leading-relaxed font-semibold ${goal.isCompleted
-                                          ? 'line-through text-slate-400 dark:text-slate-500'
-                                          : 'text-[#0F172A] dark:text-slate-200'
-                                        }`}
-                                    >
-                                      {isolateNumbersInText(localizeDomainText(goal.text))}
-                                    </span>
-                                    {goal.isCustom && (
-                                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-teal-500/15 dark:bg-cyan-500/20 text-[#0F6E6E] dark:text-cyan-300 flex-shrink-0">
-                                        مخصصة
-                                      </span>
-                                    )}
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                            <td className="py-3 px-4 align-middle text-center">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleToggleDayCompletion(day.dayNumber, false);
-                                }}
-                                aria-label={day.isCompleted ? `إلغاء إنجاز يوم ${day.dayNumber}` : `تحديد يوم ${day.dayNumber} كمُنجز`}
-                                className={`mx-auto w-9 h-9 rounded-xl flex items-center justify-center border transition-all cursor-pointer ${day.isCompleted
-                                    ? 'bg-emerald-600 hover:bg-emerald-700 border-emerald-600 text-white shadow-xs'
-                                    : 'bg-white dark:bg-[#0B161C] hover:border-[#0F6E6E] dark:hover:border-cyan-400 border-slate-300 dark:border-slate-700 text-slate-400 hover:text-[#0F6E6E] dark:hover:text-cyan-300'
-                                  }`}
-                              >
-                                <Check className="w-4 h-4 stroke-[3]" />
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile Responsive Stacked Checklist Cards */}
-                <div className="md:hidden space-y-2.5">
-                  {activeWeekDays.map((day) => {
-                    const isFocused = day.dayNumber === selectedDayNum;
-                    const domainLabel = getDomainArabicName(day.domainId || day.domainTitle);
-                    const dayGoals = resolveDayGoals(day);
-                    const doneCount = dayGoals.filter((g) => g.isCompleted).length;
+                {/* Collapsible Week 1–5 Accordions */}
+                <div className="space-y-2.5">
+                  {[1, 2, 3, 4, 5].map((wNum) => {
+                    const weekDaysList = plan.days.filter((d) => d.weekNumber === wNum);
+                    const wStats = computeWeekTaskCompletionStats(weekDaysList);
+                    const isWeekDone = weekDaysList.length > 0 && wStats.completedDays === weekDaysList.length;
+                    const isExpanded = expandedWeekTab === wNum;
+                    const weekLabel = wNum === 5 ? 'الختام (يوم 29–30)' : `الأسبوع ${wNum}`;
+                    const weekSubtitle = WEEK_INFO[wNum]?.title || '';
 
                     return (
                       <div
-                        key={day.dayNumber}
-                        onClick={() => setSelectedDayNum(day.dayNumber)}
-                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer flex items-center justify-between gap-3 ${isFocused
-                            ? 'bg-teal-50/80 dark:bg-cyan-950/35 border-[#0F6E6E] dark:border-cyan-500 shadow-xs'
-                            : 'bg-slate-50/70 dark:bg-[#071318] border-slate-200 dark:border-slate-800'
+                        key={wNum}
+                        className={`rounded-2xl border transition-all overflow-hidden ${isExpanded
+                            ? 'border-[#0F6E6E]/50 dark:border-cyan-500/50 bg-slate-50/40 dark:bg-[#071318]/60 shadow-2xs'
+                            : isWeekDone
+                              ? 'border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/35 dark:bg-emerald-950/15'
+                              : 'border-slate-200/80 dark:border-slate-800 bg-white dark:bg-[#0B161C]'
                           }`}
                       >
-                        <div className="space-y-1.5 min-w-0 flex-1">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-black text-[#0F172A] dark:text-white">
-                              يوم <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{day.dayNumber}</span>
-                            </span>
-                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-[#0F6E6E] dark:text-cyan-300">
-                              <span>{day.domainIcon || '🎯'}</span>
-                              <span>{domainLabel}</span>
-                            </span>
-                            {dayGoals.length > 1 && (
-                              <span
-                                dir="ltr"
-                                style={{ unicodeBidi: 'isolate' }}
-                                className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-teal-500/10 dark:bg-cyan-500/15 text-[#0F6E6E] dark:text-cyan-300"
-                              >
-                                {doneCount}/{dayGoals.length}
-                              </span>
-                            )}
-                          </div>
-                          <div className="space-y-1">
-                            {dayGoals.map((goal) => (
-                              <p
-                                key={goal.id}
-                                className={`text-xs leading-relaxed font-semibold flex items-start gap-1.5 ${goal.isCompleted
-                                    ? 'line-through text-slate-400 dark:text-slate-500'
-                                    : 'text-[#334155] dark:text-slate-200'
-                                  }`}
-                              >
-                                <span className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${goal.isCompleted ? 'bg-emerald-500' : 'bg-teal-500'}`} />
-                                <span>{isolateNumbersInText(localizeDomainText(goal.text))}</span>
-                              </p>
-                            ))}
-                          </div>
-                        </div>
-
+                        {/* Week Header Toggle */}
                         <button
                           type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleDayCompletion(day.dayNumber, false);
-                          }}
-                          aria-label={day.isCompleted ? `إلغاء إنجاز يوم ${day.dayNumber}` : `تحديد يوم ${day.dayNumber} كمُنجز`}
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center border flex-shrink-0 transition-all cursor-pointer ${day.isCompleted
-                              ? 'bg-emerald-600 border-emerald-600 text-white shadow-xs'
-                              : 'bg-white dark:bg-[#0B161C] border-slate-300 dark:border-slate-700 text-slate-400'
-                            }`}
+                          onClick={() => handleToggleWeekAccordion(wNum)}
+                          aria-expanded={isExpanded}
+                          className="w-full px-3.5 py-3 flex items-center justify-between gap-2 text-right cursor-pointer hover:bg-slate-50/80 dark:hover:bg-[#102027]/70 transition-colors"
                         >
-                          <Check className="w-4 h-4 stroke-[3]" />
+                          <div className="min-w-0 flex-1 space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {isWeekDone && (
+                                <span className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center flex-shrink-0">
+                                  <Check className="w-2.5 h-2.5 stroke-[3]" />
+                                </span>
+                              )}
+                              <span className="text-xs sm:text-sm font-black text-[#0F172A] dark:text-white">
+                                {weekLabel}
+                              </span>
+                              <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 truncate">
+                                · {weekSubtitle}
+                              </span>
+                            </div>
+                            {/* Mini Week Progress Bar */}
+                            <div className="w-full h-1 rounded-full bg-slate-200/80 dark:bg-slate-800 overflow-hidden">
+                              <div
+                                className={`h-full transition-all duration-300 ${isWeekDone
+                                    ? 'bg-emerald-500'
+                                    : 'bg-[#0F6E6E] dark:bg-cyan-400'
+                                  }`}
+                                style={{ width: `${wStats.percent}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-lg bg-white dark:bg-[#0B161C] border border-slate-200 dark:border-slate-700 text-[#0F6E6E] dark:text-cyan-300">
+                              <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">
+                                {wStats.completed}/{wStats.total}
+                              </span>
+                              <span className="opacity-40">|</span>
+                              <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono text-emerald-700 dark:text-emerald-400">
+                                {wStats.percent}%
+                              </span>
+                            </span>
+                            {wStats.missed > 0 && (
+                              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/70 dark:border-rose-900/50">
+                                <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{wStats.missed}</span> فائت
+                              </span>
+                            )}
+                            {isExpanded ? (
+                              <ChevronUp className="w-4 h-4 text-slate-400" />
+                            ) : (
+                              <ChevronDown className="w-4 h-4 text-slate-400" />
+                            )}
+                          </div>
                         </button>
+
+                        {/* Expanded Week Body (Only 1 Week Open at a Time) */}
+                        {isExpanded && (
+                          <div className="px-3.5 pb-3.5 pt-2 border-t border-slate-200/70 dark:border-slate-800 space-y-3">
+                            {/* Compact Day Strip */}
+                            <div className="grid grid-cols-4 sm:grid-cols-7 gap-1.5">
+                              {weekDaysList.map((day) => {
+                                const isSelected = selectedDayNum === day.dayNumber;
+                                const isCompleted = day.isCompleted;
+                                const isActiveTarget = !isCompleted && day.dayNumber === activeFocusDay.dayNumber;
+                                const dayRowStats = computeDayTaskCompletionStats(day);
+
+                                return (
+                                  <button
+                                    key={day.dayNumber}
+                                    type="button"
+                                    onClick={() => setSelectedDayNum(day.dayNumber)}
+                                    className={`relative py-2 px-1 rounded-xl border text-center transition-all cursor-pointer flex flex-col items-center justify-center ${isSelected
+                                        ? isCompleted
+                                          ? 'bg-emerald-700 dark:bg-emerald-600 text-white border-emerald-600 shadow-xs ring-2 ring-emerald-400/35'
+                                          : 'bg-[#0F6E6E] dark:bg-[#0891B2] text-white border-[#0F6E6E] dark:border-cyan-400 shadow-xs ring-2 ring-teal-500/30'
+                                        : isCompleted
+                                          ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300/80 dark:border-emerald-800'
+                                          : isActiveTarget
+                                            ? 'bg-teal-50/80 dark:bg-cyan-950/30 text-[#0F6E6E] dark:text-cyan-300 border-teal-400 dark:border-cyan-500'
+                                            : 'bg-white dark:bg-[#0B161C] text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-teal-400'
+                                      }`}
+                                  >
+                                    <span className="text-[10px] font-bold opacity-80">يوم</span>
+                                    <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-sm font-black font-mono leading-tight">
+                                      {day.dayNumber}
+                                    </span>
+                                    <span className="text-[10px] mt-0.5 font-mono" dir="ltr" style={{ unicodeBidi: 'isolate' }}>
+                                      {isCompleted ? '✓' : dayRowStats.total > 1 || dayRowStats.completed > 0 ? `${dayRowStats.completed}/${dayRowStats.total}` : dayRowStats.missed > 0 ? '✕' : day.domainIcon}
+                                    </span>
+                                  </button>
+                                );
+                              })}
+                            </div>
+
+                            {/* Scannable Day Rows inside Active Week */}
+                            <div className="space-y-2">
+                              {weekDaysList.map((day) => {
+                                const isFocused = day.dayNumber === selectedDayNum;
+                                const domainLabel = getDomainArabicName(day.domainId || day.domainTitle);
+                                const dayGoals = resolveDayGoals(day);
+                                const rowStats = computeDayTaskCompletionStats(day);
+
+                                return (
+                                  <div
+                                    key={day.dayNumber}
+                                    onClick={() => setSelectedDayNum(day.dayNumber)}
+                                    className={`p-3 rounded-2xl border transition-all cursor-pointer space-y-2 ${isFocused
+                                        ? 'bg-teal-50/75 dark:bg-cyan-950/35 border-[#0F6E6E]/60 dark:border-cyan-500/60'
+                                        : 'bg-white dark:bg-[#0B161C] border-slate-200/80 dark:border-slate-800 hover:border-teal-300 dark:hover:border-cyan-700'
+                                      }`}
+                                  >
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="text-xs font-black text-[#0F172A] dark:text-white">
+                                          يوم <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="font-mono">{day.dayNumber}</span>
+                                        </span>
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-slate-50 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700 text-[10px] font-bold text-[#0F6E6E] dark:text-cyan-300">
+                                          <span>{day.domainIcon || '🎯'}</span>
+                                          <span>{domainLabel}</span>
+                                        </span>
+                                        <span
+                                          dir="ltr"
+                                          style={{ unicodeBidi: 'isolate' }}
+                                          className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded ${rowStats.completed === rowStats.total
+                                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'
+                                              : rowStats.missed > 0 && rowStats.completed === 0
+                                                ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300'
+                                                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                                            }`}
+                                        >
+                                          {rowStats.completed}/{rowStats.total}
+                                        </span>
+                                      </div>
+
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleToggleDayCompletion(day.dayNumber, false);
+                                        }}
+                                        aria-label={day.isCompleted ? `إلغاء إنجاز يوم ${day.dayNumber}` : `تحديد يوم ${day.dayNumber} كمُنجز`}
+                                        title={day.isCompleted ? 'إلغاء إنجاز اليوم' : 'إتمام جميع مهام اليوم'}
+                                        className={`px-2 py-1 rounded-lg text-[10px] font-black border transition-all cursor-pointer inline-flex items-center gap-1 ${day.isCompleted
+                                            ? 'bg-emerald-600 border-emerald-600 text-white'
+                                            : 'bg-slate-50 dark:bg-slate-800/70 border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-300 hover:border-[#0F6E6E] hover:text-[#0F6E6E]'
+                                          }`}
+                                      >
+                                        <Check className="w-3 h-3 stroke-[3]" />
+                                        <span>{day.isCompleted ? 'مكتمل' : 'إتمام اليوم'}</span>
+                                      </button>
+                                    </div>
+
+                                    <div className="space-y-1.5">
+                                      {dayGoals.map((goal, gIdx) => {
+                                        const st = resolveDailyGoalStatus(goal);
+                                        const isDone = st === 'completed';
+                                        const isMissed = st === 'missed';
+
+                                        return (
+                                          <div key={goal.id} className="flex items-start justify-between gap-2">
+                                            <span
+                                              className={`text-xs leading-relaxed font-semibold flex items-start gap-1.5 min-w-0 flex-1 ${isDone
+                                                  ? 'line-through text-emerald-700/80 dark:text-emerald-300/80'
+                                                  : isMissed
+                                                    ? 'line-through text-slate-400 dark:text-slate-500 decoration-rose-400/70'
+                                                    : 'text-[#334155] dark:text-slate-200'
+                                                }`}
+                                            >
+                                              <span
+                                                className={`mt-1.5 w-1.5 h-1.5 rounded-full flex-shrink-0 ${isDone ? 'bg-emerald-500' : isMissed ? 'bg-rose-400' : 'bg-teal-500'
+                                                  }`}
+                                              />
+                                              <span>{isolateNumbersInText(localizeDomainText(goal.text))}</span>
+                                            </span>
+
+                                            <div className="flex items-center gap-1 flex-shrink-0">
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleToggleGoalStatus(day.dayNumber, goal.id, 'completed');
+                                                }}
+                                                aria-pressed={isDone}
+                                                aria-label={`تحديد المهمة ${gIdx + 1} في يوم ${day.dayNumber} كمُنجزة`}
+                                                title="منجز (✓)"
+                                                className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all cursor-pointer ${isDone
+                                                    ? 'bg-emerald-600 border-emerald-600 text-white'
+                                                    : 'bg-white dark:bg-[#0B161C] border-slate-300 dark:border-slate-700 text-slate-400 hover:border-emerald-500 hover:text-emerald-600'
+                                                  }`}
+                                              >
+                                                <Check className="w-3 h-3 stroke-[3]" />
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={(e) => {
+                                                  e.stopPropagation();
+                                                  handleToggleGoalStatus(day.dayNumber, goal.id, 'missed');
+                                                }}
+                                                aria-pressed={isMissed}
+                                                aria-label={`تحديد المهمة ${gIdx + 1} في يوم ${day.dayNumber} كفائتة`}
+                                                title="فائت (✕)"
+                                                className={`w-6 h-6 rounded-md border flex items-center justify-center transition-all cursor-pointer ${isMissed
+                                                    ? 'bg-rose-600/85 border-rose-600 text-white'
+                                                    : 'bg-white dark:bg-[#0B161C] border-slate-300 dark:border-slate-700 text-slate-400 hover:border-rose-400 hover:text-rose-500'
+                                                  }`}
+                                              >
+                                                <X className="w-3 h-3 stroke-[2.75]" />
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
                 </div>
-              </div>
 
-              {/* Bottom Footer Actions */}
-              <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800 flex-wrap gap-3">
-                <button
-                  type="button"
-                  onClick={() => setShowResetConfirm(true)}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors cursor-pointer"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>إنشاء خطة جديدة</span>
-                </button>
+                {/* Slim Collapsible "لماذا هذه المجالات؟" Accordion */}
+                <div className="pt-1 border-t border-slate-100 dark:border-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => setShowWhyDomains((prev) => !prev)}
+                    aria-expanded={showWhyDomains}
+                    className="w-full py-2 flex items-center justify-between text-xs font-bold text-slate-500 dark:text-slate-400 hover:text-[#0F6E6E] dark:hover:text-cyan-300 transition-colors cursor-pointer"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <Award className="w-4 h-4 text-[#0F6E6E] dark:text-cyan-400" />
+                      <span>لماذا اخترنا هذه المجالات الثلاثة؟</span>
+                    </span>
+                    {showWhyDomains ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
 
-                <div className="flex items-center gap-1.5 text-[11px] text-slate-400 dark:text-slate-500">
-                  <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-cyan-400" />
-                  <span>يُسجّل تقدمك على هذا الجهاز فقط، ولا يحتاج إلى حساب خارجي.</span>
+                  {showWhyDomains && (
+                    <div className="pt-2 pb-1 space-y-3 text-right">
+                      <p className="text-xs text-slate-600 dark:text-slate-300">
+                        {isUsingCustomFocus
+                          ? 'تم تحديد هذه المجالات الثلاثة وفق اختيارك الشخصي للتركيز عليها خلال الخطة، ويمكنك تعديلها أو استعادة أضعف 3 مجالات في أي وقت عبر زر «تخصيص» بالأعلى.'
+                          : 'اختيرت تلقائياً من أقل درجات تقييمك المسجلة (مرتبة تصاعدياً من الأدنى للأعلى).'}
+                      </p>
+                      <div className="space-y-2.5">
+                        {sortedFocusDomains.map((id) => {
+                          const scoreVal = Number(scores?.[id]) || 0;
+                          const percent = Math.min(100, Math.round(scoreVal * 10));
+                          return (
+                            <div key={id} className="space-y-1">
+                              <div className="flex items-center justify-between text-xs font-bold">
+                                <span className="flex items-center gap-1.5 text-[#0F172A] dark:text-white">
+                                  <span>{DOMAIN_META[id]?.icon || '🎯'}</span>
+                                  <span>{getDomainArabicName(id)}</span>
+                                </span>
+                                <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-slate-500 dark:text-slate-400 font-mono">
+                                  {scoreVal.toFixed(1)} / 10
+                                </span>
+                              </div>
+                              <div className="w-full h-1.5 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
+                                <div
+                                  className="h-full bg-[#0F6E6E] dark:bg-[#0891B2] rounded-full transition-all duration-500"
+                                  style={{ width: `${percent}%` }}
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Local Privacy Notice */}
+                <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 dark:text-slate-500">
+                  <span className="inline-flex items-center gap-1.5">
+                    <ShieldCheck className="w-3.5 h-3.5 text-teal-600 dark:text-cyan-400" />
+                    <span>يُسجّل تقدمك محلياً على جهازك فقط.</span>
+                  </span>
                 </div>
               </div>
-            </div>
-          </div>
-
-          {/* 4. Bottom Card: لماذا هذه المجالات؟ (مطابق لصورة 4) */}
-          <div className="bg-white dark:bg-[#0B161C] border border-slate-200/90 dark:border-slate-800 rounded-3xl p-6 sm:p-8 space-y-4 shadow-sm text-right">
-            <div className="flex items-center gap-2">
-              <Award className="w-5 h-5 text-teal-600 dark:text-cyan-400" />
-              <h3 className="text-base sm:text-lg font-black text-[#0F172A] dark:text-white">
-                لماذا هذه المجالات؟
-              </h3>
-            </div>
-
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300">
-              {isUsingCustomFocus
-                ? 'تم تحديد هذه المجالات الثلاثة وفق اختيارك الشخصي للتركيز عليها خلال الخطة، ويمكنك استعادة أضعف 3 مجالات في أي وقت عبر زر «تخصيص المجالات».'
-                : 'اختيرت تلقائياً من أقل درجات تقييمك المسجلة (مرتبة تصاعدياً من الأدنى للأعلى). درجة صفر تعني «غير مقيّم»، لذلك لا تُحسب ضمن الأولويات.'}
-            </p>
-
-            <div className="space-y-3 pt-2">
-              {sortedFocusDomains.map((id) => {
-                const scoreVal = Number(scores?.[id]) || 0;
-                const percent = Math.min(100, Math.round(scoreVal * 10));
-
-                return (
-                  <div key={id} className="space-y-1">
-                    <div className="flex items-center justify-between text-xs font-bold">
-                      <span dir="ltr" style={{ unicodeBidi: 'isolate' }} className="text-slate-500 dark:text-slate-400 font-mono">
-                        {scoreVal.toFixed(1)} / 10
-                      </span>
-                      <span className="flex items-center gap-1.5 text-[#0F172A] dark:text-white">
-                        <span>{getDomainArabicName(id)}</span>
-                        <span>{DOMAIN_META[id]?.icon || '🎯'}</span>
-                      </span>
-                    </div>
-
-                    <div className="w-full h-2 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden">
-                      <div
-                        className="h-full bg-[#0F6E6E] dark:bg-[#0891B2] rounded-full transition-all duration-500"
-                        style={{ width: `${percent}% ` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
             </div>
           </div>
 
@@ -1520,8 +1596,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
                     disabled={isDisabled}
                     onClick={() => handleToggleDraftDomain(id)}
                     className={`p-3 rounded-2xl border text-right transition-all flex items-center justify-between gap-2 cursor-pointer disabled:opacity-45 disabled:cursor-not-allowed ${isChecked
-                        ? 'bg-[#0F6E6E]/10 dark:bg-cyan-950/50 border-[#0F6E6E] dark:border-cyan-400 text-[#0F6E6E] dark:text-cyan-300 shadow-xs'
-                        : 'bg-slate-50/70 dark:bg-[#071318] border-slate-200 dark:border-slate-800 text-[#0F172A] dark:text-slate-200 hover:border-teal-400 dark:hover:border-cyan-600'
+                      ? 'bg-[#0F6E6E]/10 dark:bg-cyan-950/50 border-[#0F6E6E] dark:border-cyan-400 text-[#0F6E6E] dark:text-cyan-300 shadow-xs'
+                      : 'bg-slate-50/70 dark:bg-[#071318] border-slate-200 dark:border-slate-800 text-[#0F172A] dark:text-slate-200 hover:border-teal-400 dark:hover:border-cyan-600'
                       }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
@@ -1536,8 +1612,8 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
 
                     <div
                       className={`w-5 h-5 rounded-full border flex items-center justify-center flex-shrink-0 ${isChecked
-                          ? 'border-[#0F6E6E] dark:border-cyan-400 bg-[#0F6E6E] dark:bg-cyan-400 text-white dark:text-[#0B161C]'
-                          : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
+                        ? 'border-[#0F6E6E] dark:border-cyan-400 bg-[#0F6E6E] dark:bg-cyan-400 text-white dark:text-[#0B161C]'
+                        : 'border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800'
                         }`}
                     >
                       {isChecked && <Check className="w-3 h-3 stroke-[3]" />}
@@ -1624,15 +1700,28 @@ export const ThirtyDayPlanScreen: React.FC<ThirtyDayPlanScreenProps> = ({
         )
       }
 
-      {/* Micro-Celebration Toast on Completing Day Task */}
-      {
-        showCelebrationToast && (
-          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-[#0F6E6E] dark:bg-cyan-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm font-extrabold animate-in fade-in slide-in-from-bottom-4 duration-300 border border-white/20 select-none pointer-events-none">
-            <Sparkles className="w-4 h-4 text-amber-300 animate-spin" />
-            <span>🎉 رائع جداً! تم تسجيل إنجاز اليوم بنجاح وخطوت خطوة للأمام نحو التوازن.</span>
-          </div>
-        )
-      }
-    </div >
+      {/* Micro-Motivation Toast on Task ✓ or Full Day Completion */}
+      {motivationToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          dir="rtl"
+          className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 sm:px-5 py-2.5 sm:py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs sm:text-sm font-extrabold animate-in fade-in slide-in-from-bottom-4 duration-200 border select-none pointer-events-none max-w-[92vw] ${motivationToast.kind === 'day'
+              ? 'bg-emerald-700 dark:bg-emerald-600 text-white border-emerald-400/40'
+              : 'bg-[#0F6E6E] dark:bg-cyan-700 text-white border-white/20'
+            }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-300 flex-shrink-0" />
+          <span className="truncate">{motivationToast.message}</span>
+          <span
+            dir="ltr"
+            style={{ unicodeBidi: 'isolate' }}
+            className="px-2 py-0.5 rounded-lg bg-white/20 text-amber-200 font-mono text-[11px] font-black flex-shrink-0"
+          >
+            {motivationToast.xpDelta}
+          </span>
+        </div>
+      )}
+    </div>
   );
 };

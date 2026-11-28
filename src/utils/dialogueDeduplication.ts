@@ -916,9 +916,9 @@ export function buildComplaintAnchoredReply(
         reflection: 'أسمعك بكل هدوء؛ الشعور بالفراغ أو غياب الهوايات إشارة واضحة إلى أن وقتك الحالي يحتاج مساحة تشعر فيها بالمتعة والتجدد الشخصي.',
         followUpQuestion: q,
         summary: 'معالجة شكوى الفراغ الشخصي وغياب الهوايات بالارتباط المباشر بتفاصيل اليوم.',
-        advice: 'خصص 15 دقيقة لتجربة نشاط شخصي خفيف تستكشف فيه فضولك دون اشتراط الاحتراف.',
+        advice: 'اختر نشاطاً شخصياً خفيفاً تستكشف فيه فضولك بعيداً عن الضغوط ودون اشتراط الاحتراف.',
         actionSteps: [
-          'تخصيص 15 دقيقة في وقت الفراغ لتجربة نشاط جديد أو هواية قديمة هادئة',
+          'تخصيص وقت هادئ في يومك لتجربة نشاط جديد أو هواية قديمة',
           'تقليل التصفح العشوائي في أوقات الملل واستبداله بنشاط عملي ملموس',
         ],
       };
@@ -943,4 +943,206 @@ export function buildComplaintAnchoredReply(
   }
 
   return null;
+}
+
+/**
+ * Truncates Arabic (or mixed) text cleanly at a word boundary so no word is ever split mid-word.
+ */
+export function truncateArabicAtWordBoundary(text: string, maxLen: number): string {
+  const cleaned = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned || cleaned.length <= maxLen) return cleaned;
+
+  const sliceLimit = Math.max(10, maxLen - 3);
+  const candidate = cleaned.slice(0, sliceLimit);
+  const nextChar = cleaned[sliceLimit] || ' ';
+
+  // If the cut lands in the middle of a word, back up to the preceding whitespace
+  let cutText = candidate;
+  if (nextChar && !/[\s.,،؛:!?؟()\[\]{}«»"'\-]/.test(nextChar)) {
+    const lastSpace = candidate.lastIndexOf(' ');
+    if (lastSpace > Math.floor(sliceLimit * 0.35)) {
+      cutText = candidate.slice(0, lastSpace);
+    }
+  }
+
+  cutText = cutText.replace(/[،,.;:ـ\-\s]+$/g, '').trim();
+  return `${cutText}...`;
+}
+
+/**
+ * Identifies short confirmation, approval, continuation, or navigation messages
+ * (e.g. "نعم اعتمد", "أعتمد التقييم", "تمام", "المحطة التالية") so they are
+ * NEVER extracted as "Actual Reality" quotes or diagnostic complaints.
+ */
+export function isConfirmationOrMetaUtterance(text: string): boolean {
+  const t = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!t) return true;
+
+  if (isEmptyOrMeaninglessInput(t)) return true;
+
+  // Short greetings or bare conversational tokens
+  if (
+    /^(?:مرحبا|مرحباً|أهلا|أهلاً|سلام|السلام\s+عليكم|هلا|صباح\s+الخير|مساء\s+الخير|شكراً|شكرا|موافق|تمام|حسناً|حسنا|نعم|لا|أوكي|اوكي|طيب|أكيد|اكيد|ممتاز\s*اعتمد)[.!؟،\s]*$/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  // Explicit approval / adoption / completion / continuation / station-navigation phrases
+  if (
+    /^(?:(?:نعم|أيوة|ايوه|حسناً|حسنا|تمام|موافق|طيب|أكيد|أجل)[،,\s]*)?(?:[أإا]عتمد(?:\s*(?:التقييم|هذا\s*التقييم|النتيجة|الدرجة))?(?:\s*بدرجة.*)?|اعتماد(?:\s*التقييم)?(?:\s*بدرجة.*)?|اعتمدها|نعم\s*[أإا]عتمد|أوافق(?:\s*على\s*الاعتماد)?|موافق(?:\s*اعتمد)?|نكتفي\s*(?:بهذا)?|كافي|انتهينا|خلاص(?:\s*[أإا]عتمد)?|(?:جاهز|ننتقل|انتقل|أنتقل)\s*(?:لـ?|إلى\s*)?(?:المحطة\s*(?:التالية|القادمة)|للتالية)|المحطة\s*التالية|تقييمي(?:\s*هو)?\s*[:=]?\s*\d+(?:\.\d+)?\s*(?:من|\/)\s*10|(?:[1-9]|10)(?:\.\d+)?\s*(?:من|\/)\s*10|أرغب\s*في\s*الاستمرار(?:\s*في\s*الحوار.*)?|حسناً?\s*نكمل.*|نكمل\s*(?:الحوار|قليلاً|قليلا|شوي|شوية))[.!؟،\s]*$/i.test(
+      t
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+/**
+ * Strips ALL embedded score ratings (both parenthesized and unparenthesized X/10 or X من 10)
+ * from advisor reply prose so divergent model-written scores never clash with the Single Source of Truth.
+ */
+export function stripAllScoreRatingsFromText(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/بعد\s*ما\s*شاركتني[\s\S]*?(?:أكثر\s*دقة\s*[؟?]|المحطة\s*التالية\s*[؟?]?)/gi, '')
+    .replace(/[^\n.]*(?:أقيّم|أقيم|التقييم\s*(?:المبدئي|التقديري|المستحق)|درجتك(?:\s*المبدئية|\s*الحالية)?)\s*[^\n.]*?\b(?:[1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10[^\n.]*[.!؟]?/gi, '')
+    .replace(/\(\s*(?:[1-9](?:\.\d+)?|10(?:\.0+)?)\s*(?:\/|\s*من\s*)\s*10\s*\)/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/**
+ * Guarantees that every score mention inside an advisor reply matches the exact canonical numeric score.
+ */
+export function syncReplyScoreWithCanonicalScore(
+  reply: string,
+  canonicalScore: number
+): string {
+  const cleanScore = Number(Math.max(1, Math.min(10, canonicalScore)).toFixed(1));
+  const scoreFormatted = cleanScore.toFixed(1);
+  return String(reply || '')
+    .replace(
+      /(?:[1-9](?:\.\d+)?|10(?:\.0+)?)(?=\s*(?:\/|من)\s*10(?:[^\d]|$))/gi,
+      scoreFormatted
+    )
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+}
+
+/**
+ * Extracts strictly separated, concrete, non-boilerplate Strengths and Core Challenges (Problems ONLY)
+ * directly from substantive user utterances for a given life domain.
+ */
+export function extractGroundedStrengthsAndChallenges(
+  domainId: string,
+  domainTitle: string,
+  userTexts: string[],
+  score: number
+): { strengths: string[]; challenges: string[] } {
+  const substantive = (userTexts || [])
+    .map((t) => String(t || '').trim())
+    .filter((t) => !isConfirmationOrMetaUtterance(t));
+  const combined = substantive.join(' ');
+  const combinedLower = combined.toLowerCase();
+
+  const strengths: string[] = [];
+  const challenges: string[] = [];
+
+  // 1. Concrete Strengths grounded in what the user actually expressed/practiced
+  if (domainId === 'spiritual') {
+    if (/(صلاة|أصلي|اصلي|ورد|قرآن|قران|ذكر|أذكار|تأمل|سكينة|خلوة)/i.test(combinedLower) && !/(لا\s*أصلي|ما\s*أصلي|تارك\s*الصلاة)/i.test(combinedLower)) {
+      strengths.push('حرصك الفعلي على استبقاء صلة روحية أو ورد هادئ يمنحك مرساة للطمأنينة');
+    }
+  } else if (domainId === 'financial') {
+    if (/(بدون\s*ديون|لا\s*(?:توجد|يوجد|لدي|عندي)\s*(?:ديون|أقساط)|خالي\s*من\s*الديون)/i.test(combinedLower)) {
+      strengths.push('خلو سجلك المالي من الديون والأقساط مما يمنحك مرونة لبناء الاستقرار');
+    } else if (/(يكفي|يفي|تغطي|أدخر|ادخر|أوفر|اوفر|صندوق\s*طوارئ|احتياطي)/i.test(combinedLower)) {
+      strengths.push('قدرتك الحالية على تغطية احتياجاتك الأساسية أو امتلاك وعي عملي بقيمة الاحتياط');
+    }
+  } else if (domainId === 'career') {
+    if (/(أنجز|إنجاز|مشروع|مشاريع|خبرة|أعمل|ساعات|اجتهاد|التزام)/i.test(combinedLower)) {
+      strengths.push('تحمّلك العالي للمسؤولية وحرصك على أداء التزاماتك ومشاريعك المهنية بجدية');
+    }
+  } else if (domainId === 'personal') {
+    if (/(راحة|هدوء|أكتب|تدوين|وعي|أتعافى|أحاول|أعرف|أحمي)/i.test(combinedLower)) {
+      strengths.push('وعيك المباشر بحاجتك إلى مساحة ذاتية تحمي توازنك النفسي');
+    }
+  } else if (domainId === 'learning') {
+    if (/(أقرأ|اقرأ|كتاب|دورة|أتعلّم|أتعلم|مهارة|برامج|تطوير)/i.test(combinedLower) && !/(لا\s*أقرأ|ما\s*أقرأ)/i.test(combinedLower)) {
+      strengths.push('فضولك المعرفي الواضح وسعيك لتطوير مهاراتك واطلاعك رغم انشغال يومك');
+    }
+  } else if (domainId === 'family') {
+    if (/(والدي|أمي|أبي|أسرتي|عائلتي|أهلي|أبنائي|نجلس|أزورهم|أقضي)/i.test(combinedLower) && !/(لا\s*أجلس|قطيعة)/i.test(combinedLower)) {
+      strengths.push('حرصك الدافئ على صلة أهلك والحفاظ على حضورك العائلي');
+    }
+  } else if (domainId === 'social') {
+    if (/(أصدقاء|صديق|أصحابي|زملاء|دعم|مقرب|مقربين)/i.test(combinedLower) && !/(لا\s*(?:يوجد|توجد)\s*(?:لدي|عندي)\s*أصدقاء|ما\s*عندي\s*أصدقاء)/i.test(combinedLower)) {
+      strengths.push('امتلاكك وعياً بقيمة الصحبة الداعمة والعلاقات المريحة في محيطك');
+    }
+  } else if (domainId === 'health') {
+    if (/(مشي|رياضة|ماء|نوم\s*منتظم|أنام\s*جيداً|صحي|حركة)/i.test(combinedLower)) {
+      strengths.push('انتباهك لإشارات جسدك ومحافظتك على جانب من العادات البدنية الداعمة');
+    }
+  }
+
+  // Extract additional dialogue-specific strengths if none matched above (never use canned boilerplate!)
+  if (strengths.length === 0) {
+    if (score >= 7.5 && substantive.length > 0) {
+      strengths.push(`استقرار عاداتك الفعلية المذكورة حول «${truncateArabicAtWordBoundary(substantive[0], 60)}»`);
+    } else if (substantive.length > 0) {
+      strengths.push(`قدرتك على تسمية التحدي الفعلي بدقة في قولك «${truncateArabicAtWordBoundary(substantive[0], 60)}»`);
+    } else {
+      strengths.push(`حرصك على مراجعة واقعك في ${domainTitle} تمهيداً لتحسينه`);
+    }
+  }
+
+  // 2. Core Challenges: STRICTLY problem/struggle statements ONLY — NEVER proposed solutions or recommendations!
+  if (/(لا\s*(?:يوجد|توجد)\s*(?:لدي|عندي)\s*أصدقاء|ما\s*عندي\s*أصدقاء|ليس\s*(?:لدي|عندي)\s*أصدقاء|بدون\s*أصدقاء)/i.test(combinedLower)) {
+    challenges.push('غياب دائرة أصدقاء مقربة تمنحك دعماً ومشاركة اجتماعية منتظمة');
+  }
+  if (/(لا\s*(?:توجد|يوجد)\s*(?:لدي|عندي)\s*هوايات|ما\s*عندي\s*هوايات|فراغ\s*شخصي|أشعر\s*ب(?:ال)?فراغ|ملل)/i.test(combinedLower)) {
+    challenges.push('الشعور بالفراغ الشخصي وغياب هوايات منتظمة تجدد شغفك');
+  }
+  if (/(ساعات\s*(?:عمل|دوام)\s*طويلة|أعمل\s*(?:ل)?ساعات\s*طويلة|دوام\s*طويل|احتراق|ضغط\s*(?:ال)?عمل)/i.test(combinedLower)) {
+    challenges.push('امتداد ساعات العمل وتراكم الأعباء المهنية على حساب طاقتك وراحتك');
+  }
+  if (/(سهر|أرق|ارق|قلة\s*نوم|لا\s*أنام|ما\s*أنام|ثالثة\s*فجراً|مرهق|إرهاق|تعب|خمول)/i.test(combinedLower)) {
+    challenges.push('اضطراب جودة النوم والسهر الليلي وما ينتج عنهما من إرهاق نهاري');
+  }
+  if (/(تشتت|شاشات|هاتف|جوال|مواقع\s*التواصل|تسويف|تأجيل)/i.test(combinedLower)) {
+    challenges.push('تشتت الانتباه بفعل الهاتف والشاشات مما يغذّي التسويف وتراكم المهام');
+  }
+  if (/(مقاهي|مطاعم|توصيل|ينفد|يخلص|عجز|ديون|قرض|أقساط|اقساط|لا\s*أدخر|لا\s*ادخر|ما\s*أوفر|ما\s*اوفر)/i.test(combinedLower) && !/(بدون\s*ديون|خالي\s*من\s*الديون)/i.test(combinedLower)) {
+    challenges.push('استنزاف جزء من التدفق النقدي في مصاريف متكررة أو التزامات تضعف هامش الادخار');
+  }
+  if (/(فتور|انعزال|عزلة|وحدة|قطيعة|قلة\s*تواصل|تراجع\s*(?:في\s*)?التواصل)/i.test(combinedLower)) {
+    challenges.push('فتور التواصل الاجتماعي أو الانكفاء عن المحيط نتيجة ضغوط اليوم');
+  }
+  if (/(لا\s*أصلي|ما\s*أصلي|تارك|ضيق\s*صدر|تراجع\s*روحي|هاجر)/i.test(combinedLower)) {
+    challenges.push('تذبذب الحضور القلبي والانتظام الروحي وسط تسارع المشاغل اليومية');
+  }
+
+  // Fallback problem description grounded in user words (NEVER insert recommendations into challenges!)
+  if (challenges.length === 0) {
+    if (substantive.length > 0 && score < 7.5) {
+      challenges.push(`استمرار التحدي المرتبط بما ذكرته حول «${truncateArabicAtWordBoundary(substantive[substantive.length - 1], 70)}»`);
+    } else if (score >= 7.5) {
+      challenges.push(`خطر تراجع الاستقرار الحالي في ${domainTitle} عند ارتفاع ضغوط المراحل المزدحمة`);
+    } else {
+      challenges.push(`انخفاض مستوى الاستقرار الفعلي في ${domainTitle} (${score.toFixed(1)}/10) وحاجته لمعالجة مباشرة`);
+    }
+  }
+
+  return {
+    strengths: Array.from(new Set(strengths)).slice(0, 3),
+    challenges: Array.from(new Set(challenges)).slice(0, 3),
+  };
 }

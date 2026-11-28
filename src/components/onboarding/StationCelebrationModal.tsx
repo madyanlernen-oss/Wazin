@@ -66,7 +66,7 @@ export const StationCelebrationModal: React.FC<StationCelebrationModalProps> = (
               style={{ color: currentAdvisor.themeColor, unicodeBidi: 'isolate' }}
               dir="ltr"
             >
-              {Number(currentActiveInsights.score > 0 ? currentActiveInsights.score : 7.5).toFixed(1)}{' '}
+              {Number(currentActiveInsights.score > 0 ? currentActiveInsights.score : 5.0).toFixed(1)}{' '}
               <span className="text-base text-[#64748B] dark:text-[#94A3B8]">/ 10</span>
             </span>
           </div>
@@ -77,8 +77,8 @@ export const StationCelebrationModal: React.FC<StationCelebrationModalProps> = (
               {currentActiveInsights.score >= 8
                 ? 'ممتاز ومتألق 🌟'
                 : currentActiveInsights.score >= 6
-                ? 'جيد وواعد 🚀'
-                : 'يحتاج عناية وتركيز 💡'}
+                  ? 'جيد وواعد 🚀'
+                  : 'يحتاج عناية وتركيز 💡'}
             </span>
           </div>
         </div>

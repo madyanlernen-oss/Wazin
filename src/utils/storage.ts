@@ -4,6 +4,11 @@ import {
   parseDialogueConstraints,
 } from './realisticGoalsGenerator';
 import {
+  truncateArabicAtWordBoundary,
+  isConfirmationOrMetaUtterance,
+  extractGroundedStrengthsAndChallenges,
+} from './dialogueDeduplication';
+import {
   AdvisorConfig,
   DirectorSummaryReport,
   EisenhowerGoalItem,
@@ -887,7 +892,10 @@ export const extractInsightsFromAnswers = (
   const challenges: string[] = [];
 
   const storedDialogue = extractUserDialogueTextsForArea(advisor.id, answers);
-  const combinedTexts = Array.from(new Set([...(conversationTexts || []), ...storedDialogue].filter(Boolean)));
+  const filteredConversation = (conversationTexts || []).filter(
+    (t) => typeof t === 'string' && !isConfirmationOrMetaUtterance(t)
+  );
+  const combinedTexts = Array.from(new Set([...filteredConversation, ...storedDialogue].filter(Boolean)));
   const allDialogueText = combinedTexts.join(' ').toLowerCase();
   const hasNegativeDialogue = /(فتور|انعزال|عزلة|وحدة|وحيد|تشتت|ضغط|إرهاق|ارهاق|أرق|ارق|ديون|عجز|لا أدخر|لا ادخر|تقصير|تسويف|أنام\s*4|ساعات\s*قليلة)/i.test(allDialogueText);
   const constraints = parseDialogueConstraints(combinedTexts, userProfile);
@@ -904,11 +912,11 @@ export const extractInsightsFromAnswers = (
       if (val >= 8) {
         strengths.push(`${cleanTitle}: تقييم مرتفع (${val}/10)`);
       } else if (val <= 5) {
-        challenges.push(`${cleanTitle}: يحتاج لرفع المستوى (${val}/10)`);
+        challenges.push(`${cleanTitle}: تراجع ملحوظ في هذا المؤشر (${val}/10)`);
       }
-    } else if (q.type === 'open_text' && typeof val === 'string' && val.trim().length > 3) {
+    } else if (q.type === 'open_text' && typeof val === 'string' && !isConfirmationOrMetaUtterance(val) && val.trim().length > 3) {
       const cleanVal = val.replace(/[؟?]+$/g, '').trim();
-      challenges.push(`التحدي المذكور: "${cleanVal.slice(0, 70)}${cleanVal.length > 70 ? '...' : ''}"`);
+      challenges.push(`التحدي المذكور: «${truncateArabicAtWordBoundary(cleanVal, 70)}»`);
     }
   });
 
@@ -936,38 +944,30 @@ export const extractInsightsFromAnswers = (
     challenges.push('تخفيف الفتور عبر خطوات تواصل خفيفة ومريحة تلائم الطاقة والوقت المتاحين');
   }
 
-  const domainDefaults = DOMAIN_DEFAULT_INSIGHTS[advisor.id] || {
-    highStrengths: [
-      `وعي متقدم وأداء متميز في جانب ${advisor.title}`,
-      `انتظام واستقرار ملحوظ في متطلبات هذا الجانب`,
-    ],
-    lowStrengths: [
-      `الوعي بأهمية جانب ${advisor.title} والاستعداد الصادق للارتقاء به`,
-      `الاعتراف الصادق بالحاجة للتغيير هو أول خطوة نحو التطور والتعافي`,
-    ],
-    highChallenges: [
-      `الحفاظ على هذا المستوى الرفيع من الأداء دون تراخٍ`,
-      `نقل هذا النجاح وإلهام بقية جوانب عجلة الحياة`,
-    ],
-    lowChallenges: [
-      `الالتزام بخطوة أسبوعية ميسرة محددة بالأرقام والمواعيد`,
-      `حماية أولويات هذا الجانب من ضغوط ومشاغل الحياة اليومية`,
-    ],
-  };
+  const grounded = extractGroundedStrengthsAndChallenges(
+    advisor.id,
+    advisor.title,
+    combinedTexts,
+    score
+  );
 
   if (strengths.length === 0) {
-    if (score >= 7 && !hasNegativeDialogue) {
-      strengths.push(...domainDefaults.highStrengths);
+    if (grounded.strengths.length > 0) {
+      strengths.push(...grounded.strengths);
+    } else if (score >= 7 && !hasNegativeDialogue) {
+      strengths.push(...(DOMAIN_DEFAULT_INSIGHTS[advisor.id]?.highStrengths || [`استقرار واضح في ${advisor.title}`]));
     } else {
-      strengths.push(...domainDefaults.lowStrengths);
+      strengths.push(...(DOMAIN_DEFAULT_INSIGHTS[advisor.id]?.lowStrengths || [`مبادرتك بمراجعة واقعك في ${advisor.title}`]));
     }
   }
 
   if (challenges.length === 0) {
-    if (score >= 8 && !hasNegativeDialogue) {
-      challenges.push(...domainDefaults.highChallenges);
+    if (grounded.challenges.length > 0) {
+      challenges.push(...grounded.challenges);
+    } else if (score >= 8 && !hasNegativeDialogue) {
+      challenges.push(...(DOMAIN_DEFAULT_INSIGHTS[advisor.id]?.highChallenges || [`مخاطر التراخي عند تزايد الضغوط اليومية`]));
     } else {
-      challenges.push(...domainDefaults.lowChallenges);
+      challenges.push(`عدم استقرار العادات الأساسية في ${advisor.title} تحت ضغط المهام اليومية`);
     }
   }
 

@@ -49,7 +49,14 @@ import {
   generateThirtyDayPlan,
   syncThirtyDayPlanWithScores,
   resolveActivePlanDayAndWeek,
+  resolveDailyGoalStatus,
   resolveDayGoals,
+  toggleDailyGoalStatus,
+  computeDayTaskCompletionStats,
+  computeWeekTaskCompletionStats,
+  computePlanGamificationStats,
+  XP_PER_TASK,
+  XP_DAY_BONUS,
   MAX_DAILY_GOALS,
   exportPlanAsText,
   addGoalToThirtyDayPlanStorage,
@@ -82,6 +89,10 @@ import {
   stripRepeatedOpeningGreeting,
   sanitizeArabicGrammarAndMorphology,
   MEANINGLESS_INPUT_PROMPT_AR,
+  truncateArabicAtWordBoundary,
+  isConfirmationOrMetaUtterance,
+  syncReplyScoreWithCanonicalScore,
+  stripAllScoreRatingsFromText,
 } from '../src/utils/dialogueDeduplication';
 
 // In-memory localStorage polyfill for non-browser runtimes (Node / Bun CLI)
@@ -3537,6 +3548,71 @@ async function testLatestUpgradesIntegrity() {
       'Multi-goal days must export cleanly to text and Arabic PDF'
     );
 
+    // 2.5 Partial-Completion 3-State Tracking (pending | completed | missed) & Live Daily/Weekly Stats
+    day8.dailyGoals = [
+      { id: 'g1', text: 'مراجعة المصاريف اليومية', isCompleted: true, status: 'completed', isCustom: false },
+      { id: 'g2', text: 'تأجيل الشراء العاطفي', isCompleted: true, status: 'completed', isCustom: false },
+      { id: 'g3', text: 'توفير 50 ريالاً في صندوق الطوارئ', isCompleted: false, status: 'missed', isCustom: true },
+      { id: 'g4', text: 'تنظيم فواتير الأسبوع', isCompleted: false, status: 'pending', isCustom: false },
+    ];
+    const partialDayStats = computeDayTaskCompletionStats(day8);
+    assert(
+      partialDayStats.completed === 2 &&
+        partialDayStats.missed === 1 &&
+        partialDayStats.pending === 1 &&
+        partialDayStats.total === 4 &&
+        partialDayStats.percent === 50,
+      `Partial day stats mismatch: ${JSON.stringify(partialDayStats)}`
+    );
+    const week2Days = plan.days.filter((d) => d.weekNumber === 2);
+    const partialWeekStats = computeWeekTaskCompletionStats(week2Days);
+    assert(
+      partialWeekStats.completed === 2 &&
+        partialWeekStats.missed === 1 &&
+        partialWeekStats.total === 10 &&
+        partialWeekStats.percent === 20,
+      `Partial week stats mismatch: ${JSON.stringify(partialWeekStats)}`
+    );
+    const toggledToMissed = toggleDailyGoalStatus(day8.dailyGoals[0], 'missed');
+    const toggledBackToPending = toggleDailyGoalStatus(toggledToMissed, 'missed');
+    assert(
+      resolveDailyGoalStatus(toggledToMissed) === 'missed' &&
+        toggledToMissed.isCompleted === false &&
+        resolveDailyGoalStatus(toggledBackToPending) === 'pending',
+      'toggleDailyGoalStatus must support pending <-> completed / missed cleanly'
+    );
+    const missedExportText = exportPlanAsText(plan);
+    const missedPdfPayload = formatThirtyDayPlanForArabicPdf(plan, planScores);
+    assert(
+      missedExportText.includes('✕') &&
+        missedPdfPayload.days[7].taskText.includes('✕'),
+      'Text and Arabic PDF exports must reflect missed (✕) tasks cleanly'
+    );
+
+    // 2.6 Lightweight Gamification: Daily Streak, XP Points & Overall Progress
+    const gamifiedPlan = generateThirtyDayPlan(planScores);
+    // Complete Day 1 fully (1/1 task -> +15 XP + 25 day bonus = 40 XP) and Day 2 partially (2/3 tasks -> +30 XP)
+    gamifiedPlan.days[0].dailyGoals = [
+      { id: 'd1_1', text: 'مراجعة المصاريف', status: 'completed', isCompleted: true },
+    ];
+    gamifiedPlan.days[0].isCompleted = true;
+    gamifiedPlan.days[1].dailyGoals = [
+      { id: 'd2_1', text: 'إلغاء اشتراك غير مستخدم', status: 'completed', isCompleted: true },
+      { id: 'd2_2', text: 'تأجيل الشراء', status: 'completed', isCompleted: true },
+      { id: 'd2_3', text: 'متابعة الميزانية', status: 'pending', isCompleted: false },
+    ];
+    gamifiedPlan.days[1].isCompleted = false;
+    const gStats = computePlanGamificationStats(gamifiedPlan);
+    assert(
+      gStats.currentStreak === 2 &&
+        gStats.bestStreak === 2 &&
+        gStats.completedTasks === 3 &&
+        gStats.completedDays === 1 &&
+        gStats.xpPoints === 3 * XP_PER_TASK + 1 * XP_DAY_BONUS &&
+        gStats.overallPercent > 0,
+      `Gamification stats mismatch: ${JSON.stringify(gStats)}`
+    );
+
     // 3. Free Consultation Clean Slate + Actionable Suggestion Injection into 30-Day Plan
     assert(
       Object.keys(DEMO_ADVISOR_CHATS).length === 0,
@@ -3687,17 +3763,110 @@ async function testLatestUpgradesIntegrity() {
     const orchSerialized = JSON.stringify(orchestratorReport);
     assert(
       Boolean(orchestratorReport.rootCauseChain) &&
-        Array.isArray(orchestratorReport.domainBreakdown) &&
-        orchestratorReport.domainBreakdown.length === 8 &&
-        orchestratorReport.keystoneHabits.length >= 3 &&
-        orchestratorReport.keystoneHabits.length <= 4 &&
-        Array.isArray(orchestratorReport.readyToPromoteQueue) &&
-        orchestratorReport.readyToPromoteQueue.length >= 6 &&
-        orchestratorReport.readyToPromoteQueue.length <= 8 &&
-        !/(45\s*دقيقة|40%|15\s*دقيقة)/.test(orchSerialized) &&
-        !/"(?:financial|learning|spiritual|health|career|personal|family|social)"/.test(orchSerialized) &&
-        (orchSerialized.includes('المقاهي') || orchSerialized.includes('الهندسة') || orchSerialized.includes('الهاتف')),
+      Array.isArray(orchestratorReport.domainBreakdown) &&
+      orchestratorReport.domainBreakdown.length === 8 &&
+      orchestratorReport.keystoneHabits.length >= 3 &&
+      orchestratorReport.keystoneHabits.length <= 4 &&
+      Array.isArray(orchestratorReport.readyToPromoteQueue) &&
+      orchestratorReport.readyToPromoteQueue.length >= 6 &&
+      orchestratorReport.readyToPromoteQueue.length <= 8 &&
+      !/(45\s*دقيقة|40%|15\s*دقيقة)/.test(orchSerialized) &&
+      !/"(?:financial|learning|spiritual|health|career|personal|family|social)"/.test(orchSerialized) &&
+      (orchSerialized.includes('المقاهي') || orchSerialized.includes('الهندسة') || orchSerialized.includes('الهاتف')),
       'Smart Balance Orchestrator must cover all 8 domains, cite actual user evidence, provide 3-4 keystone habits and 6-8 action items with zero generic boilerplate'
+    );
+
+    // 6. Global 6-Point Integrity Audit Assertions
+    // (1) Score Single Source of Truth
+    const divergentDraft = 'تقييمك الحالي هو (7.5/10) ويمكننا الاعتماد بدرجة (7.5 من 10).';
+    const syncedText = syncReplyScoreWithCanonicalScore(divergentDraft, 6.5);
+    assert(
+      syncedText.includes('6.5') && !syncedText.includes('7.5'),
+      `Score Single Source of Truth failed: "${syncedText}"`
+    );
+    assert(
+      stripAllScoreRatingsFromText('بعد حوارنا، درجتك المبدئية هي 7.5/10 حالياً.') === '',
+      'stripAllScoreRatingsFromText must clear unparenthesized divergent scores'
+    );
+
+    // (2) Confirmation messages excluded from Actual Reality
+    assert(
+      isConfirmationOrMetaUtterance('نعم اعتمد') &&
+      isConfirmationOrMetaUtterance('أعتمد التقييم') &&
+      isConfirmationOrMetaUtterance('تمام') &&
+      isConfirmationOrMetaUtterance('اعتمد التقييم بدرجة 6.5 من 10') &&
+      !isConfirmationOrMetaUtterance('أعاني من ضغط ساعات العمل الطويلة'),
+      'Confirmation filter must isolate confirmation utterances from substantive descriptions'
+    );
+    const reportWithConfirmations = generateEvidenceGroundedDirectorReport({
+      userProfile: studentProfile,
+      scores: { financial: 5.5, spiritual: 8.0, career: 6.0, personal: 6.0, learning: 6.0, family: 7.0, social: 6.0, health: 4.5 },
+      conversationHistories: {
+        financial: [
+          { sender: 'user', text: 'مصروفي يضيع في طلبات التوصيل والمقاهي' },
+          { sender: 'user', text: 'أعتمد التقييم' },
+          { id: 'user_confirm_999', sender: 'user', text: 'اعتمد التقييم بدرجة 5.5 من 10' },
+        ],
+        health: [
+          { sender: 'user', text: 'سهر طويل وقلة نوم بسبب التصفح الليلي المتكرر' },
+          { sender: 'user', text: 'نعم اعتمد' },
+        ],
+      },
+    });
+    const finSection = reportWithConfirmations.domainBreakdown?.find((d) =>
+      d.domainTitle.includes('المالي')
+    );
+    assert(
+      Boolean(finSection) &&
+      !finSection!.groundedReality.includes('أعتمد التقييم') &&
+      !finSection!.groundedReality.includes('نعم اعتمد') &&
+      finSection!.groundedReality.includes('التوصيل'),
+      'Actual Reality quote must never pull confirmation messages'
+    );
+
+    // (3) Deduplicated Keystone Habits & Logical Time Slots
+    const habitSteps = reportWithConfirmations.keystoneHabits.map((h) => h.exactStep);
+    const financialHabit = reportWithConfirmations.keystoneHabits.find((h) =>
+      (h.targetDomains[0] || '').includes('المالي') || (h.name || '').includes('المالي')
+    );
+    assert(
+      new Set(habitSteps).size === habitSteps.length &&
+      (!financialHabit || !financialHabit.triggerTime.includes('قبل النوم')),
+      'Keystone habits must have unique steps and financial habits must never be placed before sleep'
+    );
+
+    // (4) Unified Quadrants between Section 2 and Section 5 & zero Q3 on habits/skills
+    const sec2ByDom = new Map(
+      (reportWithConfirmations.domainBreakdown || []).map((d) => [d.domainTitle, d])
+    );
+    for (const qItem of reportWithConfirmations.readyToPromoteQueue || []) {
+      const sec2Match = sec2ByDom.get(qItem.domainTitle);
+      assert(
+        Boolean(sec2Match) &&
+        sec2Match!.eisenhowerQuadrant.startsWith(qItem.quadrant) &&
+        !sec2Match!.eisenhowerQuadrant.startsWith('Q3'),
+        `Section 2 and Section 5 quadrants must match strictly without Q3 on constructive tasks (${qItem.domainTitle})`
+      );
+    }
+
+    // (5) Word-Boundary Truncation (zero mid-word slicing)
+    const cutSample = truncateArabicAtWordBoundary(
+      'تراكم المهام اليومية المتراكمة يؤدي إلى تشتت الانتباه في الجامعة',
+      28
+    );
+    assert(
+      !cutSample.includes('المتراك...'),
+      `Word-boundary truncation must never slice Arabic words mid-word: "${cutSample}"`
+    );
+
+    // (6) Separate Challenge vs Solution & Consistent Second-Person Voice
+    const serializedAudit = JSON.stringify(reportWithConfirmations);
+    assert(
+      !/(?:صرّح\s+المستفيد|أوضح\s+المستفيد|ذكر\s+المستفيد|\bالمستفيد\b)/.test(serializedAudit) &&
+      !serializedAudit.includes('الوضوح والصراحة في تشخيص واقع') &&
+      reportWithConfirmations.criticalBottleneck.impact !==
+      reportWithConfirmations.criticalBottleneck.recommendation,
+      'Orchestrator must keep second-person voice, eliminate boilerplate strengths, and separate challenges from solutions'
     );
 
     results.push({
@@ -3706,7 +3875,7 @@ async function testLatestUpgradesIntegrity() {
       name: 'Chat Persistence, Free Consult & Plan Cap',
       passed: true,
       durationMs: Date.now() - qaStart,
-      details: `Clean demo chats OK; Day ${addedRes.dayNumber} plan injection OK; Day 8 capped 4/4; Orchestrator OK`,
+      details: `Clean demo chats OK; Day ${addedRes.dayNumber} plan injection OK; Day 8 capped 4/4; 6-Point Audit OK`,
     });
   } catch (err: any) {
     results.push({

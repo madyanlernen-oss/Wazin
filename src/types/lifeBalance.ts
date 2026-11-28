@@ -200,10 +200,13 @@ export interface WeekData {
   challenges: string[];
 }
 
+export type DailyGoalStatus = 'pending' | 'completed' | 'missed';
+
 export interface DailyGoalItem {
   id: string;
   text: string;
   isCompleted: boolean;
+  status?: DailyGoalStatus;
   isCustom?: boolean;
   completedAt?: number;
 }

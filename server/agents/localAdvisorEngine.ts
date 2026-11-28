@@ -27,6 +27,8 @@ import {
   MEANINGLESS_INPUT_PROMPT_AR,
   sanitizeArabicGrammarAndMorphology,
   buildComplaintAnchoredReply,
+  isConfirmationOrMetaUtterance,
+  syncReplyScoreWithCanonicalScore,
 } from '../../src/utils/dialogueDeduplication';
 
 // مصفوفة من 4 ردود استكشافية محايدة ومختلفة لكل محطة من المحطات الثماني لمنع التكرار عند اللجوء للمحرك المحلي
@@ -207,13 +209,7 @@ export function generateLocalAgentResponse(
     : [...(historyTexts || []).filter((t) => !/(?:أهلاً بك|أقيّم وضعك|التقييم المستحق|بصفتي مستشارك|هل ترغب في اعتماد التقييم)/i.test(String(t || ''))), message];
   const sessionUserMessages = rawSessionUserTexts
     .map((t) => String(t || '').trim())
-    .filter(
-      (t) =>
-        t.length > 0 &&
-        !/^(?:اعتمد\s*التقييم(?:\s*بدرجة.*)?|نعم\s*اعتمد|اعتماد|نكتفي|خلاص|انتهينا|أرغب في الاستمرار|حسناً?\s*نكمل)/i.test(
-          t
-        )
-    );
+    .filter((t) => t.length > 0 && !isConfirmationOrMetaUtterance(t));
   const currentSessionUnifiedScore =
     sessionUserMessages.length > 0
       ? calculateUnifiedScore(extractUnifiedMetricsFromSession(sessionUserMessages, agentKey))
@@ -402,6 +398,9 @@ export function generateLocalAgentResponse(
       finalReply = `${finalReply}\n\n${formatUnifiedScoreConfirmationMessage(computedScore)}`;
     } else if (safeReflectionQ && !finalReply.includes('؟') && !finalReply.includes('?')) {
       finalReply = `${finalReply}\n\n${safeReflectionQ}`;
+    }
+    if (!isEarlyConversationalTurn && computedScore > 0) {
+      finalReply = syncReplyScoreWithCanonicalScore(finalReply, computedScore);
     }
     const rawAdvice = data.advice || (data.actionSteps && data.actionSteps.length > 0 ? data.actionSteps[0] : finalReply);
     const finalSummary = data.summary || (finalReply.length > 120 ? finalReply.slice(0, 120) + '...' : finalReply);

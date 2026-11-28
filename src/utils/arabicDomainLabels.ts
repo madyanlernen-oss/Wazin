@@ -185,6 +185,18 @@ export function getDomainArabicName(keyOrName: string): string {
   return 'الجانب الحياتي';
 }
 
+function enforceSecondPersonDirectorVoice(text: string): string {
+  if (!text || typeof text !== 'string') return '';
+  return text
+    .replace(/صرّح\s+المستفيد\s+بواقع\s*:/g, 'ذكرتَ في هذه المحطة:')
+    .replace(/صرّح\s+المستفيد/g, 'ذكرتَ')
+    .replace(/أوضح\s+المستفيد/g, 'أوضحتَ')
+    .replace(/ما\s+ذكره\s+المستفيد/g, 'ما ذكرتَه')
+    .replace(/ذكر\s+المستفيد/g, 'ذكرتَ')
+    .replace(/للمستفيد/g, 'لك')
+    .replace(/\bالمستفيد\b/g, 'أنت');
+}
+
 /**
  * Replaces leaked English domain keys and jargon phrases inside Arabic prose with natural Arabic equivalents.
  */
@@ -372,6 +384,19 @@ export function reconcileDirectorReportWithScores<T extends Record<string, any>>
     }
   }
 
+  // Enforce Single Source of Truth scores across domainBreakdown & overallBalanceScore
+  if (Array.isArray(next.domainBreakdown)) {
+    next.domainBreakdown = next.domainBreakdown.map((d: any) => {
+      const domId = inferDomainIdFromLabel(d?.domainTitle);
+      const canonical = domId && Number(scores[domId] || 0) > 0 ? Number(scores[domId]) : Number(d?.score || 0);
+      return {
+        ...d,
+        score: Number(canonical.toFixed(1)),
+      };
+    });
+  }
+  next.overallBalanceScore = avg;
+
   return sanitizeDirectorReportArabic(next) as T;
 }
 
@@ -381,29 +406,30 @@ export function reconcileDirectorReportWithScores<T extends Record<string, any>>
 export function sanitizeDirectorReportArabic<T extends Record<string, any>>(report: T): T {
   if (!report || typeof report !== 'object') return report;
 
+  const cleanText = (val: any) => enforceSecondPersonDirectorVoice(localizeDomainText(String(val || '')));
   const mapList = (arr: any) =>
-    Array.isArray(arr) ? arr.map((item) => localizeDomainText(String(item || ''))) : [];
+    Array.isArray(arr) ? arr.map((item) => cleanText(item)) : [];
 
   return {
     ...report,
     ...(typeof report.overallDiagnosis === 'string'
-      ? { overallDiagnosis: localizeDomainText(report.overallDiagnosis) }
+      ? { overallDiagnosis: cleanText(report.overallDiagnosis) }
       : {}),
     ...(typeof report.balanceIndexLabel === 'string'
-      ? { balanceIndexLabel: localizeDomainText(report.balanceIndexLabel) }
+      ? { balanceIndexLabel: cleanText(report.balanceIndexLabel) }
       : {}),
     ...(typeof report.rootCauseChain === 'string'
-      ? { rootCauseChain: localizeDomainText(report.rootCauseChain) }
+      ? { rootCauseChain: cleanText(report.rootCauseChain) }
       : {}),
     ...(typeof report.directorGoldenRule === 'string'
-      ? { directorGoldenRule: localizeDomainText(report.directorGoldenRule) }
+      ? { directorGoldenRule: cleanText(report.directorGoldenRule) }
       : {}),
     ...(report.strongestSynergy && typeof report.strongestSynergy === 'object'
       ? {
           strongestSynergy: {
             ...report.strongestSynergy,
-            title: localizeDomainText(report.strongestSynergy.title || ''),
-            description: localizeDomainText(report.strongestSynergy.description || ''),
+            title: cleanText(report.strongestSynergy.title || ''),
+            description: cleanText(report.strongestSynergy.description || ''),
             domainsInvolved: mapList(report.strongestSynergy.domainsInvolved),
           },
         }
@@ -412,9 +438,9 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
       ? {
           criticalBottleneck: {
             ...report.criticalBottleneck,
-            title: localizeDomainText(report.criticalBottleneck.title || ''),
-            impact: localizeDomainText(report.criticalBottleneck.impact || ''),
-            recommendation: localizeDomainText(report.criticalBottleneck.recommendation || ''),
+            title: cleanText(report.criticalBottleneck.title || ''),
+            impact: cleanText(report.criticalBottleneck.impact || ''),
+            recommendation: cleanText(report.criticalBottleneck.recommendation || ''),
             domain: getDomainArabicName(report.criticalBottleneck.domain || ''),
           },
         }
@@ -424,10 +450,10 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
           domainBreakdown: report.domainBreakdown.map((d: any) => ({
             ...d,
             domainTitle: getDomainArabicName(d?.domainTitle || ''),
-            groundedReality: localizeDomainText(d?.groundedReality || ''),
-            crossDomainImpact: localizeDomainText(d?.crossDomainImpact || ''),
-            actionableTask: localizeDomainText(d?.actionableTask || ''),
-            eisenhowerQuadrant: localizeDomainText(d?.eisenhowerQuadrant || ''),
+            groundedReality: cleanText(d?.groundedReality || ''),
+            crossDomainImpact: cleanText(d?.crossDomainImpact || ''),
+            actionableTask: cleanText(d?.actionableTask || ''),
+            eisenhowerQuadrant: cleanText(d?.eisenhowerQuadrant || ''),
             planFrequency: d?.planFrequency === 'أسبوعي' ? 'أسبوعي' : 'يومي',
           })),
         }
@@ -436,13 +462,13 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
       ? {
           keystoneHabits: report.keystoneHabits.map((h: any) => ({
             ...h,
-            name: localizeDomainText(h?.name || ''),
-            triggerTime: localizeDomainText(h?.triggerTime || ''),
+            name: cleanText(h?.name || ''),
+            triggerTime: cleanText(h?.triggerTime || ''),
             ...(typeof h?.exactStep === 'string'
-              ? { exactStep: localizeDomainText(h.exactStep) }
+              ? { exactStep: cleanText(h.exactStep) }
               : {}),
             targetDomains: mapList(h?.targetDomains),
-            expectedImpact: localizeDomainText(h?.expectedImpact || ''),
+            expectedImpact: cleanText(h?.expectedImpact || ''),
           })),
         }
       : {}),
@@ -450,8 +476,8 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
       ? {
           thirtyDayRoadmap: report.thirtyDayRoadmap.map((w: any) => ({
             ...w,
-            weekTitle: localizeDomainText(w?.weekTitle || ''),
-            coreFocus: localizeDomainText(w?.coreFocus || ''),
+            weekTitle: cleanText(w?.weekTitle || ''),
+            coreFocus: cleanText(w?.coreFocus || ''),
             actions: mapList(w?.actions),
           })),
         }
@@ -460,11 +486,11 @@ export function sanitizeDirectorReportArabic<T extends Record<string, any>>(repo
       ? {
           readyToPromoteQueue: report.readyToPromoteQueue.map((item: any) => ({
             ...item,
-            title: localizeDomainText(item?.title || ''),
+            title: cleanText(item?.title || ''),
             domainTitle: getDomainArabicName(item?.domainTitle || ''),
             quadrant: item?.quadrant === 'Q1' ? 'Q1' : 'Q2',
             frequency: item?.frequency === 'أسبوعي' ? 'أسبوعي' : 'يومي',
-            milestone: localizeDomainText(item?.milestone || ''),
+            milestone: cleanText(item?.milestone || ''),
           })),
         }
       : {}),
@@ -562,7 +588,7 @@ export function formatThirtyDayPlanForArabicPdf(
       domainId: string;
       domainTitle?: string;
       selectedTask: string;
-      dailyGoals?: Array<{ text: string; isCompleted?: boolean }>;
+      dailyGoals?: Array<{ text: string; isCompleted?: boolean; status?: 'pending' | 'completed' | 'missed' }>;
       isCompleted: boolean;
     }>;
   },
@@ -597,7 +623,12 @@ export function formatThirtyDayPlanForArabicPdf(
       const formattedTaskText =
         activeGoals.length > 1
           ? activeGoals
-              .map((g, idx) => `${idx + 1}) ${localizeDomainText(g.text)}${g.isCompleted ? ' ✓' : ''}`)
+              .map((g, idx) => {
+                const isDone = g.status === 'completed' || (!g.status && g.isCompleted);
+                const isMissed = g.status === 'missed';
+                const mark = isDone ? ' ✓' : isMissed ? ' ✕' : '';
+                return `${idx + 1}) ${localizeDomainText(g.text)}${mark}`;
+              })
               .join(' • ')
           : localizeDomainText(activeGoals[0]?.text || d.selectedTask || '');
 
