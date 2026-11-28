@@ -118,13 +118,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
 
   const savedUsers = getStoredUsers();
 
-  // Quick 1-click fill for the official Demo account
-  const handleQuickDemoFill = () => {
-    setEmailOrName('demo@wazan.com');
-    setPassword('123456');
-    setError(null);
-  };
-
   // Handle Standard Login with Strict Verification
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -492,46 +485,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
           {/* Focused Form: LOGIN */}
           {mode === 'login' ? (
             <form onSubmit={handleLoginSubmit} className="space-y-4">
-              {/* Quick Demo Fill Helper Banner (Password line removed per requirement 6) */}
-              <div className="p-3.5 rounded-2xl bg-teal-50/80 dark:bg-[#112028] border border-teal-200/90 dark:border-teal-900/60 flex items-center justify-between gap-3 text-xs transition-colors">
-                <div className="text-right">
-                  <div className="flex items-center gap-1.5 font-black text-[#0B6E72] dark:text-cyan-300">
-                    <Sparkles className="w-3.5 h-3.5 text-amber-500" aria-hidden="true" />
-                    <span>الحسابات التجريبية الجاهزة (كلمة المرور: 123456):</span>
-                  </div>
-                  <div className="text-xs text-[#475569] dark:text-slate-300 mt-1 flex flex-wrap items-center gap-2" dir="ltr">
-                    <button
-                      type="button"
-                      onClick={handleQuickDemoFill}
-                      className="font-mono font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-teal-200/50 dark:border-slate-700 hover:border-teal-500 hover:text-[#0B6E72] dark:hover:text-cyan-300 cursor-pointer transition-colors"
-                      title="سعود المنصور (حساب مكتمل التقييم)"
-                    >
-                      demo@wazan.com
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEmailOrName('ahmed@wazan.com');
-                        setPassword('123456');
-                        setError(null);
-                      }}
-                      className="font-mono font-bold bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-teal-200/50 dark:border-slate-700 hover:border-teal-500 hover:text-[#0B6E72] dark:hover:text-cyan-300 cursor-pointer transition-colors"
-                      title="أحمد (حساب جديد للتقييم والتجربة)"
-                    >
-                      ahmed@wazan.com
-                    </button>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={handleQuickDemoFill}
-                  className="px-3 py-1.5 rounded-xl bg-[#0B6E72] hover:bg-[#085255] dark:bg-[#0891B2] text-white text-xs font-black transition-all shadow-xs flex-shrink-0 cursor-pointer hover:scale-[1.02] active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#0B6E72] dark:focus-visible:ring-cyan-400 focus-visible:ring-offset-2"
-                  title="تعبئة بيانات الحساب التجريبي بنقرة واحدة"
-                >
-                  تعبئة تلقائية ⚡
-                </button>
-              </div>
-
               <div>
                 <label
                   htmlFor="auth-login-identifier"
@@ -783,27 +736,27 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({
                   signupWorkStatus === 'صاحب عمل/مستقل' ||
                   signupWorkStatus.includes('صاحب عمل') ||
                   signupWorkStatus.includes('مستقل')) && (
-                  <div className="p-3 rounded-xl bg-teal-50/70 dark:bg-cyan-950/30 border border-teal-200/80 dark:border-cyan-900/40 animate-fadeIn">
-                    <label
-                      htmlFor="auth-signup-income-stability"
-                      className="block text-xs font-bold text-[#0B6E72] dark:text-cyan-300 mb-1"
-                    >
-                      هل دخلك ثابت؟ <span className="text-rose-500">*</span>
-                    </label>
-                    <select
-                      id="auth-signup-income-stability"
-                      required
-                      value={signupIncomeStability}
-                      onChange={(e) => setSignupIncomeStability(e.target.value)}
-                      className="w-full bg-white dark:bg-[#102033] border border-teal-300 dark:border-cyan-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer font-medium"
-                      dir="rtl"
-                    >
-                      <option value="">اختر طبيعة الدخل...</option>
-                      <option value="نعم (دخل ثابت)">نعم (دخل ثابت)</option>
-                      <option value="لا (دخل متغير)">لا (دخل متغير)</option>
-                    </select>
-                  </div>
-                )}
+                    <div className="p-3 rounded-xl bg-teal-50/70 dark:bg-cyan-950/30 border border-teal-200/80 dark:border-cyan-900/40 animate-fadeIn">
+                      <label
+                        htmlFor="auth-signup-income-stability"
+                        className="block text-xs font-bold text-[#0B6E72] dark:text-cyan-300 mb-1"
+                      >
+                        هل دخلك ثابت؟ <span className="text-rose-500">*</span>
+                      </label>
+                      <select
+                        id="auth-signup-income-stability"
+                        required
+                        value={signupIncomeStability}
+                        onChange={(e) => setSignupIncomeStability(e.target.value)}
+                        className="w-full bg-white dark:bg-[#102033] border border-teal-300 dark:border-cyan-700 rounded-xl px-3 py-2 text-xs sm:text-sm text-[#0F172A] dark:text-white focus:outline-none focus:border-[#0B6E72] dark:focus:border-cyan-400 focus:ring-1 focus:ring-[#0B6E72] transition-all cursor-pointer font-medium"
+                        dir="rtl"
+                      >
+                        <option value="">اختر طبيعة الدخل...</option>
+                        <option value="نعم (دخل ثابت)">نعم (دخل ثابت)</option>
+                        <option value="لا (دخل متغير)">لا (دخل متغير)</option>
+                      </select>
+                    </div>
+                  )}
 
                 {/* 2. Age Group */}
                 <div>
